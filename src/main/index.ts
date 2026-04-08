@@ -7,8 +7,6 @@ import { DatabaseManager } from './database'
 import { LlamaServerManager } from './llama-server'
 import { AgentManager } from './agent-manager'
 import { ModelManager } from './model-manager'
-import { FileSystemTools } from './tools/file-system'
-import { SystemInfoTool } from './tools/system-info'
 import { MCPClientManager } from './mcp/client-manager'
 import { MCPOAuthManager } from './mcp/oauth-manager'
 import { registerIPCHandlers } from './ipc-handlers'
@@ -117,14 +115,9 @@ app.whenReady().then(async () => {
     return db.getOAuthTokens(serverId)
   })
 
-  // Initialize FileSystemTools, SystemInfoTool, and AgentManager
-  const fileTools = new FileSystemTools(workspacePath, () => mainWindow)
-  const systemInfoTool = new SystemInfoTool()
+  // Initialize AgentManager (uses Claude Agent SDK — tools are built-in)
   const agentManager = new AgentManager({
-    baseUrl: `http://127.0.0.1:8847`,
     db,
-    fileTools,
-    systemInfoTool,
     getMainWindow: () => mainWindow
   })
 
@@ -150,7 +143,6 @@ app.whenReady().then(async () => {
     getWorkspacePath: () => workspacePath,
     setWorkspacePath: (path: string) => {
       workspacePath = path
-      fileTools.setWorkspace(path)
     }
   })
 
