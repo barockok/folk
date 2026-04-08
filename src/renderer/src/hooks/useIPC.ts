@@ -23,7 +23,10 @@ export function useIPC(): void {
 
     const unsubComplete = window.folk.onAgentComplete((data) => {
       if (data.conversationId === activeConversationId) {
-        addMessage(data.message)
+        if (data.message) {
+          addMessage(data.message)
+        }
+        clearStreaming()
         setProcessing(false)
         clearToolCalls()
       }
