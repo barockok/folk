@@ -15,6 +15,7 @@ let mainWindow: BrowserWindow | null = null
 let db: DatabaseManager
 let llama: LlamaServerManager
 let mcpManager: MCPClientManager
+let agentManager: AgentManager
 let workspacePath: string = app.getPath('home')
 
 function createWindow(): void {
@@ -116,7 +117,7 @@ app.whenReady().then(async () => {
   })
 
   // Initialize AgentManager (uses Claude Agent SDK — tools are built-in)
-  const agentManager = new AgentManager({
+  agentManager = new AgentManager({
     db,
     getMainWindow: () => mainWindow
   })
@@ -224,6 +225,11 @@ app.whenReady().then(async () => {
 })
 
 app.on('window-all-closed', async () => {
+  try {
+    await agentManager?.closeAll()
+  } catch {
+    // ignore agent session close errors
+  }
   try {
     await mcpManager?.disconnectAll()
   } catch {
