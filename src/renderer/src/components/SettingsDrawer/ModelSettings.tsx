@@ -13,10 +13,18 @@ function formatBytes(bytes: number): string {
 
 export default function ModelSettings(): React.JSX.Element {
   const [modelInfo, setModelInfo] = useState<ModelInfo | null>(null)
+  const [apiKey, setApiKey] = useState('')
 
   useEffect(() => {
     window.folk.getModelInfo().then(setModelInfo)
+    window.folk.getSetting('anthropicApiKey').then((key) => {
+      if (key) setApiKey(key as string)
+    })
   }, [])
+
+  const saveApiKey = (): void => {
+    window.folk.setSetting('anthropicApiKey', apiKey)
+  }
 
   const handleChangeModel = async (): Promise<void> => {
     const paths = await window.folk.openFileDialog({
@@ -37,6 +45,28 @@ export default function ModelSettings(): React.JSX.Element {
 
   return (
     <div className="space-y-6">
+      <div className="mb-6">
+        <h4 className="text-sm font-medium text-text-primary mb-2">Claude API Key</h4>
+        <p className="text-xs text-text-muted mb-3">
+          Required. Get your key from console.anthropic.com
+        </p>
+        <div className="flex gap-2">
+          <input
+            type="password"
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            placeholder="sk-ant-..."
+            className="flex-1 bg-transparent border border-border-mist-10 rounded-default px-3 py-2 text-sm font-mono text-text-primary placeholder:text-text-muted focus:border-signal-blue focus:outline-none"
+          />
+          <button
+            onClick={saveApiKey}
+            className="px-4 py-2 text-sm bg-white text-black font-medium rounded-default hover:bg-white/90 transition-colors"
+          >
+            Save
+          </button>
+        </div>
+      </div>
+
       <div>
         <h3 className="text-sm font-medium text-text-primary mb-3">Current Model</h3>
         {modelInfo ? (
