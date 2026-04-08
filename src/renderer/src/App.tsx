@@ -10,6 +10,7 @@ import ArtifactPanel from './components/ArtifactPanel/ArtifactPanel'
 import SettingsDrawer from './components/SettingsDrawer/SettingsDrawer'
 import OnboardingWizard from './components/Onboarding/OnboardingWizard'
 import ToastContainer from './components/ToastContainer'
+import { StatusBar } from './components/StatusBar'
 
 function App(): React.JSX.Element {
   useIPC()
@@ -69,6 +70,7 @@ function App(): React.JSX.Element {
       </div>
       {showSettings && <SettingsDrawer />}
       <ToastContainer />
+      <StatusBar />
     </div>
   )
 }
