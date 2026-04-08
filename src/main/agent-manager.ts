@@ -44,6 +44,8 @@ export class AgentManager extends EventEmitter {
   }
 
   async handleMessage(conversationId: string, userContent: string): Promise<void> {
+    console.log(`[AgentManager] handleMessage called for conversation=${conversationId}, content="${userContent.slice(0, 50)}"`)
+
     // Save user message
     const userBlocks: ContentBlock[] = [{ type: 'text', text: userContent }]
     this.db.addMessage(conversationId, 'user', userBlocks)
@@ -57,6 +59,7 @@ export class AgentManager extends EventEmitter {
 
     // Load full conversation history
     const history = this.db.getMessages(conversationId)
+    console.log(`[AgentManager] Loaded ${history.length} messages from history`)
     const apiMessages = history.map((msg) => ({
       role: msg.role as 'user' | 'assistant',
       content: this.toApiContent(msg.content)
@@ -68,7 +71,9 @@ export class AgentManager extends EventEmitter {
 
     try {
       await this.agentLoop(conversationId, apiMessages, controller.signal)
+      console.log(`[AgentManager] agentLoop completed successfully`)
     } catch (err) {
+      console.error(`[AgentManager] Error in agentLoop:`, err)
       if ((err as Error).name === 'AbortError') {
         return
       }
@@ -95,7 +100,10 @@ export class AgentManager extends EventEmitter {
     for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
       if (signal.aborted) return
 
-      const stream = this.client.messages.stream({
+      console.log(`[AgentManager] agentLoop iteration=${iteration}, messages=${messages.length}`)
+      console.log(`[AgentManager] Calling API at baseURL=${this.client.baseURL}`)
+
+      const requestParams = {
         model: 'gemma-4-e4b',
         max_tokens: 4096,
         system: this.getSystemPrompt(),
@@ -104,6 +112,14 @@ export class AgentManager extends EventEmitter {
           ...this.fileTools.getToolDefinitions(),
           ...this.systemInfoTool.getToolDefinitions()
         ] as Anthropic.Tool[]
+      }
+
+      console.log(`[AgentManager] Request tools: ${requestParams.tools.map(t => t.name).join(', ')}`)
+
+      const stream = this.client.messages.stream(requestParams)
+
+      stream.on('error', (err) => {
+        console.error(`[AgentManager] Stream error:`, err)
       })
 
       // Stream text tokens
@@ -113,7 +129,14 @@ export class AgentManager extends EventEmitter {
         }
       })
 
-      const finalMessage = await stream.finalMessage()
+      let finalMessage: Anthropic.Message
+      try {
+        finalMessage = await stream.finalMessage()
+        console.log(`[AgentManager] Got finalMessage, stop_reason=${finalMessage.stop_reason}, content_blocks=${finalMessage.content.length}`)
+      } catch (streamErr) {
+        console.error(`[AgentManager] stream.finalMessage() failed:`, streamErr)
+        throw streamErr
+      }
 
       if (signal.aborted) return
 

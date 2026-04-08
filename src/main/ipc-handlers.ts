@@ -23,7 +23,14 @@ export function registerIPCHandlers(deps: IPCDependencies): void {
 
   // --- Agent ---
   ipcMain.handle('agent:send-message', async (_, conversationId: string, content: string) => {
-    await deps.agentManager.handleMessage(conversationId, content)
+    console.log(`[IPC] agent:send-message received, conv=${conversationId}, content="${content.slice(0, 50)}"`)
+    try {
+      await deps.agentManager.handleMessage(conversationId, content)
+      console.log(`[IPC] agent:send-message completed`)
+    } catch (err) {
+      console.error(`[IPC] agent:send-message error:`, err)
+      throw err
+    }
   })
   ipcMain.handle('agent:stop', (_, conversationId: string) => {
     deps.agentManager.stop(conversationId)
