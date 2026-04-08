@@ -1,7 +1,8 @@
 import { useState, useRef, useCallback } from 'react'
-import { Paperclip, Send, Square } from 'lucide-react'
+import { FileText, Paperclip, Send, Square, X } from 'lucide-react'
 import { useConversationStore } from '../../stores/conversation'
 import { useAgentStore } from '../../stores/agent'
+import { useAttachmentStore } from '../../stores/attachments'
 
 export default function ChatInput(): React.JSX.Element {
   const [input, setInput] = useState('')
@@ -10,17 +11,28 @@ export default function ChatInput(): React.JSX.Element {
   const activeConversationId = useConversationStore((s) => s.activeConversationId)
   const isProcessing = useAgentStore((s) => s.isProcessing)
   const setProcessing = useAgentStore((s) => s.setProcessing)
+  const files = useAttachmentStore((s) => s.files)
+  const removeFile = useAttachmentStore((s) => s.removeFile)
+  const clearFiles = useAttachmentStore((s) => s.clearFiles)
 
-  const canSend = input.trim().length > 0 && !isProcessing
+  const canSend = (input.trim().length > 0 || files.length > 0) && !isProcessing
 
   const handleSend = useCallback(() => {
     if (!canSend) return
-    sendMessage(input.trim())
+
+    let messageText = ''
+    for (const file of files) {
+      messageText += `Content of ${file.name}:\n\`\`\`\n${file.content}\n\`\`\`\n\n`
+    }
+    messageText += input.trim()
+
+    sendMessage(messageText)
     setInput('')
+    clearFiles()
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto'
     }
-  }, [canSend, input, sendMessage])
+  }, [canSend, input, files, sendMessage, clearFiles])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>): void => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -38,6 +50,26 @@ export default function ChatInput(): React.JSX.Element {
 
   return (
     <div className="border-t border-border-mist-10 p-4">
+      {files.length > 0 && (
+        <div className="flex flex-wrap gap-2 mb-2">
+          {files.map((file) => (
+            <div
+              key={file.name}
+              className="flex items-center gap-1.5 px-2 py-1 bg-surface-elevated rounded-default text-xs text-text-secondary"
+            >
+              <FileText size={12} />
+              <span className="max-w-[120px] truncate">{file.name}</span>
+              <button
+                onClick={() => removeFile(file.name)}
+                className="text-text-muted hover:text-text-primary transition-colors cursor-pointer"
+                aria-label={`Remove ${file.name}`}
+              >
+                <X size={12} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
       <div className="flex items-end gap-3">
         <button
           className="flex-shrink-0 p-2 text-text-muted hover:text-text-secondary transition-colors cursor-pointer"
