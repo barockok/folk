@@ -2,6 +2,7 @@ import { useConversationStore } from '../../stores/conversation'
 import MessageList from './MessageList'
 import ChatInput from './ChatInput'
 import EmptyState from '../EmptyState'
+import ActivityLog from '../ActivityLog/ActivityLog'
 
 export default function ChatPanel(): React.JSX.Element {
   const { activeConversationId, messages } = useConversationStore()
@@ -38,6 +39,7 @@ export default function ChatPanel(): React.JSX.Element {
       {/* Content */}
       <div className="relative z-10 flex flex-col flex-1 min-h-0">
         {showEmpty ? <EmptyState /> : <MessageList />}
+        <ActivityLog />
         <ChatInput />
       </div>
     </div>
