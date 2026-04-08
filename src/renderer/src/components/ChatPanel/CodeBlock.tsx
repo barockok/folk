@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Copy, Check } from 'lucide-react'
+import { useHighlighter } from '../../hooks/useHighlighter'
 
 interface CodeBlockProps {
   language: string
@@ -8,12 +9,17 @@ interface CodeBlockProps {
 
 export default function CodeBlock({ language, children }: CodeBlockProps): React.JSX.Element {
   const [copied, setCopied] = useState(false)
+  const highlighter = useHighlighter()
 
   const handleCopy = (): void => {
     navigator.clipboard.writeText(children)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
+
+  const highlighted = highlighter && language
+    ? highlighter.codeToHtml(children, { lang: language, theme: 'github-dark' })
+    : null
 
   return (
     <div className="border border-border-mist-10 rounded-default bg-pure-black my-3 overflow-hidden">
@@ -27,9 +33,14 @@ export default function CodeBlock({ language, children }: CodeBlockProps): React
           {copied ? 'Copied' : 'Copy'}
         </button>
       </div>
-      <pre className="overflow-x-auto p-3">
-        <code className="text-sm font-mono text-text-secondary">{children}</code>
-      </pre>
+      {highlighted ? (
+        <div className="p-3 overflow-x-auto text-sm [&_pre]:!bg-transparent [&_pre]:!m-0 [&_code]:!text-sm"
+             dangerouslySetInnerHTML={{ __html: highlighted }} />
+      ) : (
+        <pre className="overflow-x-auto p-3">
+          <code className="text-sm font-mono text-text-secondary">{children}</code>
+        </pre>
+      )}
     </div>
   )
 }
