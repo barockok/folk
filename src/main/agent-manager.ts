@@ -177,7 +177,7 @@ export class AgentManager extends EventEmitter {
         if (toolBlock.name === 'system_info') {
           result = this.systemInfoTool.executeTool(toolBlock.name)
         } else {
-          result = this.fileTools.executeTool(
+          result = await this.fileTools.executeTool(
             toolBlock.name,
             toolBlock.input as Record<string, unknown>
           )

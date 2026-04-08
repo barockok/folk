@@ -1,5 +1,6 @@
 import fs from 'fs'
 import path from 'path'
+import { dialog, BrowserWindow } from 'electron'
 
 export interface FileToolResult {
   success: boolean
@@ -9,9 +10,11 @@ export interface FileToolResult {
 
 export class FileSystemTools {
   private workspacePath: string
+  private getMainWindow: () => BrowserWindow | null
 
-  constructor(workspacePath: string) {
+  constructor(workspacePath: string, getMainWindow?: () => BrowserWindow | null) {
     this.workspacePath = path.resolve(workspacePath)
+    this.getMainWindow = getMainWindow || (() => null)
   }
 
   setWorkspace(newPath: string): void {
@@ -105,6 +108,24 @@ export class FileSystemTools {
         error: err instanceof Error ? err.message : String(err)
       }
     }
+  }
+
+  async readExternalFile(): Promise<FileToolResult> {
+    const mainWindow = this.getMainWindow()
+    if (!mainWindow) {
+      return { success: false, error: 'No main window available' }
+    }
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Agent requests access to a file',
+      message: 'The AI agent wants to read a file outside your workspace. Select a file to grant access.',
+      properties: ['openFile'],
+    })
+    if (result.canceled || result.filePaths.length === 0) {
+      return { success: false, error: 'User denied file access' }
+    }
+    const filePath = result.filePaths[0]
+    const content = fs.readFileSync(filePath, 'utf-8')
+    return { success: true, data: { content, path: filePath } }
   }
 
   createFile(filePath: string, content?: string): FileToolResult {
@@ -203,11 +224,26 @@ export class FileSystemTools {
           },
           required: ['path']
         }
+      },
+      {
+        name: 'read_external_file',
+        description:
+          'Request access to read a file outside the workspace. The user will be shown a file picker dialog to approve.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            reason: {
+              type: 'string',
+              description: 'Explain why you need this file'
+            }
+          },
+          required: ['reason']
+        }
       }
     ]
   }
 
-  executeTool(toolName: string, input: Record<string, unknown>): FileToolResult {
+  async executeTool(toolName: string, input: Record<string, unknown>): Promise<FileToolResult> {
     switch (toolName) {
       case 'read_file':
         return this.readFile(input.path as string)
@@ -217,6 +253,8 @@ export class FileSystemTools {
         return this.listDirectory(input.path as string | undefined)
       case 'create_file':
         return this.createFile(input.path as string, input.content as string | undefined)
+      case 'read_external_file':
+        return this.readExternalFile()
       default:
         return { success: false, error: `Unknown tool: ${toolName}` }
     }
