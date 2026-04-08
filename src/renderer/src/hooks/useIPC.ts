@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useConversationStore } from '../stores/conversation'
 import { useAgentStore } from '../stores/agent'
+import { useToastStore } from '../stores/toast'
 
 export function useIPC(): void {
   const activeConversationId = useConversationStore((s) => s.activeConversationId)
@@ -37,6 +38,11 @@ export function useIPC(): void {
         clearStreaming()
         setProcessing(false)
         clearToolCalls()
+        useToastStore.getState().addToast({
+          type: 'error',
+          message: data.error || 'An error occurred',
+          duration: 8000,
+        })
       }
     })
 

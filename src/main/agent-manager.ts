@@ -369,7 +369,19 @@ export class AgentManager extends EventEmitter {
     switch (message.type) {
       case 'assistant': {
         // Full assistant response — save to DB and notify
-        const textParts = message.message.content
+        const assistantMsg = message.message
+
+        // Check if this is an error response
+        if ((message as any).error) {
+          console.error(`[AgentManager] Assistant error: ${(message as any).error}`)
+          win?.webContents.send('agent:error', {
+            conversationId,
+            error: `API Error: ${(message as any).error}`,
+          })
+          break
+        }
+
+        const textParts = assistantMsg.content
           .filter((b: any) => b.type === 'text')
           .map((b: any) => b.text)
 
@@ -397,20 +409,17 @@ export class AgentManager extends EventEmitter {
       }
 
       case 'result': {
-        // Final result with cost/duration
+        // Final result — only send if there's actual content (not just metadata)
         const result = message as any
         console.log(`[AgentManager] Result: cost=${result.cost_usd}, tokens_in=${result.usage?.input_tokens}, tokens_out=${result.usage?.output_tokens}`)
 
-        if (result.result) {
-          const contentBlocks: ContentBlock[] = [{ type: 'text', text: result.result }]
-          const savedMsg = this.db.addMessage(conversationId, 'assistant', contentBlocks)
-          win?.webContents.send('agent:complete', { conversationId, message: savedMsg })
-        }
+        // result.result contains the final text if any — but we already sent
+        // the streaming tokens and assistant messages, so skip to avoid duplicates
         break
       }
 
       case 'system': {
-        // System messages — tool results, notifications
+        // System messages — log but don't display (tool results come via hooks)
         const sys = message as any
         console.log(`[AgentManager] System: subtype=${sys.subtype} ${JSON.stringify(sys).slice(0, 200)}`)
         break
