@@ -114,7 +114,7 @@ app.whenReady().then(async () => {
   const fileTools = new FileSystemTools(workspacePath, () => mainWindow)
   const systemInfoTool = new SystemInfoTool()
   const agentManager = new AgentManager({
-    baseUrl: `http://127.0.0.1:8847/v1`,
+    baseUrl: `http://127.0.0.1:8847`,
     db,
     fileTools,
     systemInfoTool,
