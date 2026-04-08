@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Trash2 } from 'lucide-react'
+import { Download, Trash2 } from 'lucide-react'
 import type { Conversation } from '../../../../shared/types'
 import { useConversationStore } from '../../stores/conversation'
 
@@ -100,16 +100,28 @@ export default function ConversationItem({
             {formatTimeAgo(conversation.updatedAt)}
           </div>
         </div>
-        <button
-          onClick={(e) => {
-            e.stopPropagation()
-            onDelete()
-          }}
-          className="opacity-0 group-hover:opacity-100 p-1 text-text-muted hover:text-error transition-all cursor-pointer"
-          aria-label="Delete conversation"
-        >
-          <Trash2 size={14} />
-        </button>
+        <div className="flex items-center gap-0.5">
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              window.folk.exportConversation(conversation.id)
+            }}
+            className="opacity-0 group-hover:opacity-100 p-1 text-text-muted hover:text-text-secondary transition-all cursor-pointer"
+            aria-label="Export conversation"
+          >
+            <Download size={14} />
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              onDelete()
+            }}
+            className="opacity-0 group-hover:opacity-100 p-1 text-text-muted hover:text-error transition-all cursor-pointer"
+            aria-label="Delete conversation"
+          >
+            <Trash2 size={14} />
+          </button>
+        </div>
       </div>
     </button>
   )

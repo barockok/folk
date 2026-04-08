@@ -36,6 +36,7 @@ const folkAPI: FolkAPI = {
   // System
   getLlamaStatus: () => ipcRenderer.invoke('llama:status'),
   getAppVersion: () => ipcRenderer.invoke('app:version'),
+  exportConversation: (conversationId) => ipcRenderer.invoke('conversation:export', conversationId),
   openFileDialog: (options) => ipcRenderer.invoke('dialog:open-file', options),
 
   // Event listeners (main → renderer)

@@ -108,6 +108,7 @@ export interface FolkAPI {
   getCurrentWorkspace: () => Promise<string>
   getLlamaStatus: () => Promise<LlamaStatus>
   getAppVersion: () => Promise<string>
+  exportConversation: (conversationId: string) => Promise<void>
   openFileDialog: (options?: { filters?: { name: string; extensions: string[] }[] }) => Promise<string[]>
   onToken: (callback: (data: { conversationId: string; token: string }) => void) => () => void
   onToolStart: (callback: (data: { conversationId: string; toolCall: ToolCallStart }) => void) => () => void

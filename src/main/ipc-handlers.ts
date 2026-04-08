@@ -48,6 +48,39 @@ export function registerIPCHandlers(deps: IPCDependencies): void {
     return db.getMessages(conversationId)
   })
 
+  // --- Export ---
+  ipcMain.handle('conversation:export', async (_, conversationId: string) => {
+    const conv = db.getConversation(conversationId)
+    if (!conv) return
+
+    const messages = db.getMessages(conversationId)
+
+    let md = `# ${conv.title}\n\n`
+    md += `*Exported from Folk on ${new Date().toLocaleDateString()}*\n\n---\n\n`
+
+    for (const msg of messages) {
+      const role = msg.role === 'user' ? '**You**' : '**Folk**'
+      md += `### ${role}\n\n`
+      for (const block of msg.content) {
+        if (block.type === 'text') {
+          md += block.text + '\n\n'
+        }
+      }
+    }
+
+    const win = getMainWindow()
+    if (!win) return
+
+    const result = await dialog.showSaveDialog(win, {
+      defaultPath: `${conv.title.replace(/[^a-zA-Z0-9 ]/g, '')}.md`,
+      filters: [{ name: 'Markdown', extensions: ['md'] }]
+    })
+
+    if (!result.canceled && result.filePath) {
+      fs.writeFileSync(result.filePath, md, 'utf-8')
+    }
+  })
+
   // --- Settings ---
   ipcMain.handle('settings:get', async (_event, key: string) => {
     return db.getSetting(key)
