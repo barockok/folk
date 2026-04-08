@@ -1,5 +1,7 @@
+import { useState, useRef, useEffect } from 'react'
 import { Trash2 } from 'lucide-react'
 import type { Conversation } from '../../../../shared/types'
+import { useConversationStore } from '../../stores/conversation'
 
 interface ConversationItemProps {
   conversation: Conversation
@@ -29,6 +31,42 @@ export default function ConversationItem({
   onClick,
   onDelete
 }: ConversationItemProps): React.JSX.Element {
+  const [isEditing, setIsEditing] = useState(false)
+  const [editTitle, setEditTitle] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
+  const renameConversation = useConversationStore((s) => s.renameConversation)
+
+  useEffect(() => {
+    if (isEditing && inputRef.current) {
+      inputRef.current.focus()
+      inputRef.current.select()
+    }
+  }, [isEditing])
+
+  const handleDoubleClick = (e: React.MouseEvent): void => {
+    e.stopPropagation()
+    setEditTitle(conversation.title || 'New conversation')
+    setIsEditing(true)
+  }
+
+  const handleSave = (): void => {
+    const trimmed = editTitle.trim()
+    if (trimmed && trimmed !== conversation.title) {
+      renameConversation(conversation.id, trimmed)
+    }
+    setIsEditing(false)
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>): void => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      handleSave()
+    } else if (e.key === 'Escape') {
+      e.preventDefault()
+      setIsEditing(false)
+    }
+  }
+
   return (
     <button
       onClick={onClick}
@@ -40,9 +78,24 @@ export default function ConversationItem({
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <div className="text-sm text-text-primary truncate">
-            {conversation.title || 'New conversation'}
-          </div>
+          {isEditing ? (
+            <input
+              ref={inputRef}
+              value={editTitle}
+              onChange={(e) => setEditTitle(e.target.value)}
+              onKeyDown={handleKeyDown}
+              onBlur={handleSave}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full bg-transparent border-b border-electric-cyan text-sm text-text-primary outline-none"
+            />
+          ) : (
+            <div
+              className="text-sm text-text-primary truncate"
+              onDoubleClick={handleDoubleClick}
+            >
+              {conversation.title || 'New conversation'}
+            </div>
+          )}
           <div className="text-xs text-text-muted mt-0.5">
             {formatTimeAgo(conversation.updatedAt)}
           </div>
