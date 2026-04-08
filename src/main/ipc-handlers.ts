@@ -1,11 +1,16 @@
 import { ipcMain, app, dialog, BrowserWindow } from 'electron'
+import fs from 'fs'
 import type { DatabaseManager } from './database'
 import type { LlamaServerManager } from './llama-server'
+import type { AgentManager } from './agent-manager'
+import type { ModelManager } from './model-manager'
 import type { MCPServer } from '../shared/types'
 
 export interface IPCDependencies {
   db: DatabaseManager
   llama: LlamaServerManager
+  agentManager: AgentManager
+  modelManager: ModelManager
   getMainWindow: () => BrowserWindow | null
   getWorkspacePath: () => string
   setWorkspacePath: (path: string) => void
@@ -14,12 +19,12 @@ export interface IPCDependencies {
 export function registerIPCHandlers(deps: IPCDependencies): void {
   const { db, llama, getMainWindow, getWorkspacePath, setWorkspacePath } = deps
 
-  // --- Agent (stubs, wired in Task 25) ---
-  ipcMain.handle('agent:send-message', async () => {
-    /* wired in Task 25 */
+  // --- Agent ---
+  ipcMain.handle('agent:send-message', async (_, conversationId: string, content: string) => {
+    await deps.agentManager.handleMessage(conversationId, content)
   })
-  ipcMain.handle('agent:stop', () => {
-    /* wired in Task 25 */
+  ipcMain.handle('agent:stop', (_, conversationId: string) => {
+    deps.agentManager.stop(conversationId)
   })
 
   // --- Conversations ---
@@ -75,16 +80,41 @@ export function registerIPCHandlers(deps: IPCDependencies): void {
 
   // --- Model ---
   ipcMain.handle('model:info', async () => {
-    // TODO: implement model info retrieval
-    return null
+    const modelPath = (db.getSetting('modelPath') as string | null) ?? deps.modelManager.getDefaultModelPath()
+    if (!fs.existsSync(modelPath)) return null
+    const stats = fs.statSync(modelPath)
+    const name = modelPath.split('/').pop() ?? modelPath.split('\\').pop() ?? 'unknown'
+    return {
+      name,
+      path: modelPath,
+      sizeBytes: stats.size,
+      quantization: 'Q4',
+      contextSize: 4096
+    }
   })
 
-  ipcMain.handle('model:change', async (_event, _path: string) => {
-    // TODO: implement model change
+  ipcMain.handle('model:change', async (_event, path: string) => {
+    db.setSetting('modelPath', path)
   })
 
-  ipcMain.handle('model:download', async () => {
-    /* stub — wired later */
+  ipcMain.handle('model:download', async (_event, url: string) => {
+    const destPath = deps.modelManager.getDefaultModelPath()
+    const win = getMainWindow()
+
+    const onProgress = (progress: { percent: number; speed: string; eta: string }): void => {
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('model:download-progress', progress)
+      }
+    }
+
+    deps.modelManager.on('progress', onProgress)
+
+    try {
+      await deps.modelManager.download({ url, destPath })
+      db.setSetting('modelPath', destPath)
+    } finally {
+      deps.modelManager.removeListener('progress', onProgress)
+    }
   })
 
   // --- Workspace ---

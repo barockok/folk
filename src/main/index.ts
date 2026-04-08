@@ -5,6 +5,9 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { DatabaseManager } from './database'
 import { LlamaServerManager } from './llama-server'
+import { AgentManager } from './agent-manager'
+import { ModelManager } from './model-manager'
+import { FileSystemTools } from './tools/file-system'
 import { registerIPCHandlers } from './ipc-handlers'
 
 let mainWindow: BrowserWindow | null = null
@@ -74,6 +77,19 @@ app.whenReady().then(async () => {
     contextSize: 4096
   })
 
+  // Initialize ModelManager
+  const modelsDir = join(app.getPath('userData'), 'models')
+  const modelManager = new ModelManager(modelsDir)
+
+  // Initialize FileSystemTools and AgentManager
+  const fileTools = new FileSystemTools(workspacePath)
+  const agentManager = new AgentManager({
+    baseUrl: `http://127.0.0.1:8847/v1`,
+    db,
+    fileTools,
+    getMainWindow: () => mainWindow
+  })
+
   // Forward llama status events to renderer
   llama.on('status', (status) => {
     mainWindow?.webContents.send('llama:status-change', status)
@@ -83,10 +99,13 @@ app.whenReady().then(async () => {
   registerIPCHandlers({
     db,
     llama,
+    agentManager,
+    modelManager,
     getMainWindow: () => mainWindow,
     getWorkspacePath: () => workspacePath,
     setWorkspacePath: (path: string) => {
       workspacePath = path
+      fileTools.setWorkspace(path)
     }
   })
 
