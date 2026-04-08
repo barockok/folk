@@ -289,13 +289,10 @@ export class AgentManager extends EventEmitter {
       model,
       env: cleanEnv,
       mcpServers: mcpServers.length > 0 ? mcpServers : undefined,
-      allowedTools: [
-        'Read', 'Grep', 'Glob', 'LS', 'Bash',
-        'Write', 'Edit', 'MultiEdit',
-        'WebFetch', 'WebSearch',
-        'TodoRead', 'TodoWrite',
-        'Agent',
-      ],
+      // Limit tools to keep system prompt small for local models
+      // Each tool adds ~500-1000 tokens to the prompt
+      tools: ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep'],
+      allowedTools: ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep'],
       permissionMode: 'bypassPermissions',
       hooks: {
         PreToolUse: [{
