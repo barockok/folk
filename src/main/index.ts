@@ -16,9 +16,13 @@ let llama: LlamaServerManager
 let workspacePath: string = app.getPath('home')
 
 function createWindow(): void {
+  const savedBounds = db.getSetting('windowBounds') as { x: number; y: number; width: number; height: number } | null
+  const wasMaximized = db.getSetting('windowMaximized') as boolean | null
+
   mainWindow = new BrowserWindow({
-    width: 1400,
-    height: 900,
+    width: savedBounds?.width ?? 1400,
+    height: savedBounds?.height ?? 900,
+    ...(savedBounds ? { x: savedBounds.x, y: savedBounds.y } : {}),
     minWidth: 800,
     minHeight: 600,
     show: false,
@@ -36,7 +40,27 @@ function createWindow(): void {
     }
   })
 
+  // Debounced window bounds saving
+  let boundsTimer: ReturnType<typeof setTimeout> | null = null
+  const saveBounds = (): void => {
+    if (boundsTimer) clearTimeout(boundsTimer)
+    boundsTimer = setTimeout(() => {
+      if (mainWindow && !mainWindow.isMaximized()) {
+        db.setSetting('windowBounds', mainWindow.getBounds())
+      }
+    }, 500)
+  }
+  mainWindow.on('resize', saveBounds)
+  mainWindow.on('move', saveBounds)
+
+  // Save maximized state
+  mainWindow.on('maximize', () => db.setSetting('windowMaximized', true))
+  mainWindow.on('unmaximize', () => db.setSetting('windowMaximized', false))
+
   mainWindow.on('ready-to-show', () => {
+    if (wasMaximized) {
+      mainWindow?.maximize()
+    }
     mainWindow?.show()
   })
 
