@@ -4,6 +4,7 @@ import type { DatabaseManager } from './database'
 import type { LlamaServerManager } from './llama-server'
 import type { AgentManager } from './agent-manager'
 import type { ModelManager } from './model-manager'
+import type { MCPClientManager } from './mcp/client-manager'
 import type { MCPServer } from '../shared/types'
 
 export interface IPCDependencies {
@@ -11,6 +12,7 @@ export interface IPCDependencies {
   llama: LlamaServerManager
   agentManager: AgentManager
   modelManager: ModelManager
+  mcpManager: MCPClientManager
   getMainWindow: () => BrowserWindow | null
   getWorkspacePath: () => string
   setWorkspacePath: (path: string) => void
@@ -98,17 +100,28 @@ export function registerIPCHandlers(deps: IPCDependencies): void {
   ipcMain.handle(
     'mcp:add-server',
     async (_event, config: Omit<MCPServer, 'id' | 'createdAt'>) => {
-      return db.addMCPServer(config)
+      const server = db.addMCPServer(config)
+      // Auto-connect if enabled
+      if (server.enabled) {
+        deps.mcpManager.connect(server).catch((err) => {
+          console.error(`Failed to connect MCP server ${server.name}:`, err)
+        })
+      }
+      return server
     }
   )
 
   ipcMain.handle('mcp:remove-server', async (_event, id: string) => {
+    // Disconnect before removing
+    await deps.mcpManager.disconnect(id)
     db.removeMCPServer(id)
   })
 
-  ipcMain.handle('mcp:test-connection', async (_event, _id: string) => {
-    // TODO: implement actual MCP connection test
-    return { ok: true }
+  ipcMain.handle('mcp:test-connection', async (_event, id: string) => {
+    const servers = db.listMCPServers()
+    const server = servers.find((s) => s.id === id)
+    if (!server) return { ok: false, error: 'Server not found' }
+    return deps.mcpManager.testConnection(server)
   })
 
   // --- Model ---

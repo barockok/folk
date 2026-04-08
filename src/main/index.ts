@@ -9,11 +9,13 @@ import { AgentManager } from './agent-manager'
 import { ModelManager } from './model-manager'
 import { FileSystemTools } from './tools/file-system'
 import { SystemInfoTool } from './tools/system-info'
+import { MCPClientManager } from './mcp/client-manager'
 import { registerIPCHandlers } from './ipc-handlers'
 
 let mainWindow: BrowserWindow | null = null
 let db: DatabaseManager
 let llama: LlamaServerManager
+let mcpManager: MCPClientManager
 let workspacePath: string = app.getPath('home')
 
 function createWindow(): void {
@@ -105,8 +107,11 @@ app.whenReady().then(async () => {
   const modelsDir = join(app.getPath('userData'), 'models')
   const modelManager = new ModelManager(modelsDir)
 
+  // Initialize MCP Client Manager
+  mcpManager = new MCPClientManager()
+
   // Initialize FileSystemTools, SystemInfoTool, and AgentManager
-  const fileTools = new FileSystemTools(workspacePath)
+  const fileTools = new FileSystemTools(workspacePath, () => mainWindow)
   const systemInfoTool = new SystemInfoTool()
   const agentManager = new AgentManager({
     baseUrl: `http://127.0.0.1:8847/v1`,
@@ -121,12 +126,18 @@ app.whenReady().then(async () => {
     mainWindow?.webContents.send('llama:status-change', status)
   })
 
+  // Forward MCP status events to renderer
+  mcpManager.on('status-change', (serverId: string, status: string) => {
+    mainWindow?.webContents.send('mcp:status-change', { serverId, status })
+  })
+
   // Register IPC handlers
   registerIPCHandlers({
     db,
     llama,
     agentManager,
     modelManager,
+    mcpManager,
     getMainWindow: () => mainWindow,
     getWorkspacePath: () => workspacePath,
     setWorkspacePath: (path: string) => {
@@ -197,12 +208,27 @@ app.whenReady().then(async () => {
     })
   }
 
+  // Connect to enabled MCP servers
+  const mcpServers = db.listMCPServers()
+  for (const server of mcpServers) {
+    if (server.enabled) {
+      mcpManager.connect(server).catch((err) => {
+        console.error(`Failed to connect MCP server ${server.name}:`, err)
+      })
+    }
+  }
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
 })
 
 app.on('window-all-closed', async () => {
+  try {
+    await mcpManager?.disconnectAll()
+  } catch {
+    // ignore MCP disconnect errors during shutdown
+  }
   try {
     await llama?.stop()
   } catch {
