@@ -6,7 +6,7 @@ interface ModelDownloadStepProps {
   onSkip: () => void
 }
 
-const MODEL_URL = 'https://huggingface.co/ggml-org/gemma-4-E4B-it-GGUF/resolve/main/gemma-4-E4B-it-Q4_K_M.gguf'
+const MODEL_URL = 'https://huggingface.co/ggml-org/gemma-4-E4B-it-GGUF/resolve/main/gemma-4-e4b-it-Q4_K_M.gguf'
 
 export default function ModelDownloadStep({ onNext, onSkip }: ModelDownloadStepProps): React.JSX.Element {
   const [downloading, setDownloading] = useState(false)
