@@ -53,10 +53,10 @@ export class AgentManager extends EventEmitter {
   }
 
   private getMode(): AgentMode {
-    const apiKey = (this.db.getSetting('anthropicApiKey') as string) || ''
-    // If user set a real Anthropic API key, use Claude mode
-    if (apiKey && apiKey.startsWith('sk-ant-')) return 'claude'
-    return 'local'
+    // Always use Claude mode (Agent SDK) — it works with llama-server
+    // via ANTHROPIC_BASE_URL. Local mode is fallback for basic chat only.
+    const mode = (this.db.getSetting('agentMode') as string) || 'claude'
+    return mode as AgentMode
   }
 
   async handleMessage(conversationId: string, userContent: string): Promise<void> {
@@ -248,8 +248,10 @@ export class AgentManager extends EventEmitter {
 
   private buildClaudeSessionOptions(conversationId: string, sessionDir: string): SDKSessionOptions {
     const win = this.getMainWindow()
-    const apiKey = (this.db.getSetting('anthropicApiKey') as string) || ''
-    const model = (this.db.getSetting('model') as string) || 'claude-sonnet-4-6'
+    const apiKey = (this.db.getSetting('anthropicApiKey') as string) ||
+      'sk-ant-folk00000000000000000000000000000000000000000000000000'
+    const baseUrl = (this.db.getSetting('anthropicBaseUrl') as string) || 'http://127.0.0.1:8847'
+    const model = (this.db.getSetting('model') as string) || 'gemma-4-e4b'
 
     // Build MCP server configs from Folk's database
     const mcpServers: Record<string, any>[] = []
@@ -266,14 +268,26 @@ export class AgentManager extends EventEmitter {
       }
     }
 
+    // Build a clean env — don't inherit personal Claude plugins/MCP from the host
+    const cleanEnv: Record<string, string | undefined> = {
+      PATH: process.env.PATH,
+      HOME: sessionDir,  // Sandbox HOME so Claude Code doesn't load personal ~/.claude
+      CLAUDE_CONFIG_DIR: sessionDir,
+      ANTHROPIC_API_KEY: apiKey,
+      ANTHROPIC_BASE_URL: baseUrl,
+      CLAUDE_AGENT_SDK_CLIENT_APP: 'folk/0.1.0',
+      // Preserve essential env vars
+      TMPDIR: process.env.TMPDIR,
+      LANG: process.env.LANG,
+      TERM: process.env.TERM,
+      SHELL: process.env.SHELL,
+      USER: process.env.USER,
+      LOGNAME: process.env.LOGNAME,
+    }
+
     return {
       model,
-      env: {
-        ...process.env,
-        CLAUDE_CONFIG_DIR: sessionDir,
-        ANTHROPIC_API_KEY: apiKey,
-        CLAUDE_AGENT_SDK_CLIENT_APP: 'folk/0.1.0',
-      },
+      env: cleanEnv,
       mcpServers: mcpServers.length > 0 ? mcpServers : undefined,
       allowedTools: [
         'Read', 'Grep', 'Glob', 'LS', 'Bash',

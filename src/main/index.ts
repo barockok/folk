@@ -104,7 +104,7 @@ app.whenReady().then(async () => {
   llama = new LlamaServerManager({
     modelPath,
     port: 8847,
-    contextSize: 32768
+    contextSize: 65536
   })
 
   // Initialize MCP Client Manager and OAuth Manager
