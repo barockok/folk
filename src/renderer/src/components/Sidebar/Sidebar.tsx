@@ -5,13 +5,17 @@ import { useUIStore } from '../../stores/ui'
 import SearchInput from './SearchInput'
 import ConversationList from './ConversationList'
 
-export default function Sidebar(): React.JSX.Element {
+interface SidebarProps {
+  style?: React.CSSProperties
+}
+
+export default function Sidebar({ style }: SidebarProps): React.JSX.Element {
   const [searchQuery, setSearchQuery] = useState('')
   const createConversation = useConversationStore((s) => s.createConversation)
   const toggleSettings = useUIStore((s) => s.toggleSettings)
 
   return (
-    <div className="w-[260px] bg-pure-black border-r border-border-mist-08 flex flex-col h-full">
+    <div className="bg-pure-black border-r border-border-mist-08 flex flex-col h-full flex-shrink-0" style={{ width: style?.width ?? 260, ...style }}>
       <SearchInput value={searchQuery} onChange={setSearchQuery} />
       <ConversationList searchQuery={searchQuery} />
       <div className="border-t border-border-mist-06 p-3 flex gap-2">

@@ -5,11 +5,15 @@ interface UIState {
   showSettings: boolean
   showActivityLog: boolean
   sidebarCollapsed: boolean
+  sidebarWidth: number
+  artifactPanelWidth: number
   toggleArtifactPanel: () => void
   toggleSettings: () => void
   toggleActivityLog: () => void
   toggleSidebar: () => void
   setShowSettings: (show: boolean) => void
+  setSidebarWidth: (w: number) => void
+  setArtifactPanelWidth: (w: number) => void
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -17,6 +21,8 @@ export const useUIStore = create<UIState>((set) => ({
   showSettings: false,
   showActivityLog: false,
   sidebarCollapsed: false,
+  sidebarWidth: 260,
+  artifactPanelWidth: 400,
 
   toggleArtifactPanel: () => {
     set((state) => ({ showArtifactPanel: !state.showArtifactPanel }))
@@ -36,5 +42,13 @@ export const useUIStore = create<UIState>((set) => ({
 
   setShowSettings: (show: boolean) => {
     set({ showSettings: show })
+  },
+
+  setSidebarWidth: (w: number) => {
+    set({ sidebarWidth: w })
+  },
+
+  setArtifactPanelWidth: (w: number) => {
+    set({ artifactPanelWidth: w })
   }
 }))

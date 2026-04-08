@@ -7,7 +7,11 @@ import CodeViewer from './CodeViewer'
 import MarkdownViewer from './MarkdownViewer'
 import ImageViewer from './ImageViewer'
 
-export default function ArtifactPanel(): React.JSX.Element | null {
+interface ArtifactPanelProps {
+  style?: React.CSSProperties
+}
+
+export default function ArtifactPanel({ style }: ArtifactPanelProps): React.JSX.Element | null {
   const { artifacts } = useAgentStore()
   const { showArtifactPanel, toggleArtifactPanel } = useUIStore()
   const [activeIndex, setActiveIndex] = useState(0)
@@ -58,7 +62,7 @@ export default function ArtifactPanel(): React.JSX.Element | null {
   return (
     <div
       className="flex-shrink-0 bg-pure-black border-l border-border-mist-08 flex flex-col"
-      style={{ width: 400 }}
+      style={{ width: style?.width ?? 400, ...style }}
     >
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border-mist-06">
