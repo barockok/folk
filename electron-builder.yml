@@ -1,5 +1,5 @@
-appId: com.electron.app
-productName: electron-vite-temp
+appId: dev.barock.folk
+productName: Folk
 directories:
   buildResources: build
 files:
@@ -9,35 +9,68 @@ files:
   - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+  - '!docs/*'
+  - '!specs/*'
+  - '!tests/*'
+  - '!.specify/*'
 asarUnpack:
   - resources/**
-win:
-  executableName: electron-vite-temp
-nsis:
-  artifactName: ${name}-${version}-setup.${ext}
-  shortcutName: ${productName}
-  uninstallDisplayName: ${productName}
-  createDesktopShortcut: always
 mac:
+  category: public.app-category.productivity
+  icon: build/icon.icns
+  hardenedRuntime: true
+  gatekeeperAssess: false
   entitlementsInherit: build/entitlements.mac.plist
+  target:
+    - target: dmg
+      arch:
+        - arm64
+        - x64
+    - target: zip
+      arch:
+        - arm64
+        - x64
   extendInfo:
-    - NSCameraUsageDescription: Application requests access to the device's camera.
-    - NSMicrophoneUsageDescription: Application requests access to the device's microphone.
-    - NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
-    - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
+    - NSDocumentsFolderUsageDescription: Folk needs access to your Documents folder to read and write files.
+    - NSDownloadsFolderUsageDescription: Folk needs access to your Downloads folder to save files.
   notarize: false
 dmg:
-  artifactName: ${name}-${version}.${ext}
+  artifactName: Folk-${version}-${arch}.${ext}
+  window:
+    width: 540
+    height: 380
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
+win:
+  executableName: Folk
+  icon: build/icon.ico
+  target:
+    - target: nsis
+      arch:
+        - x64
+nsis:
+  artifactName: Folk-${version}-setup.${ext}
+  shortcutName: Folk
+  uninstallDisplayName: Folk
+  createDesktopShortcut: always
+  oneClick: false
+  allowToChangeInstallationDirectory: true
 linux:
   target:
     - AppImage
-    - snap
     - deb
-  maintainer: electronjs.org
+  maintainer: barock
   category: Utility
+  icon: build/icon.png
 appImage:
-  artifactName: ${name}-${version}.${ext}
+  artifactName: Folk-${version}.${ext}
 npmRebuild: false
 publish:
-  provider: generic
-  url: https://example.com/auto-updates
+  provider: github
+  owner: barockok
+  repo: folk
