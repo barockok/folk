@@ -7,6 +7,8 @@ interface MCPConnection {
   process: ChildProcess | null
   status: 'connected' | 'disconnected' | 'error'
   tools: MCPToolDefinition[]
+  headers?: Record<string, string>
+  baseUrl?: string
 }
 
 interface MCPToolDefinition {
@@ -17,8 +19,18 @@ interface MCPToolDefinition {
 
 export class MCPClientManager extends EventEmitter {
   private connections: Map<string, MCPConnection> = new Map()
+  private tokenProvider?: (serverId: string) => Promise<any>
+
+  setTokenProvider(provider: (serverId: string) => Promise<any>): void {
+    this.tokenProvider = provider
+  }
 
   async connect(server: MCPServer): Promise<void> {
+    if (server.transport === 'sse') {
+      await this.connectSSE(server)
+      return
+    }
+
     if (server.transport !== 'stdio' || !server.command) {
       throw new Error(`Unsupported transport: ${server.transport}`)
     }
@@ -79,8 +91,10 @@ export class MCPClientManager extends EventEmitter {
 
   async disconnect(serverId: string): Promise<void> {
     const conn = this.connections.get(serverId)
-    if (!conn || !conn.process) return
-    conn.process.kill('SIGTERM')
+    if (!conn) return
+    if (conn.process) {
+      conn.process.kill('SIGTERM')
+    }
     this.connections.delete(serverId)
   }
 
@@ -109,6 +123,12 @@ export class MCPClientManager extends EventEmitter {
   }
 
   async callTool(serverId: string, toolName: string, args: Record<string, unknown>): Promise<unknown> {
+    const conn = this.connections.get(serverId)
+    if (!conn) throw new Error('Not connected')
+
+    if (conn.baseUrl) {
+      return this.sendHttpRequest(serverId, 'tools/call', { name: toolName, arguments: args })
+    }
     return this.sendRequest(serverId, 'tools/call', { name: toolName, arguments: args })
   }
 
@@ -121,6 +141,77 @@ export class MCPClientManager extends EventEmitter {
     } catch (err: any) {
       return { ok: false, error: err.message }
     }
+  }
+
+  private async connectSSE(server: MCPServer): Promise<void> {
+    const connection: MCPConnection = {
+      server,
+      process: null,
+      status: 'connecting' as any,
+      tools: [],
+    }
+    this.connections.set(server.id, connection)
+
+    // Build headers with OAuth token if available
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    }
+
+    if (this.tokenProvider) {
+      const tokens = await this.tokenProvider(server.id)
+      if (tokens?.access_token) {
+        headers['Authorization'] = `${tokens.token_type || 'Bearer'} ${tokens.access_token}`
+      }
+    }
+
+    // Store headers and base URL for HTTP requests
+    connection.headers = headers
+    connection.baseUrl = server.url!
+
+    // Try to initialize
+    try {
+      await this.sendHttpRequest(server.id, 'initialize', {
+        protocolVersion: '2024-11-05',
+        capabilities: {},
+        clientInfo: { name: 'Folk', version: '1.0.0' },
+      })
+
+      await this.sendHttpRequest(server.id, 'notifications/initialized', {})
+
+      const toolsResult = await this.sendHttpRequest(server.id, 'tools/list', {})
+      if (toolsResult?.tools) {
+        connection.tools = toolsResult.tools
+      }
+
+      connection.status = 'connected'
+      this.emit('status-change', server.id, 'connected')
+    } catch (err: any) {
+      connection.status = 'error'
+      this.emit('status-change', server.id, 'error')
+      throw err
+    }
+  }
+
+  private async sendHttpRequest(serverId: string, method: string, params: unknown): Promise<any> {
+    const conn = this.connections.get(serverId)
+    if (!conn?.baseUrl) throw new Error('Not connected via HTTP')
+
+    const id = ++this.requestId
+    const res = await fetch(conn.baseUrl, {
+      method: 'POST',
+      headers: conn.headers || { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id, method, params }),
+    })
+
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}: ${await res.text()}`)
+    }
+
+    const response = await res.json()
+    if (response.error) {
+      throw new Error(response.error.message || JSON.stringify(response.error))
+    }
+    return response.result
   }
 
   private requestId = 0
