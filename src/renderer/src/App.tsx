@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useIPC } from './hooks/useIPC'
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 import { useConversationStore } from './stores/conversation'
 import { useUIStore } from './stores/ui'
 import TitleBar from './components/TitleBar'
@@ -11,10 +12,12 @@ import OnboardingWizard from './components/Onboarding/OnboardingWizard'
 
 function App(): React.JSX.Element {
   useIPC()
+  useKeyboardShortcuts()
 
   const loadConversations = useConversationStore((s) => s.loadConversations)
   const showArtifactPanel = useUIStore((s) => s.showArtifactPanel)
   const showSettings = useUIStore((s) => s.showSettings)
+  const sidebarCollapsed = useUIStore((s) => s.sidebarCollapsed)
 
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -59,7 +62,7 @@ function App(): React.JSX.Element {
     <div className="flex flex-col h-screen bg-void-black text-text-primary overflow-hidden">
       <TitleBar />
       <div className="flex flex-1 overflow-hidden">
-        <Sidebar />
+        {!sidebarCollapsed && <Sidebar />}
         <ChatPanel />
         {showArtifactPanel && <ArtifactPanel />}
       </div>
