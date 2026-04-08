@@ -95,17 +95,17 @@ app.whenReady().then(async () => {
     workspacePath = savedWorkspace
   }
 
-  // Initialize LlamaServerManager
-  const modelPath = join(app.getPath('userData'), 'models', 'default.gguf')
+  // Initialize ModelManager
+  const modelsDir = join(app.getPath('userData'), 'models')
+  const modelManager = new ModelManager(modelsDir)
+
+  // Initialize LlamaServerManager — use saved model path or ModelManager's default
+  const modelPath = (db.getSetting('modelPath') as string | null) ?? modelManager.getDefaultModelPath()
   llama = new LlamaServerManager({
     modelPath,
     port: 8847,
     contextSize: 4096
   })
-
-  // Initialize ModelManager
-  const modelsDir = join(app.getPath('userData'), 'models')
-  const modelManager = new ModelManager(modelsDir)
 
   // Initialize MCP Client Manager
   mcpManager = new MCPClientManager()

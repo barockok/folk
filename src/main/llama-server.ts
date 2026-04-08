@@ -175,10 +175,40 @@ export class LlamaServerManager extends EventEmitter {
   }
 
   private getDefaultBinaryPath(): string {
+    const { execSync } = require('child_process')
+
+    // 1. Check bundled binary
     const platform = process.platform
     const arch = process.arch
     const resourcesPath =
       process.resourcesPath ?? path.join(path.dirname(process.execPath), 'resources')
-    return path.join(resourcesPath, 'bin', `${platform}-${arch}`, 'llama-server')
+    const bundledPath = path.join(resourcesPath, 'bin', `${platform}-${arch}`, 'llama-server')
+
+    try {
+      const fs = require('fs')
+      if (fs.existsSync(bundledPath)) return bundledPath
+    } catch {}
+
+    // 2. Check common install locations
+    const commonPaths = [
+      '/opt/homebrew/bin/llama-server',
+      '/usr/local/bin/llama-server',
+      '/usr/bin/llama-server',
+    ]
+    for (const p of commonPaths) {
+      try {
+        const fs = require('fs')
+        if (fs.existsSync(p)) return p
+      } catch {}
+    }
+
+    // 3. Try to find via PATH using 'which'
+    try {
+      const result = execSync('which llama-server', { encoding: 'utf-8' }).trim()
+      if (result) return result
+    } catch {}
+
+    // 4. Fallback to bundled path (will fail with clear error)
+    return bundledPath
   }
 }
