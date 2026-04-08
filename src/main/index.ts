@@ -8,6 +8,7 @@ import { LlamaServerManager } from './llama-server'
 import { AgentManager } from './agent-manager'
 import { ModelManager } from './model-manager'
 import { FileSystemTools } from './tools/file-system'
+import { SystemInfoTool } from './tools/system-info'
 import { registerIPCHandlers } from './ipc-handlers'
 
 let mainWindow: BrowserWindow | null = null
@@ -104,12 +105,14 @@ app.whenReady().then(async () => {
   const modelsDir = join(app.getPath('userData'), 'models')
   const modelManager = new ModelManager(modelsDir)
 
-  // Initialize FileSystemTools and AgentManager
+  // Initialize FileSystemTools, SystemInfoTool, and AgentManager
   const fileTools = new FileSystemTools(workspacePath)
+  const systemInfoTool = new SystemInfoTool()
   const agentManager = new AgentManager({
     baseUrl: `http://127.0.0.1:8847/v1`,
     db,
     fileTools,
+    systemInfoTool,
     getMainWindow: () => mainWindow
   })
 

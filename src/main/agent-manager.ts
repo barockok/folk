@@ -3,12 +3,14 @@ import Anthropic from '@anthropic-ai/sdk'
 import type { BrowserWindow } from 'electron'
 import type { DatabaseManager } from './database'
 import type { FileSystemTools, FileToolResult } from './tools/file-system'
+import type { SystemInfoTool, SystemInfoResult } from './tools/system-info'
 import type { ContentBlock } from '../shared/types'
 
 interface AgentManagerConfig {
   baseUrl: string
   db: DatabaseManager
   fileTools: FileSystemTools
+  systemInfoTool: SystemInfoTool
   getMainWindow: () => BrowserWindow | null
 }
 
@@ -18,6 +20,7 @@ export class AgentManager extends EventEmitter {
   private client: Anthropic
   private db: DatabaseManager
   private fileTools: FileSystemTools
+  private systemInfoTool: SystemInfoTool
   private getMainWindow: () => BrowserWindow | null
   private abortControllers: Map<string, AbortController> = new Map()
 
@@ -29,6 +32,7 @@ export class AgentManager extends EventEmitter {
     })
     this.db = config.db
     this.fileTools = config.fileTools
+    this.systemInfoTool = config.systemInfoTool
     this.getMainWindow = config.getMainWindow
   }
 
@@ -96,7 +100,10 @@ export class AgentManager extends EventEmitter {
         max_tokens: 4096,
         system: this.getSystemPrompt(),
         messages: messages as Anthropic.MessageParam[],
-        tools: this.fileTools.getToolDefinitions() as Anthropic.Tool[]
+        tools: [
+          ...this.fileTools.getToolDefinitions(),
+          ...this.systemInfoTool.getToolDefinitions()
+        ] as Anthropic.Tool[]
       })
 
       // Stream text tokens
@@ -166,10 +173,15 @@ export class AgentManager extends EventEmitter {
 
         // Execute the tool
         const startTime = Date.now()
-        const result: FileToolResult = this.fileTools.executeTool(
-          toolBlock.name,
-          toolBlock.input as Record<string, unknown>
-        )
+        let result: FileToolResult | SystemInfoResult
+        if (toolBlock.name === 'system_info') {
+          result = this.systemInfoTool.executeTool(toolBlock.name)
+        } else {
+          result = this.fileTools.executeTool(
+            toolBlock.name,
+            toolBlock.input as Record<string, unknown>
+          )
+        }
         const durationMs = Date.now() - startTime
 
         // Save tool call to DB
