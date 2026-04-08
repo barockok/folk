@@ -1,0 +1,58 @@
+@theme {
+  /* Colors */
+  --color-void-black: #0f0f0f;
+  --color-pure-black: #000000;
+  --color-electric-cyan: #00ffff;
+  --color-composio-cobalt: #0007cd;
+  --color-signal-blue: #0089ff;
+  --color-ocean-blue: #0096ff;
+  --color-charcoal: #2c2c2c;
+
+  /* Text */
+  --color-text-primary: #ffffff;
+  --color-text-secondary: rgba(255, 255, 255, 0.6);
+  --color-text-tertiary: rgba(255, 255, 255, 0.5);
+  --color-text-muted: #444444;
+  --color-text-phantom: rgba(255, 255, 255, 0.2);
+
+  /* Borders */
+  --color-border-mist-04: rgba(255, 255, 255, 0.04);
+  --color-border-mist-06: rgba(255, 255, 255, 0.06);
+  --color-border-mist-08: rgba(255, 255, 255, 0.08);
+  --color-border-mist-10: rgba(255, 255, 255, 0.10);
+  --color-border-mist-12: rgba(255, 255, 255, 0.12);
+
+  /* Accents */
+  --color-cyan-glow-12: rgba(0, 255, 255, 0.12);
+  --color-cyan-glow-03: rgba(0, 255, 255, 0.03);
+  --color-cobalt-glow-05: rgba(0, 7, 205, 0.05);
+
+  /* Semantic */
+  --color-error: #ff4444;
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+
+  /* Surfaces */
+  --color-surface-elevated: rgba(255, 255, 255, 0.04);
+  --color-surface-hover: rgba(255, 255, 255, 0.02);
+  --color-surface-bubble: rgba(255, 255, 255, 0.06);
+
+  /* Shadows */
+  --shadow-brutalist: 4px 4px 0px rgba(0, 0, 0, 0.15);
+  --shadow-floating: 0px 8px 32px rgba(0, 0, 0, 0.5);
+
+  /* Fonts */
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  /* Spacing */
+  --spacing-sidebar: 260px;
+  --spacing-artifact-panel: 400px;
+  --spacing-settings-drawer: 480px;
+
+  /* Radii */
+  --radius-sharp: 2px;
+  --radius-default: 4px;
+  --radius-pill: 37px;
+  --radius-full: 9999px;
+}
