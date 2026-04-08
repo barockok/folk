@@ -1,0 +1,24 @@
+[build]
+  publish = "."
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+[[redirects]]
+  from = "/download/mac-arm64"
+  to = "https://github.com/barockok/folk/releases/latest/download/Folk-0.1.0-arm64.dmg"
+  status = 302
+
+[[redirects]]
+  from = "/download/mac-x64"
+  to = "https://github.com/barockok/folk/releases/latest/download/Folk-0.1.0-x64.dmg"
+  status = 302
+
+[[redirects]]
+  from = "/download"
+  to = "https://github.com/barockok/folk/releases/latest"
+  status = 302
