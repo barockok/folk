@@ -1,350 +1,219 @@
 import { EventEmitter } from 'events'
-import Anthropic from '@anthropic-ai/sdk'
-import type { BrowserWindow } from 'electron'
+import { query, type Options, type SDKMessage } from '@anthropic-ai/claude-agent-sdk'
+import { app, BrowserWindow } from 'electron'
+import { join } from 'path'
+import { mkdirSync, existsSync } from 'fs'
 import type { DatabaseManager } from './database'
-import type { FileSystemTools, FileToolResult } from './tools/file-system'
-import type { SystemInfoTool, SystemInfoResult } from './tools/system-info'
 import type { ContentBlock } from '../shared/types'
 
 interface AgentManagerConfig {
-  baseUrl: string
   db: DatabaseManager
-  fileTools: FileSystemTools
-  systemInfoTool: SystemInfoTool
   getMainWindow: () => BrowserWindow | null
 }
 
-const MAX_ITERATIONS = 20
-
 export class AgentManager extends EventEmitter {
-  private client: Anthropic
   private db: DatabaseManager
-  private fileTools: FileSystemTools
-  private systemInfoTool: SystemInfoTool
   private getMainWindow: () => BrowserWindow | null
-  private abortControllers: Map<string, AbortController> = new Map()
+  private activeQueries: Map<string, { abort: AbortController }> = new Map()
+  private sandboxBaseDir: string
 
   constructor(config: AgentManagerConfig) {
     super()
-    this.client = new Anthropic({
-      baseURL: config.baseUrl,
-      apiKey: 'local-no-key-needed'
-    })
     this.db = config.db
-    this.fileTools = config.fileTools
-    this.systemInfoTool = config.systemInfoTool
     this.getMainWindow = config.getMainWindow
-  }
-
-  updateBaseUrl(url: string): void {
-    this.client = new Anthropic({
-      baseURL: url,
-      apiKey: 'local-no-key-needed'
-    })
+    // Each conversation gets its own .claude sandbox inside the app data
+    this.sandboxBaseDir = join(app.getPath('userData'), 'sessions')
+    if (!existsSync(this.sandboxBaseDir)) {
+      mkdirSync(this.sandboxBaseDir, { recursive: true })
+    }
   }
 
   async handleMessage(conversationId: string, userContent: string): Promise<void> {
-    console.log(`[AgentManager] handleMessage called for conversation=${conversationId}, content="${userContent.slice(0, 50)}"`)
+    console.log(
+      `[AgentManager] handleMessage conv=${conversationId} content="${userContent.slice(0, 50)}"`
+    )
 
-    // Save user message
+    const win = this.getMainWindow()
+
+    // Save user message to DB
     const userBlocks: ContentBlock[] = [{ type: 'text', text: userContent }]
     this.db.addMessage(conversationId, 'user', userBlocks)
     this.db.updateConversationTimestamp(conversationId)
 
     // Auto-title on first message
-    const messages = this.db.getMessages(conversationId)
-    if (messages.length === 1) {
-      this.autoTitle(conversationId, userContent)
+    const allMessages = this.db.getMessages(conversationId)
+    if (allMessages.length === 1) {
+      const title = userContent.length > 50 ? userContent.slice(0, 47) + '...' : userContent
+      this.db.renameConversation(conversationId, title)
     }
 
-    // Load full conversation history
-    const history = this.db.getMessages(conversationId)
-    console.log(`[AgentManager] Loaded ${history.length} messages from history`)
-    const apiMessages = history.map((msg) => ({
-      role: msg.role as 'user' | 'assistant',
-      content: this.toApiContent(msg.content)
-    }))
+    // Get workspace path from conversation or settings
+    const conv = this.db.getConversation(conversationId)
+    const workspacePath =
+      conv?.workspacePath ||
+      (this.db.getSetting('workspacePath') as string) ||
+      app.getPath('home')
 
-    // Create abort controller
-    const controller = new AbortController()
-    this.abortControllers.set(conversationId, controller)
+    // Create sandboxed session directory for this conversation
+    const sessionDir = join(this.sandboxBaseDir, conversationId)
+    if (!existsSync(sessionDir)) {
+      mkdirSync(sessionDir, { recursive: true })
+    }
+
+    // Set up abort controller
+    const abortController = new AbortController()
+    this.activeQueries.set(conversationId, { abort: abortController })
 
     try {
-      await this.agentLoop(conversationId, apiMessages, controller.signal)
-      console.log(`[AgentManager] agentLoop completed successfully`)
-    } catch (err) {
-      console.error(`[AgentManager] Error in agentLoop:`, err)
-      if ((err as Error).name === 'AbortError') {
-        return
+      // Build SDK options
+      const options: Options = {
+        abortController,
+        cwd: workspacePath,
+        // Sandbox the .claude home directory per conversation
+        env: {
+          ...process.env,
+          CLAUDE_CONFIG_DIR: sessionDir,
+          HOME: sessionDir, // Override HOME so .claude goes to sandbox
+          // User can set their own API key in Folk settings
+          ANTHROPIC_API_KEY:
+            (this.db.getSetting('anthropicApiKey') as string) ||
+            process.env.ANTHROPIC_API_KEY ||
+            ''
+        },
+        // Use all Claude Code tools
+        tools: { type: 'preset', preset: 'claude_code' },
+        // Auto-allow safe tools, let dangerous ones through
+        allowedTools: ['Read', 'Grep', 'Glob', 'LS', 'WebFetch', 'WebSearch'],
+        // Permission mode - accept edits without prompting
+        permissionMode: 'acceptEdits',
+        // Don't persist sessions to disk (we manage our own DB)
+        persistSession: false
       }
-      const errorMessage = err instanceof Error ? err.message : String(err)
-      this.sendIPC('agent:error', { conversationId, error: errorMessage })
+
+      // Create the query (Claude Code session)
+      console.log(`[AgentManager] Starting Claude Code session in workspace=${workspacePath}`)
+      const conversation = query({
+        prompt: userContent,
+        options
+      })
+
+      // Stream messages from the agent
+      for await (const message of conversation) {
+        if (abortController.signal.aborted) break
+
+        this.handleSDKMessage(conversationId, message, win)
+      }
+
+      console.log(`[AgentManager] Session completed for conv=${conversationId}`)
+    } catch (err: any) {
+      console.error(`[AgentManager] Error:`, err)
+      if (err.name !== 'AbortError') {
+        win?.webContents.send('agent:error', {
+          conversationId,
+          error: err.message || String(err)
+        })
+      }
     } finally {
-      this.abortControllers.delete(conversationId)
+      this.activeQueries.delete(conversationId)
     }
   }
 
   stop(conversationId: string): void {
-    const controller = this.abortControllers.get(conversationId)
-    if (controller) {
-      controller.abort()
-      this.abortControllers.delete(conversationId)
+    const active = this.activeQueries.get(conversationId)
+    if (active) {
+      active.abort.abort()
+      this.activeQueries.delete(conversationId)
     }
   }
 
-  private async agentLoop(
+  private handleSDKMessage(
     conversationId: string,
-    messages: Array<{ role: 'user' | 'assistant'; content: unknown }>,
-    signal: AbortSignal
-  ): Promise<void> {
-    for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
-      if (signal.aborted) return
+    message: SDKMessage,
+    win: BrowserWindow | null
+  ): void {
+    switch (message.type) {
+      case 'assistant': {
+        // Full assistant message with content blocks
+        const textBlocks = message.message.content
+          .filter((b: any) => b.type === 'text')
+          .map((b: any) => b.text)
+          .join('')
 
-      console.log(`[AgentManager] agentLoop iteration=${iteration}, messages=${messages.length}`)
-      console.log(`[AgentManager] Calling API at baseURL=${this.client.baseURL}`)
-
-      const requestParams = {
-        model: 'gemma-4-e4b',
-        max_tokens: 4096,
-        system: this.getSystemPrompt(),
-        messages: messages as Anthropic.MessageParam[],
-        tools: [
-          ...this.fileTools.getToolDefinitions(),
-          ...this.systemInfoTool.getToolDefinitions()
-        ] as Anthropic.Tool[]
-      }
-
-      console.log(`[AgentManager] Request tools: ${requestParams.tools.map(t => t.name).join(', ')}`)
-
-      const stream = this.client.messages.stream(requestParams)
-
-      stream.on('error', (err) => {
-        console.error(`[AgentManager] Stream error:`, err)
-      })
-
-      // Stream text tokens
-      stream.on('text', (text) => {
-        if (!signal.aborted) {
-          this.sendIPC('agent:token', { conversationId, token: text })
+        if (textBlocks) {
+          const contentBlocks: ContentBlock[] = [{ type: 'text', text: textBlocks }]
+          const savedMsg = this.db.addMessage(conversationId, 'assistant', contentBlocks)
+          win?.webContents.send('agent:complete', { conversationId, message: savedMsg })
         }
-      })
 
-      let finalMessage: Anthropic.Message
-      try {
-        finalMessage = await stream.finalMessage()
-        console.log(`[AgentManager] Got finalMessage, stop_reason=${finalMessage.stop_reason}, content_blocks=${finalMessage.content.length}`)
-      } catch (streamErr) {
-        console.error(`[AgentManager] stream.finalMessage() failed:`, streamErr)
-        throw streamErr
-      }
-
-      if (signal.aborted) return
-
-      // Build ContentBlock array from the response
-      const assistantBlocks: ContentBlock[] = finalMessage.content.map((block) => {
-        if (block.type === 'text') {
-          return { type: 'text' as const, text: block.text }
-        }
-        if (block.type === 'tool_use') {
-          return {
-            type: 'tool_use' as const,
-            id: block.id,
-            name: block.name,
-            input: block.input as Record<string, unknown>
-          }
-        }
-        return { type: 'text' as const, text: '' }
-      })
-
-      // Save assistant message
-      const assistantMessage = this.db.addMessage(
-        conversationId,
-        'assistant',
-        assistantBlocks,
-        finalMessage.usage?.output_tokens ?? null
-      )
-
-      // Check for tool use
-      const toolUseBlocks = finalMessage.content.filter((block) => block.type === 'tool_use')
-
-      if (toolUseBlocks.length === 0 || finalMessage.stop_reason === 'end_turn') {
-        // No tools or end_turn: we're done
-        const completeMessage = this.db.getMessages(conversationId).at(-1)
-        this.sendIPC('agent:complete', {
-          conversationId,
-          message: completeMessage ?? assistantMessage
-        })
-        return
-      }
-
-      // Execute tools
-      const toolResultBlocks: ContentBlock[] = []
-
-      for (const toolBlock of toolUseBlocks) {
-        if (toolBlock.type !== 'tool_use') continue
-        if (signal.aborted) return
-
-        // Notify tool start
-        this.sendIPC('agent:tool-start', {
-          conversationId,
-          toolCall: {
-            id: toolBlock.id,
-            toolName: toolBlock.name,
-            input: toolBlock.input as Record<string, unknown>
-          }
-        })
-
-        // Execute the tool
-        const startTime = Date.now()
-        let result: FileToolResult | SystemInfoResult
-        if (toolBlock.name === 'system_info') {
-          result = this.systemInfoTool.executeTool(toolBlock.name)
-        } else {
-          result = await this.fileTools.executeTool(
-            toolBlock.name,
-            toolBlock.input as Record<string, unknown>
-          )
-        }
-        const durationMs = Date.now() - startTime
-
-        // Save tool call to DB
-        const toolCall = this.db.addToolCall(
-          assistantMessage.id,
-          toolBlock.name,
-          toolBlock.input as Record<string, unknown>
-        )
-        this.db.completeToolCall(
-          toolCall.id,
-          result.data as Record<string, unknown> | null,
-          result.success ? 'success' : 'error'
-        )
-
-        // Notify tool result
-        this.sendIPC('agent:tool-result', {
-          conversationId,
-          toolCall: {
-            id: toolBlock.id,
-            toolName: toolBlock.name,
-            output: result.data ?? { error: result.error },
-            status: result.success ? 'success' : 'error',
-            durationMs
-          }
-        })
-
-        // Create artifact for write/create operations
-        if (
-          result.success &&
-          (toolBlock.name === 'write_file' || toolBlock.name === 'create_file')
-        ) {
-          const input = toolBlock.input as Record<string, unknown>
-          const filePath = input.path as string
-          const ext = filePath.split('.').pop() ?? ''
-          const artifact = this.db.addArtifact(
+        // Handle tool use blocks
+        const toolBlocks = message.message.content.filter((b: any) => b.type === 'tool_use')
+        for (const tool of toolBlocks) {
+          win?.webContents.send('agent:tool-start', {
             conversationId,
-            assistantMessage.id,
-            'file',
-            filePath,
-            (input.content as string) ?? null,
-            filePath,
-            ext
-          )
-          this.sendIPC('agent:artifact', { conversationId, artifact })
-        }
-
-        // Build tool_result content block
-        toolResultBlocks.push({
-          type: 'tool_result' as const,
-          toolUseId: toolBlock.id,
-          content: JSON.stringify(result.success ? result.data : { error: result.error }),
-          isError: !result.success
-        })
-      }
-
-      // Save tool results as a user message (required by the API)
-      this.db.addMessage(conversationId, 'user', toolResultBlocks)
-
-      // Append assistant and tool result messages for next iteration
-      messages.push({
-        role: 'assistant',
-        content: finalMessage.content
-      })
-      messages.push({
-        role: 'user',
-        content: toolResultBlocks.map((block) => {
-          if (block.type === 'tool_result') {
-            return {
-              type: 'tool_result' as const,
-              tool_use_id: block.toolUseId,
-              content: block.content,
-              is_error: block.isError
+            toolCall: {
+              id: (tool as any).id,
+              toolName: (tool as any).name,
+              input: (tool as any).input
             }
-          }
-          return block
-        })
-      })
-    }
-
-    // Max iterations reached
-    this.sendIPC('agent:error', {
-      conversationId,
-      error: 'Agent reached maximum iteration limit'
-    })
-  }
-
-  private getSystemPrompt(): string {
-    return `You are Folk, a helpful AI assistant running locally on the user's machine. You have access to file system tools that let you read, write, create, and list files within the user's workspace.
-
-When working with files:
-- Always use relative paths from the workspace root
-- Be careful with file modifications — confirm destructive changes when appropriate
-- Provide clear explanations of what you're doing and why
-
-You run entirely locally — no data leaves the user's machine. Be concise, helpful, and accurate.`
-  }
-
-  private autoTitle(conversationId: string, firstMessage: string): void {
-    const maxLength = 50
-    let title = firstMessage.replace(/\n/g, ' ').trim()
-    if (title.length > maxLength) {
-      title = title.substring(0, maxLength - 3) + '...'
-    }
-    if (title.length === 0) {
-      title = 'New Conversation'
-    }
-    this.db.renameConversation(conversationId, title)
-  }
-
-  private sendIPC(channel: string, data: unknown): void {
-    const win = this.getMainWindow()
-    if (win && !win.isDestroyed()) {
-      win.webContents.send(channel, data)
-    }
-  }
-
-  private toApiContent(
-    blocks: ContentBlock[]
-  ): Array<Record<string, unknown>> {
-    return blocks.map((block) => {
-      if (block.type === 'text') {
-        return { type: 'text', text: block.text }
-      }
-      if (block.type === 'tool_use') {
-        return {
-          type: 'tool_use',
-          id: block.id,
-          name: block.name,
-          input: block.input
+          })
         }
+        break
       }
-      if (block.type === 'tool_result') {
-        return {
-          type: 'tool_result',
-          tool_use_id: block.toolUseId,
-          content: block.content,
-          is_error: block.isError
+
+      case 'stream_event': {
+        // Streaming token deltas
+        const event = message.event
+        if (
+          event.type === 'content_block_delta' &&
+          (event as any).delta?.type === 'text_delta'
+        ) {
+          win?.webContents.send('agent:token', {
+            conversationId,
+            token: (event as any).delta.text
+          })
         }
+        break
       }
-      return { type: 'text', text: '' }
-    })
+
+      case 'result': {
+        // Final result message
+        console.log(
+          `[AgentManager] Result: cost_usd=${(message as any).cost_usd}, duration=${(message as any).duration_ms}ms`
+        )
+
+        // Save the final result text if present
+        if ((message as any).result) {
+          const contentBlocks: ContentBlock[] = [
+            { type: 'text', text: (message as any).result }
+          ]
+          const savedMsg = this.db.addMessage(conversationId, 'assistant', contentBlocks)
+          win?.webContents.send('agent:complete', { conversationId, message: savedMsg })
+        }
+        break
+      }
+
+      case 'system': {
+        // System messages (tool results, status updates)
+        const sysMsg = message as any
+        if (sysMsg.subtype === 'tool_result') {
+          win?.webContents.send('agent:tool-result', {
+            conversationId,
+            toolCall: {
+              id: sysMsg.tool_use_id || '',
+              toolName: sysMsg.tool_name || 'unknown',
+              output: { content: sysMsg.content },
+              status: sysMsg.is_error ? 'error' : 'success',
+              durationMs: 0
+            }
+          })
+        }
+        break
+      }
+
+      default:
+        // Log other message types for debugging
+        console.log(`[AgentManager] SDK message type=${message.type}`)
+        break
+    }
   }
 }
