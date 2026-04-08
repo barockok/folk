@@ -263,9 +263,41 @@ export class AgentManager extends EventEmitter {
       env.ANTHROPIC_BASE_URL = baseUrl
     }
 
+    // Build MCP server configs from Folk's database
+    const mcpServers: Record<string, any>[] = []
+    const folkMcpServers = this.db.listMCPServers()
+    for (const server of folkMcpServers) {
+      if (!server.enabled) continue
+      if (server.transport === 'stdio' && server.command) {
+        const config: Record<string, any> = {}
+        config[server.name] = {
+          type: 'stdio',
+          command: server.command,
+          args: server.args || [],
+          env: server.env || {},
+        }
+        mcpServers.push(config)
+      } else if (server.transport === 'sse' && server.url) {
+        // Check for OAuth tokens
+        const tokens = this.db.getOAuthTokens(server.id)
+        const headers: Record<string, string> = {}
+        if (tokens?.access_token) {
+          headers['Authorization'] = `${tokens.token_type || 'Bearer'} ${tokens.access_token}`
+        }
+        const config: Record<string, any> = {}
+        config[server.name] = {
+          type: 'sse',
+          url: server.url,
+          headers,
+        }
+        mcpServers.push(config)
+      }
+    }
+
     return {
       model,
       env,
+      mcpServers: mcpServers.length > 0 ? mcpServers : undefined,
       allowedTools: [
         'Read', 'Grep', 'Glob', 'LS', 'Bash',
         'Write', 'Edit', 'MultiEdit',
