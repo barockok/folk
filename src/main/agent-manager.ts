@@ -246,18 +246,26 @@ export class AgentManager extends EventEmitter {
       ],
     }
 
+    // Determine API configuration
+    const apiKey = (this.db.getSetting('anthropicApiKey') as string) || process.env.ANTHROPIC_API_KEY || ''
+    const baseUrl = (this.db.getSetting('anthropicBaseUrl') as string) || process.env.ANTHROPIC_BASE_URL || ''
+    const model = (this.db.getSetting('model') as string) || 'claude-sonnet-4-6'
+
+    const env: Record<string, string | undefined> = {
+      ...process.env,
+      CLAUDE_CONFIG_DIR: sessionDir,
+      ANTHROPIC_API_KEY: apiKey || 'local-no-key',
+      CLAUDE_AGENT_SDK_CLIENT_APP: 'folk/0.1.0',
+    }
+
+    // If user configured a custom base URL (e.g. llama-server, Ollama proxy, LiteLLM)
+    if (baseUrl) {
+      env.ANTHROPIC_BASE_URL = baseUrl
+    }
+
     return {
-      model: (this.db.getSetting('model') as string) || 'claude-sonnet-4-6',
-      env: {
-        ...process.env,
-        CLAUDE_CONFIG_DIR: sessionDir,
-        ANTHROPIC_API_KEY:
-          (this.db.getSetting('anthropicApiKey') as string) ||
-          process.env.ANTHROPIC_API_KEY ||
-          '',
-        // Identify Folk in User-Agent
-        CLAUDE_AGENT_SDK_CLIENT_APP: 'folk/0.1.0',
-      },
+      model,
+      env,
       allowedTools: [
         'Read', 'Grep', 'Glob', 'LS', 'Bash',
         'Write', 'Edit', 'MultiEdit',

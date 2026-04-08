@@ -14,16 +14,26 @@ function formatBytes(bytes: number): string {
 export default function ModelSettings(): React.JSX.Element {
   const [modelInfo, setModelInfo] = useState<ModelInfo | null>(null)
   const [apiKey, setApiKey] = useState('')
+  const [baseUrl, setBaseUrl] = useState('')
+  const [model, setModel] = useState('')
 
   useEffect(() => {
     window.folk.getModelInfo().then(setModelInfo)
     window.folk.getSetting('anthropicApiKey').then((key) => {
       if (key) setApiKey(key as string)
     })
+    window.folk.getSetting('anthropicBaseUrl').then((url) => {
+      if (url) setBaseUrl(url as string)
+    })
+    window.folk.getSetting('model').then((m) => {
+      if (m) setModel(m as string)
+    })
   }, [])
 
-  const saveApiKey = (): void => {
+  const saveApiConfig = (): void => {
     window.folk.setSetting('anthropicApiKey', apiKey)
+    window.folk.setSetting('anthropicBaseUrl', baseUrl)
+    if (model) window.folk.setSetting('model', model)
   }
 
   const handleChangeModel = async (): Promise<void> => {
@@ -45,21 +55,48 @@ export default function ModelSettings(): React.JSX.Element {
 
   return (
     <div className="space-y-6">
-      <div className="mb-6">
-        <h4 className="text-sm font-medium text-text-primary mb-2">Claude API Key</h4>
-        <p className="text-xs text-text-muted mb-3">
-          Required. Get your key from console.anthropic.com
-        </p>
-        <div className="flex gap-2">
+      <div className="mb-6 space-y-4">
+        <h4 className="text-sm font-medium text-text-primary mb-2">API Configuration</h4>
+
+        <div>
+          <label className="text-xs text-text-muted mb-1 block">API Key</label>
           <input
             type="password"
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
-            placeholder="sk-ant-..."
-            className="flex-1 bg-transparent border border-border-mist-10 rounded-default px-3 py-2 text-sm font-mono text-text-primary placeholder:text-text-muted focus:border-signal-blue focus:outline-none"
+            placeholder="sk-ant-... (from console.anthropic.com)"
+            className="w-full bg-transparent border border-border-mist-10 rounded-default px-3 py-2 text-sm font-mono text-text-primary placeholder:text-text-muted focus:border-signal-blue focus:outline-none"
           />
+        </div>
+
+        <div>
+          <label className="text-xs text-text-muted mb-1 block">Base URL (optional)</label>
+          <input
+            type="text"
+            value={baseUrl}
+            onChange={(e) => setBaseUrl(e.target.value)}
+            placeholder="e.g. http://localhost:8847 for llama-server, or leave empty for Anthropic"
+            className="w-full bg-transparent border border-border-mist-10 rounded-default px-3 py-2 text-sm font-mono text-text-primary placeholder:text-text-muted focus:border-signal-blue focus:outline-none"
+          />
+          <p className="text-xs text-text-muted mt-1">
+            Point to llama-server, Ollama, LiteLLM, or any Anthropic-compatible API
+          </p>
+        </div>
+
+        <div>
+          <label className="text-xs text-text-muted mb-1 block">Model</label>
+          <input
+            type="text"
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+            placeholder="claude-sonnet-4-6 (default)"
+            className="w-full bg-transparent border border-border-mist-10 rounded-default px-3 py-2 text-sm font-mono text-text-primary placeholder:text-text-muted focus:border-signal-blue focus:outline-none"
+          />
+        </div>
+
+        <div>
           <button
-            onClick={saveApiKey}
+            onClick={saveApiConfig}
             className="px-4 py-2 text-sm bg-white text-black font-medium rounded-default hover:bg-white/90 transition-colors"
           >
             Save
