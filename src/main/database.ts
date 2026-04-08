@@ -82,6 +82,18 @@ export class DatabaseManager {
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS mcp_oauth_tokens (
+        server_id TEXT PRIMARY KEY REFERENCES mcp_servers(id) ON DELETE CASCADE,
+        access_token TEXT NOT NULL,
+        refresh_token TEXT,
+        token_type TEXT NOT NULL DEFAULT 'Bearer',
+        expires_in INTEGER,
+        obtained_at INTEGER NOT NULL,
+        oauth_config TEXT,
+        client_id TEXT,
+        client_secret TEXT
+      );
     `)
   }
 
@@ -274,6 +286,90 @@ export class DatabaseManager {
 
   removeMCPServer(id: string): void {
     this.db.prepare('DELETE FROM mcp_servers WHERE id = ?').run(id)
+  }
+
+  getMCPServerById(id: string): MCPServer | null {
+    const row = this.db.prepare('SELECT * FROM mcp_servers WHERE id = ?').get(id) as
+      | MCPServerRow
+      | undefined
+    return row ? mapMCPServer(row) : null
+  }
+
+  // --- OAuth Tokens ---
+
+  saveOAuthTokens(
+    serverId: string,
+    tokens: {
+      access_token: string
+      refresh_token?: string
+      token_type: string
+      expires_in?: number
+      obtained_at: number
+    },
+    oauthConfig?: string,
+    clientId?: string,
+    clientSecret?: string
+  ): void {
+    this.db
+      .prepare(
+        `INSERT OR REPLACE INTO mcp_oauth_tokens
+         (server_id, access_token, refresh_token, token_type, expires_in, obtained_at, oauth_config, client_id, client_secret)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        serverId,
+        tokens.access_token,
+        tokens.refresh_token ?? null,
+        tokens.token_type,
+        tokens.expires_in ?? null,
+        tokens.obtained_at,
+        oauthConfig ?? null,
+        clientId ?? null,
+        clientSecret ?? null
+      )
+  }
+
+  getOAuthTokens(serverId: string): {
+    access_token: string
+    refresh_token: string | null
+    token_type: string
+    expires_in: number | null
+    obtained_at: number
+    oauth_config: string | null
+    client_id: string | null
+    client_secret: string | null
+  } | null {
+    const row = this.db
+      .prepare('SELECT * FROM mcp_oauth_tokens WHERE server_id = ?')
+      .get(serverId) as
+      | {
+          server_id: string
+          access_token: string
+          refresh_token: string | null
+          token_type: string
+          expires_in: number | null
+          obtained_at: number
+          oauth_config: string | null
+          client_id: string | null
+          client_secret: string | null
+        }
+      | undefined
+    return row
+      ? {
+          access_token: row.access_token,
+          refresh_token: row.refresh_token,
+          token_type: row.token_type,
+          expires_in: row.expires_in,
+          obtained_at: row.obtained_at,
+          oauth_config: row.oauth_config,
+          client_id: row.client_id,
+          client_secret: row.client_secret,
+        }
+      : null
+  }
+
+  deleteOAuthTokens(serverId: string): void {
+    this.db.prepare('DELETE FROM mcp_oauth_tokens WHERE server_id = ?').run(serverId)
   }
 
   // --- Settings ---
