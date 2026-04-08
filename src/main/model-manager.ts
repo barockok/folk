@@ -15,7 +15,7 @@ export interface DownloadProgressEvent {
   eta: string
 }
 
-const DEFAULT_MODEL_NAME = 'gemma-4-e4b-q4.gguf'
+const DEFAULT_MODEL_NAME = 'gemma-4-E4B-it-Q4_K_M.gguf'
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`

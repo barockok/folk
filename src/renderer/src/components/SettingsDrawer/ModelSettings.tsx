@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Upload, Download } from 'lucide-react'
 import type { ModelInfo } from '../../../../shared/types'
 
-const MODEL_URL = 'https://huggingface.co/google/gemma-4-e4b-it-GGUF/resolve/main/gemma-4-e4b-it.gguf'
+const MODEL_URL = 'https://huggingface.co/ggml-org/gemma-4-E4B-it-GGUF/resolve/main/gemma-4-E4B-it-Q4_K_M.gguf'
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`

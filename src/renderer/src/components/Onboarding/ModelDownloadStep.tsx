@@ -6,7 +6,7 @@ interface ModelDownloadStepProps {
   onSkip: () => void
 }
 
-const MODEL_URL = 'https://huggingface.co/google/gemma-4-e4b-it-GGUF/resolve/main/gemma-4-e4b-it.gguf'
+const MODEL_URL = 'https://huggingface.co/ggml-org/gemma-4-E4B-it-GGUF/resolve/main/gemma-4-E4B-it-Q4_K_M.gguf'
 
 export default function ModelDownloadStep({ onNext, onSkip }: ModelDownloadStepProps): React.JSX.Element {
   const [downloading, setDownloading] = useState(false)
@@ -42,7 +42,7 @@ export default function ModelDownloadStep({ onNext, onSkip }: ModelDownloadStepP
     <div className="flex flex-col items-center justify-center flex-1 px-6 max-w-md mx-auto w-full">
       <h2 className="text-2xl font-semibold text-text-primary mb-2">Download your AI model</h2>
       <p className="text-sm text-text-secondary mb-8 text-center">
-        Gemma 4 E4B — ~1.5 GB. This only happens once.
+        Gemma 4 E4B (Q4_K_M) — ~5.3 GB. This only happens once.
       </p>
 
       {!downloading && !done && (
