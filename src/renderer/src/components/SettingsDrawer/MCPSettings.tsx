@@ -205,6 +205,7 @@ export default function MCPSettings(): React.JSX.Element {
   const [servers, setServers] = useState<MCPServer[]>([])
   const [showAddModal, setShowAddModal] = useState(false)
   const [testing, setTesting] = useState<string | null>(null)
+  const [connecting, setConnecting] = useState<string | null>(null)
   const [testResults, setTestResults] = useState<Record<string, { ok: boolean; error?: string }>>({})
 
   const loadServers = async (): Promise<void> => {
@@ -230,6 +231,25 @@ export default function MCPSettings(): React.JSX.Element {
       setTestResults((prev) => ({ ...prev, [id]: { ok: false, error: 'Test failed' } }))
     }
     setTesting(null)
+  }
+
+  const handleConnect = async (server: MCPServer): Promise<void> => {
+    setConnecting(server.id)
+    try {
+      // First try to discover OAuth
+      const oauthConfig = await window.folk.discoverMCPOAuth(server.url!)
+      if (oauthConfig) {
+        // OAuth flow - opens browser
+        await window.folk.authorizeMCP(server.id, server.url!)
+        setTestResults((prev) => ({ ...prev, [server.id]: { ok: true } }))
+      } else {
+        // No OAuth - just test direct connection
+        await handleTest(server.id)
+      }
+    } catch (err: any) {
+      setTestResults((prev) => ({ ...prev, [server.id]: { ok: false, error: err.message } }))
+    }
+    setConnecting(null)
   }
 
   const handleSave = async (data: AddServerFormData): Promise<void> => {
@@ -315,6 +335,15 @@ export default function MCPSettings(): React.JSX.Element {
                 </div>
               </div>
               <div className="flex items-center gap-1">
+                {server.transport === 'sse' && server.url && (
+                  <button
+                    onClick={() => handleConnect(server)}
+                    disabled={connecting === server.id}
+                    className="text-xs text-electric-cyan hover:text-electric-cyan/80 px-2 py-1 border border-electric-cyan/30 rounded-default transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    {connecting === server.id ? 'Connecting...' : 'Connect'}
+                  </button>
+                )}
                 <button
                   onClick={() => handleTest(server.id)}
                   disabled={testing === server.id}

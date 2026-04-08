@@ -5,6 +5,7 @@ import type { LlamaServerManager } from './llama-server'
 import type { AgentManager } from './agent-manager'
 import type { ModelManager } from './model-manager'
 import type { MCPClientManager } from './mcp/client-manager'
+import type { MCPOAuthManager } from './mcp/oauth-manager'
 import type { MCPServer } from '../shared/types'
 
 export interface IPCDependencies {
@@ -13,6 +14,7 @@ export interface IPCDependencies {
   agentManager: AgentManager
   modelManager: ModelManager
   mcpManager: MCPClientManager
+  oauthManager: MCPOAuthManager
   getMainWindow: () => BrowserWindow | null
   getWorkspacePath: () => string
   setWorkspacePath: (path: string) => void
@@ -129,6 +131,59 @@ export function registerIPCHandlers(deps: IPCDependencies): void {
     const server = servers.find((s) => s.id === id)
     if (!server) return { ok: false, error: 'Server not found' }
     return deps.mcpManager.testConnection(server)
+  })
+
+  ipcMain.handle('mcp:discover-oauth', async (_, serverUrl: string) => {
+    return deps.oauthManager.discoverOAuth(serverUrl)
+  })
+
+  ipcMain.handle('mcp:authorize', async (_, serverId: string, serverUrl: string) => {
+    // 1. Discover OAuth config
+    const oauthConfig = await deps.oauthManager.discoverOAuth(serverUrl)
+    if (!oauthConfig) {
+      throw new Error('Server does not support OAuth')
+    }
+
+    // 2. Register client if supported
+    let clientId = 'folk-desktop'
+    let clientSecret: string | undefined
+
+    if (oauthConfig.registration_endpoint) {
+      try {
+        const reg = await deps.oauthManager.registerClient(
+          oauthConfig.registration_endpoint,
+          'http://127.0.0.1:0/callback'
+        )
+        clientId = reg.client_id
+        clientSecret = reg.client_secret
+      } catch {
+        // Use default client_id
+      }
+    }
+
+    // 3. Authorize (opens browser)
+    const tokens = await deps.oauthManager.authorize(oauthConfig, clientId, clientSecret)
+
+    // 4. Save tokens
+    deps.db.saveOAuthTokens(
+      serverId,
+      tokens,
+      JSON.stringify(oauthConfig),
+      clientId,
+      clientSecret
+    )
+
+    // 5. Try connecting with the token
+    const server = deps.db.getMCPServerById(serverId)
+    if (server) {
+      try {
+        await deps.mcpManager.connect(server)
+      } catch {
+        // Token saved, connection can be retried
+      }
+    }
+
+    return { success: true }
   })
 
   // --- Model ---

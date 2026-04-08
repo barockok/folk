@@ -101,6 +101,8 @@ export interface FolkAPI {
   addMCPServer: (config: Omit<MCPServer, 'id' | 'createdAt'>) => Promise<MCPServer>
   removeMCPServer: (id: string) => Promise<void>
   testMCPConnection: (id: string) => Promise<{ ok: boolean; error?: string }>
+  discoverMCPOAuth: (serverUrl: string) => Promise<{ authorization_endpoint: string; token_endpoint: string } | null>
+  authorizeMCP: (serverId: string, serverUrl: string) => Promise<{ success: boolean }>
   getModelInfo: () => Promise<ModelInfo | null>
   changeModel: (path: string) => Promise<void>
   downloadModel: (url: string) => Promise<void>

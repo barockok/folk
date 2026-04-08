@@ -23,6 +23,8 @@ const folkAPI: FolkAPI = {
   addMCPServer: (config) => ipcRenderer.invoke('mcp:add-server', config),
   removeMCPServer: (id) => ipcRenderer.invoke('mcp:remove-server', id),
   testMCPConnection: (id) => ipcRenderer.invoke('mcp:test-connection', id),
+  discoverMCPOAuth: (serverUrl) => ipcRenderer.invoke('mcp:discover-oauth', serverUrl),
+  authorizeMCP: (serverId, serverUrl) => ipcRenderer.invoke('mcp:authorize', serverId, serverUrl),
 
   // Model
   getModelInfo: () => ipcRenderer.invoke('model:info'),

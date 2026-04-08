@@ -10,6 +10,7 @@ import { ModelManager } from './model-manager'
 import { FileSystemTools } from './tools/file-system'
 import { SystemInfoTool } from './tools/system-info'
 import { MCPClientManager } from './mcp/client-manager'
+import { MCPOAuthManager } from './mcp/oauth-manager'
 import { registerIPCHandlers } from './ipc-handlers'
 
 let mainWindow: BrowserWindow | null = null
@@ -107,8 +108,14 @@ app.whenReady().then(async () => {
     contextSize: 4096
   })
 
-  // Initialize MCP Client Manager
+  // Initialize MCP Client Manager and OAuth Manager
   mcpManager = new MCPClientManager()
+  const oauthManager = new MCPOAuthManager()
+
+  // Set token provider so MCP client can use stored OAuth tokens
+  mcpManager.setTokenProvider(async (serverId) => {
+    return db.getOAuthTokens(serverId)
+  })
 
   // Initialize FileSystemTools, SystemInfoTool, and AgentManager
   const fileTools = new FileSystemTools(workspacePath, () => mainWindow)
@@ -138,6 +145,7 @@ app.whenReady().then(async () => {
     agentManager,
     modelManager,
     mcpManager,
+    oauthManager,
     getMainWindow: () => mainWindow,
     getWorkspacePath: () => workspacePath,
     setWorkspacePath: (path: string) => {
