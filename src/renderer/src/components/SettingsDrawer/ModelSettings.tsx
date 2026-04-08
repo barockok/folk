@@ -64,7 +64,7 @@ export default function ModelSettings(): React.JSX.Element {
             type="password"
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
-            placeholder="sk-ant-... (from console.anthropic.com)"
+            placeholder="sk-ant-... (optional, uses local llama-server by default)"
             className="w-full bg-transparent border border-border-mist-10 rounded-default px-3 py-2 text-sm font-mono text-text-primary placeholder:text-text-muted focus:border-signal-blue focus:outline-none"
           />
         </div>
@@ -75,7 +75,7 @@ export default function ModelSettings(): React.JSX.Element {
             type="text"
             value={baseUrl}
             onChange={(e) => setBaseUrl(e.target.value)}
-            placeholder="e.g. http://localhost:8847 for llama-server, or leave empty for Anthropic"
+            placeholder="http://127.0.0.1:8847 (default: local llama-server)"
             className="w-full bg-transparent border border-border-mist-10 rounded-default px-3 py-2 text-sm font-mono text-text-primary placeholder:text-text-muted focus:border-signal-blue focus:outline-none"
           />
           <p className="text-xs text-text-muted mt-1">
@@ -89,7 +89,7 @@ export default function ModelSettings(): React.JSX.Element {
             type="text"
             value={model}
             onChange={(e) => setModel(e.target.value)}
-            placeholder="claude-sonnet-4-6 (default)"
+            placeholder="gemma-4-e4b (default: local model)"
             className="w-full bg-transparent border border-border-mist-10 rounded-default px-3 py-2 text-sm font-mono text-text-primary placeholder:text-text-muted focus:border-signal-blue focus:outline-none"
           />
         </div>

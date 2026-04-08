@@ -247,20 +247,17 @@ export class AgentManager extends EventEmitter {
     }
 
     // Determine API configuration
-    const apiKey = (this.db.getSetting('anthropicApiKey') as string) || process.env.ANTHROPIC_API_KEY || ''
-    const baseUrl = (this.db.getSetting('anthropicBaseUrl') as string) || process.env.ANTHROPIC_BASE_URL || ''
-    const model = (this.db.getSetting('model') as string) || 'claude-sonnet-4-6'
+    // Default: local llama-server on port 8847 (Anthropic-compatible API)
+    const apiKey = (this.db.getSetting('anthropicApiKey') as string) || process.env.ANTHROPIC_API_KEY || 'local-no-key-needed'
+    const baseUrl = (this.db.getSetting('anthropicBaseUrl') as string) || process.env.ANTHROPIC_BASE_URL || 'http://127.0.0.1:8847'
+    const model = (this.db.getSetting('model') as string) || 'gemma-4-e4b'
 
     const env: Record<string, string | undefined> = {
       ...process.env,
       CLAUDE_CONFIG_DIR: sessionDir,
-      ANTHROPIC_API_KEY: apiKey || 'local-no-key',
+      ANTHROPIC_API_KEY: apiKey,
+      ANTHROPIC_BASE_URL: baseUrl,
       CLAUDE_AGENT_SDK_CLIENT_APP: 'folk/0.1.0',
-    }
-
-    // If user configured a custom base URL (e.g. llama-server, Ollama proxy, LiteLLM)
-    if (baseUrl) {
-      env.ANTHROPIC_BASE_URL = baseUrl
     }
 
     // Build MCP server configs from Folk's database
