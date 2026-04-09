@@ -1,5 +1,6 @@
 import { BrowserWindow, ipcMain } from 'electron'
 import { join } from 'path'
+import { is } from '@electron-toolkit/utils'
 import { EventEmitter } from 'events'
 
 type InferenceStatus = 'idle' | 'loading' | 'ready' | 'error'
@@ -85,7 +86,11 @@ export class InferenceManager extends EventEmitter {
     })
 
     // Load the inference page
-    await this.window.loadFile(join(__dirname, '../renderer/inference.html'))
+    if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+      await this.window.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/inference.html`)
+    } else {
+      await this.window.loadFile(join(__dirname, '../renderer/inference.html'))
+    }
   }
 
   async loadModel(modelId?: string): Promise<void> {
