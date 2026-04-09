@@ -51,10 +51,15 @@ export class AgentManager extends EventEmitter {
       win?.webContents.send('model:download-progress', progress)
     })
 
-    // Load the model
-    console.log('[AgentManager] Loading Gemma 4 model via WebGPU...')
-    await this.inference.loadModel()
-    console.log('[AgentManager] Model loaded and ready')
+    // Load the active model (or default)
+    const activeModelId = this.db.getSetting('activeModelId') as string | null
+    if (activeModelId) {
+      console.log(`[AgentManager] Loading model: ${activeModelId}`)
+      await this.inference.loadModel(activeModelId)
+      console.log('[AgentManager] Model loaded and ready')
+    } else {
+      console.log('[AgentManager] No active model set, skipping model load')
+    }
   }
 
   async handleMessage(conversationId: string, userContent: string): Promise<void> {
@@ -82,7 +87,14 @@ export class AgentManager extends EventEmitter {
       (this.db.getSetting('workspacePath') as string) ||
       app.getPath('home')
 
-    // Wait for model to be ready (may still be loading on first launch)
+    // Check if a model is loaded
+    if (this.inference.getStatus() === 'idle') {
+      const errorMsg = 'No AI model is loaded. Please download and activate a model in Settings.'
+      win?.webContents.send('agent:error', { conversationId, error: errorMsg })
+      return
+    }
+
+    // Wait for model to be ready (may still be loading)
     if (this.inference.getStatus() !== 'ready') {
       console.log('[AgentManager] Waiting for model to finish loading...')
       win?.webContents.send('agent:token', { conversationId, token: '_Loading AI model, please wait..._\n\n' })

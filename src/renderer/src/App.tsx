@@ -43,8 +43,7 @@ function App(): React.JSX.Element {
     async function checkFirstLaunch(): Promise<void> {
       try {
         const workspace = await window.folk.getSetting('workspacePath')
-        const modelPath = await window.folk.getSetting('modelPath')
-        if (!workspace && !modelPath) {
+        if (!workspace) {
           setShowOnboarding(true)
         }
       } catch {
