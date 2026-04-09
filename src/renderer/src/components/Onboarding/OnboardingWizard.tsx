@@ -51,9 +51,7 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps):
       {/* Step content */}
       <div className="relative z-10 flex flex-col flex-1 min-h-0">
         {step === 0 && <WelcomeStep onNext={() => setStep(1)} />}
-        {step === 1 && (
-          <ModelDownloadStep onNext={() => setStep(2)} onSkip={() => setStep(2)} />
-        )}
+        {step === 1 && <ModelDownloadStep onNext={() => setStep(2)} />}
         {step === 2 && <WorkspaceStep onComplete={onComplete} />}
       </div>
     </div>
