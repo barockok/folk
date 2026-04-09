@@ -39,12 +39,35 @@ api.onLoadModel(async (modelId?: string) => {
     const id = modelId || DEFAULT_MODEL
     console.log(`[InferenceWorker] Loading model: ${id}`)
 
-    const progressCallback = (progress: { status: string; progress?: number; file?: string }): void => {
-      if (progress.status === 'progress') {
+    // Track per-file download progress to compute overall percentage
+    const fileProgress = new Map<string, { loaded: number; total: number }>()
+
+    const progressCallback = (progress: {
+      status: string
+      progress?: number
+      loaded?: number
+      total?: number
+      file?: string
+    }): void => {
+      if (progress.status === 'progress' && progress.file) {
+        fileProgress.set(progress.file, {
+          loaded: progress.loaded || 0,
+          total: progress.total || 0
+        })
+
+        // Compute overall progress across all files
+        let totalBytes = 0
+        let loadedBytes = 0
+        for (const entry of fileProgress.values()) {
+          totalBytes += entry.total
+          loadedBytes += entry.loaded
+        }
+        const overallPercent = totalBytes > 0 ? Math.round((loadedBytes / totalBytes) * 100) : 0
+
         api.sendDownloadProgress({
           modelId: id,
-          percent: Math.round(progress.progress || 0),
-          file: progress.file || ''
+          percent: overallPercent,
+          file: progress.file
         })
       }
     }
