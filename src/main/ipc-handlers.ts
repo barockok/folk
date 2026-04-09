@@ -138,6 +138,7 @@ export function registerIPCHandlers(deps: IPCDependencies): void {
   ipcMain.handle('model:download-by-id', async (_event, modelId: string) => {
     const win = getMainWindow()
     try {
+      await deps.agentManager.waitForInitialized()
       const inference = deps.agentManager.getInference()
       await inference.loadModel(modelId)
       // Save to downloaded models list
@@ -160,6 +161,7 @@ export function registerIPCHandlers(deps: IPCDependencies): void {
   })
 
   ipcMain.handle('model:download-cancel', async () => {
+    await deps.agentManager.waitForInitialized()
     const inference = deps.agentManager.getInference()
     inference.abort()
   })
@@ -167,6 +169,7 @@ export function registerIPCHandlers(deps: IPCDependencies): void {
   ipcMain.handle('model:set-active', async (_event, modelId: string) => {
     db.setSetting('activeModelId', modelId)
     // Reload model in inference engine
+    await deps.agentManager.waitForInitialized()
     const inference = deps.agentManager.getInference()
     await inference.loadModel(modelId)
   })

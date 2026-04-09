@@ -23,6 +23,8 @@ export class AgentManager extends EventEmitter {
   private getMainWindow: () => BrowserWindow | null
   private inference: InferenceManager
   private agentLoops: Map<string, AgentLoop> = new Map()
+  private initialized = false
+  private initPromise: Promise<void> | null = null
 
   constructor(config: AgentManagerConfig) {
     super()
@@ -51,6 +53,8 @@ export class AgentManager extends EventEmitter {
       win?.webContents.send('model:download-progress', progress)
     })
 
+    this.initialized = true
+
     // Load the active model (or default)
     const activeModelId = this.db.getSetting('activeModelId') as string | null
     if (activeModelId) {
@@ -60,6 +64,23 @@ export class AgentManager extends EventEmitter {
     } else {
       console.log('[AgentManager] No active model set, skipping model load')
     }
+  }
+
+  async waitForInitialized(): Promise<void> {
+    if (this.initialized) return
+    if (!this.initPromise) {
+      this.initPromise = new Promise((resolve) => {
+        const check = (): void => {
+          if (this.initialized) {
+            resolve()
+          } else {
+            setTimeout(check, 100)
+          }
+        }
+        check()
+      })
+    }
+    return this.initPromise
   }
 
   async handleMessage(conversationId: string, userContent: string): Promise<void> {
