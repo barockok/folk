@@ -74,6 +74,12 @@ export interface DownloadProgress {
   eta: string
 }
 
+export interface ModelDownloadProgress {
+  modelId: string
+  percent: number
+  file: string
+}
+
 export interface ToolCallStart {
   id: string
   toolName: string
@@ -106,7 +112,11 @@ export interface FolkAPI {
   authorizeMCP: (serverId: string, serverUrl: string) => Promise<{ success: boolean }>
   getModelInfo: () => Promise<ModelInfo | null>
   changeModel: (path: string) => Promise<void>
-  downloadModel: (url: string) => Promise<void>
+  downloadModelById: (modelId: string) => Promise<void>
+  cancelModelDownload: () => Promise<void>
+  setActiveModel: (modelId: string) => Promise<void>
+  getActiveModel: () => Promise<string | null>
+  getDownloadedModels: () => Promise<string[]>
   selectWorkspace: () => Promise<string | null>
   getCurrentWorkspace: () => Promise<string>
   getLlamaStatus: () => Promise<LlamaStatus>
@@ -119,6 +129,8 @@ export interface FolkAPI {
   onArtifact: (callback: (data: { conversationId: string; artifact: Artifact }) => void) => () => void
   onAgentComplete: (callback: (data: { conversationId: string; message: Message }) => void) => () => void
   onAgentError: (callback: (data: { conversationId: string; error: string }) => void) => () => void
-  onDownloadProgress: (callback: (data: DownloadProgress) => void) => () => void
+  onModelDownloadProgress: (callback: (data: ModelDownloadProgress) => void) => () => void
+  onModelDownloadComplete: (callback: (data: { modelId: string }) => void) => () => void
+  onModelDownloadError: (callback: (data: { modelId: string; error: string }) => void) => () => void
   onLlamaStatusChange: (callback: (status: LlamaStatus) => void) => () => void
 }

@@ -29,7 +29,11 @@ const folkAPI: FolkAPI = {
   // Model
   getModelInfo: () => ipcRenderer.invoke('model:info'),
   changeModel: (path) => ipcRenderer.invoke('model:change', path),
-  downloadModel: (url) => ipcRenderer.invoke('model:download', url),
+  downloadModelById: (modelId) => ipcRenderer.invoke('model:download-by-id', modelId),
+  cancelModelDownload: () => ipcRenderer.invoke('model:download-cancel'),
+  setActiveModel: (modelId) => ipcRenderer.invoke('model:set-active', modelId),
+  getActiveModel: () => ipcRenderer.invoke('model:get-active'),
+  getDownloadedModels: () => ipcRenderer.invoke('model:get-downloaded'),
 
   // Workspace
   selectWorkspace: () => ipcRenderer.invoke('workspace:select'),
@@ -78,11 +82,23 @@ const folkAPI: FolkAPI = {
     ipcRenderer.on('agent:error', handler)
     return () => ipcRenderer.removeListener('agent:error', handler)
   },
-  onDownloadProgress: (callback) => {
+  onModelDownloadProgress: (callback) => {
     const handler = (_event: Electron.IpcRendererEvent, data: Parameters<typeof callback>[0]) =>
       callback(data)
     ipcRenderer.on('model:download-progress', handler)
     return () => ipcRenderer.removeListener('model:download-progress', handler)
+  },
+  onModelDownloadComplete: (callback) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: Parameters<typeof callback>[0]) =>
+      callback(data)
+    ipcRenderer.on('model:download-complete', handler)
+    return () => ipcRenderer.removeListener('model:download-complete', handler)
+  },
+  onModelDownloadError: (callback) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: Parameters<typeof callback>[0]) =>
+      callback(data)
+    ipcRenderer.on('model:download-error', handler)
+    return () => ipcRenderer.removeListener('model:download-error', handler)
   },
   onLlamaStatusChange: (callback) => {
     const handler = (_event: Electron.IpcRendererEvent, status: Parameters<typeof callback>[0]) =>
