@@ -14,6 +14,17 @@ export default defineConfig({
   },
   preload: {
     plugins: [externalizeDepsPlugin()],
+    build: {
+      rollupOptions: {
+        input: {
+          index: resolve('src/preload/index.ts'),
+          inference: resolve('src/inference/preload.ts')
+        },
+        output: {
+          entryFileNames: '[name].js'
+        }
+      }
+    },
     resolve: {
       alias: {
         '@shared': resolve('src/shared')
@@ -21,6 +32,14 @@ export default defineConfig({
     }
   },
   renderer: {
+    build: {
+      rollupOptions: {
+        input: {
+          index: resolve('src/renderer/index.html'),
+          inference: resolve('src/renderer/inference.html')
+        }
+      }
+    },
     resolve: {
       alias: {
         '@renderer': resolve('src/renderer/src'),
