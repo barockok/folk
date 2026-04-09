@@ -82,6 +82,14 @@ export class AgentManager extends EventEmitter {
       (this.db.getSetting('workspacePath') as string) ||
       app.getPath('home')
 
+    // Wait for model to be ready (may still be loading on first launch)
+    if (this.inference.getStatus() !== 'ready') {
+      console.log('[AgentManager] Waiting for model to finish loading...')
+      win?.webContents.send('agent:token', { conversationId, token: '_Loading AI model, please wait..._\n\n' })
+      await this.inference.waitForReady()
+      console.log('[AgentManager] Model ready, proceeding')
+    }
+
     // Get or create agent loop for this conversation
     let loop = this.agentLoops.get(conversationId)
     if (!loop) {

@@ -21,6 +21,9 @@ export class InferenceManager extends EventEmitter {
   private pendingRequests: Map<string, PendingRequest> = new Map()
   private requestCounter = 0
 
+  private readyPromise: Promise<void> | null = null
+  private readyResolve: (() => void) | null = null
+
   getStatus(): InferenceStatus {
     return this.status
   }
@@ -46,6 +49,10 @@ export class InferenceManager extends EventEmitter {
       this.status = status as InferenceStatus
       console.log(`[InferenceManager] Status: ${status}`)
       this.emit('status', status)
+      if (status === 'ready' && this.readyResolve) {
+        this.readyResolve()
+        this.readyResolve = null
+      }
     })
 
     ipcMain.on('inference:token', (_, requestId: string, token: string) => {
@@ -100,6 +107,16 @@ export class InferenceManager extends EventEmitter {
       }
       this.on('status', handler)
     })
+  }
+
+  async waitForReady(): Promise<void> {
+    if (this.status === 'ready') return
+    if (!this.readyPromise) {
+      this.readyPromise = new Promise((resolve) => {
+        this.readyResolve = resolve
+      })
+    }
+    return this.readyPromise
   }
 
   async generate(
