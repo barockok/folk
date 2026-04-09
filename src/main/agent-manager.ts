@@ -175,4 +175,8 @@ export class AgentManager extends EventEmitter {
     this.agentLoops.clear()
     await this.inference.close()
   }
+
+  getInference(): InferenceManager {
+    return this.inference
+  }
 }

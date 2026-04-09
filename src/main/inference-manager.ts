@@ -20,6 +20,7 @@ export class InferenceManager extends EventEmitter {
   private status: InferenceStatus = 'idle'
   private pendingRequests: Map<string, PendingRequest> = new Map()
   private requestCounter = 0
+  private currentModelId: string | null = null
 
   private readyPromise: Promise<void> | null = null
   private readyResolve: (() => void) | null = null
@@ -89,11 +90,11 @@ export class InferenceManager extends EventEmitter {
 
   async loadModel(modelId?: string): Promise<void> {
     if (!this.window) throw new Error('Inference window not initialized')
+    this.currentModelId = modelId || null
     this.window.webContents.send('inference:load-model', modelId)
 
-    // Wait for ready status
     return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error('Model load timeout')), 300000) // 5 min
+      const timeout = setTimeout(() => reject(new Error('Model load timeout')), 300000)
       const handler = (status: string): void => {
         if (status === 'ready') {
           clearTimeout(timeout)
@@ -107,6 +108,10 @@ export class InferenceManager extends EventEmitter {
       }
       this.on('status', handler)
     })
+  }
+
+  getCurrentModelId(): string | null {
+    return this.currentModelId
   }
 
   async waitForReady(): Promise<void> {

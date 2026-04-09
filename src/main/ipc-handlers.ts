@@ -119,10 +119,11 @@ export function registerIPCHandlers(deps: IPCDependencies): void {
     throw new Error('MCP OAuth not available in WebGPU mode')
   })
 
-  // --- Model (stub — model is managed by InferenceManager now) ---
+  // --- Model ---
   ipcMain.handle('model:info', async () => {
+    const activeModel = db.getSetting('activeModelId') as string | null
     return {
-      name: 'gemma-4-e2b-it-ONNX',
+      name: activeModel || 'gemma-4-e2b-it-ONNX',
       path: 'WebGPU (in-browser)',
       sizeBytes: 0,
       quantization: 'q4f16',
@@ -134,8 +135,48 @@ export function registerIPCHandlers(deps: IPCDependencies): void {
     // No-op in WebGPU mode
   })
 
-  ipcMain.handle('model:download', async () => {
-    // Model downloads are handled by transformers.js automatically
+  ipcMain.handle('model:download-by-id', async (_event, modelId: string) => {
+    const win = getMainWindow()
+    try {
+      const inference = deps.agentManager.getInference()
+      await inference.loadModel(modelId)
+      // Save to downloaded models list
+      const downloaded = (db.getSetting('downloadedModels') as string[] | null) || []
+      if (!downloaded.includes(modelId)) {
+        downloaded.push(modelId)
+        db.setSetting('downloadedModels', downloaded)
+      }
+      // Set as active if no active model
+      const activeModel = db.getSetting('activeModelId') as string | null
+      if (!activeModel) {
+        db.setSetting('activeModelId', modelId)
+      }
+      win?.webContents.send('model:download-complete', { modelId })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      win?.webContents.send('model:download-error', { modelId, error: message })
+      throw err
+    }
+  })
+
+  ipcMain.handle('model:download-cancel', async () => {
+    const inference = deps.agentManager.getInference()
+    inference.abort()
+  })
+
+  ipcMain.handle('model:set-active', async (_event, modelId: string) => {
+    db.setSetting('activeModelId', modelId)
+    // Reload model in inference engine
+    const inference = deps.agentManager.getInference()
+    await inference.loadModel(modelId)
+  })
+
+  ipcMain.handle('model:get-active', async () => {
+    return db.getSetting('activeModelId') as string | null
+  })
+
+  ipcMain.handle('model:get-downloaded', async () => {
+    return (db.getSetting('downloadedModels') as string[] | null) || []
   })
 
   // --- Workspace ---
