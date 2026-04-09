@@ -53,6 +53,7 @@ export interface MCPServer {
   url: string | null
   args: string[] | null
   env: Record<string, string> | null
+  headers: Record<string, string> | null
   enabled: boolean
   createdAt: number
 }

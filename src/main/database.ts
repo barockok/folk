@@ -74,6 +74,7 @@ export class DatabaseManager {
         url TEXT,
         args TEXT,
         env TEXT,
+        headers TEXT,
         enabled INTEGER DEFAULT 1,
         created_at INTEGER NOT NULL
       );
@@ -262,8 +263,8 @@ export class DatabaseManager {
     const now = Date.now()
     this.db
       .prepare(
-        `INSERT INTO mcp_servers (id, name, transport, command, url, args, env, enabled, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO mcp_servers (id, name, transport, command, url, args, env, headers, enabled, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         id,
@@ -273,6 +274,7 @@ export class DatabaseManager {
         config.url,
         config.args ? JSON.stringify(config.args) : null,
         config.env ? JSON.stringify(config.env) : null,
+        config.headers ? JSON.stringify(config.headers) : null,
         config.enabled ? 1 : 0,
         now
       )
@@ -509,6 +511,7 @@ function mapMCPServer(row: MCPServerRow): MCPServer {
     url: row.url,
     args: row.args ? JSON.parse(row.args) : null,
     env: row.env ? JSON.parse(row.env) : null,
+    headers: (row as any).headers ? JSON.parse((row as any).headers) : null,
     enabled: row.enabled === 1,
     createdAt: row.created_at
   }

@@ -152,11 +152,17 @@ export class MCPClientManager extends EventEmitter {
     }
     this.connections.set(server.id, connection)
 
-    // Build headers with OAuth token if available
+    // Build headers: start with content type, then server-configured headers, then OAuth
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     }
 
+    // Apply stored headers from server config (e.g. x-api-key for Composio)
+    if (server.headers) {
+      Object.assign(headers, server.headers)
+    }
+
+    // Apply OAuth tokens if available (overrides manual Authorization header)
     if (this.tokenProvider) {
       const tokens = await this.tokenProvider(server.id)
       if (tokens?.access_token) {

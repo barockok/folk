@@ -9,6 +9,7 @@ interface AddServerFormData {
   url: string
   args: string
   env: string
+  headers: string
 }
 
 const EMPTY_FORM: AddServerFormData = {
@@ -17,6 +18,7 @@ const EMPTY_FORM: AddServerFormData = {
   command: '',
   url: '',
   args: '',
+  headers: '',
   env: '',
 }
 
@@ -149,19 +151,32 @@ function AddServerModal({
 
           {/* SSE fields */}
           {form.transport === 'sse' && (
-            <div>
-              <label className={labelClass}>Server URL</label>
-              <input
-                type="text"
-                value={form.url}
-                onChange={(e) => update('url', e.target.value)}
-                placeholder="e.g. https://mcp.composio.dev/api/v1/sse"
-                className={`${inputClass} font-mono text-xs`}
-              />
-              <p className="text-xs text-text-muted mt-1">
-                HTTP SSE endpoint URL (supports OAuth / API key auth)
-              </p>
-            </div>
+            <>
+              <div>
+                <label className={labelClass}>Server URL</label>
+                <input
+                  type="text"
+                  value={form.url}
+                  onChange={(e) => update('url', e.target.value)}
+                  placeholder="e.g. https://connect.composio.dev/mcp"
+                  className={`${inputClass} font-mono text-xs`}
+                />
+              </div>
+
+              <div>
+                <label className={labelClass}>Auth Headers (Header: Value, one per line)</label>
+                <textarea
+                  value={form.headers}
+                  onChange={(e) => update('headers', e.target.value)}
+                  placeholder={`x-api-key: ck_your_composio_key\nAuthorization: Bearer your_token`}
+                  rows={3}
+                  className={`${inputClass} font-mono text-xs resize-none`}
+                />
+                <p className="text-xs text-text-muted mt-1">
+                  For Composio: x-api-key header. For Slack: Authorization Bearer token.
+                </p>
+              </div>
+            </>
           )}
 
           {/* Environment Variables */}
@@ -272,6 +287,19 @@ export default function MCPSettings(): React.JSX.Element {
         }
       })
 
+    // Parse headers from "Header: Value" lines
+    const headersObj: Record<string, string> = {}
+    data.headers
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .forEach((line) => {
+        const colonIdx = line.indexOf(':')
+        if (colonIdx > 0) {
+          headersObj[line.slice(0, colonIdx).trim()] = line.slice(colonIdx + 1).trim()
+        }
+      })
+
     await window.folk.addMCPServer({
       name: data.name.trim(),
       transport: data.transport,
@@ -279,6 +307,7 @@ export default function MCPSettings(): React.JSX.Element {
       url: data.transport === 'sse' ? data.url.trim() : null,
       args: args.length > 0 ? args : null,
       env: Object.keys(envObj).length > 0 ? envObj : null,
+      headers: Object.keys(headersObj).length > 0 ? headersObj : null,
       enabled: true,
     })
 
