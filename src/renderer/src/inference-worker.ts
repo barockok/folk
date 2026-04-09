@@ -42,6 +42,7 @@ api.onLoadModel(async (modelId?: string) => {
     const progressCallback = (progress: { status: string; progress?: number; file?: string }): void => {
       if (progress.status === 'progress') {
         api.sendDownloadProgress({
+          modelId: id,
           percent: Math.round(progress.progress || 0),
           file: progress.file || ''
         })
