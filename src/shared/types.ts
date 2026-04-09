@@ -68,12 +68,6 @@ export interface ModelInfo {
 
 export type LlamaStatus = 'starting' | 'ready' | 'error' | 'stopped'
 
-export interface DownloadProgress {
-  percent: number
-  speed: string
-  eta: string
-}
-
 export interface ModelDownloadProgress {
   modelId: string
   percent: number
