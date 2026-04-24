@@ -1,15 +1,32 @@
 import { EventEmitter } from 'node:events'
-import { createAgent, Agent } from '@anthropic-ai/claude-agent-sdk'
+import { query, AbortError } from '@anthropic-ai/claude-agent-sdk'
+import type { McpServerConfig } from '@anthropic-ai/claude-agent-sdk'
 import { Database } from './database'
 import type {
   Session,
   SessionConfig,
+  Attachment,
   AgentChunk,
   AgentToolCall,
   AgentToolResult,
-  AgentError,
-  Attachment
+  AgentError
 } from '@shared/types'
+
+function mapError(sessionId: string, err: Error & { code?: string }): AgentError {
+  if (err instanceof AbortError || err.name === 'AbortError') {
+    return { sessionId, code: 'cancelled', message: err.message, retryable: false }
+  }
+  if (/model.*not.*found|invalid.*model/i.test(err.message)) {
+    return { sessionId, code: 'invalid-model', message: err.message, retryable: false }
+  }
+  const code = err.code
+  if (code === '401') return { sessionId, code: 'auth', message: err.message, retryable: false }
+  if (code === '429') return { sessionId, code: 'quota', message: err.message, retryable: true }
+  if (code === 'ECONNREFUSED' || code === 'ENETUNREACH') {
+    return { sessionId, code: 'offline', message: err.message, retryable: true }
+  }
+  return { sessionId, code: 'crash', message: err.message, retryable: true }
+}
 
 export interface AgentManagerEvents {
   chunk: (e: AgentChunk) => void
@@ -20,22 +37,8 @@ export interface AgentManagerEvents {
   error: (e: AgentError) => void
 }
 
-function mapError(sessionId: string, err: Error & { code?: string }): AgentError {
-  const code = err.code
-  if (code === '401') {
-    return { sessionId, code: 'auth', message: err.message, retryable: false }
-  }
-  if (code === '429') {
-    return { sessionId, code: 'quota', message: err.message, retryable: true }
-  }
-  if (code === 'ECONNREFUSED' || code === 'ENETUNREACH') {
-    return { sessionId, code: 'offline', message: err.message, retryable: true }
-  }
-  return { sessionId, code: 'crash', message: err.message, retryable: true }
-}
-
 export class AgentManager extends EventEmitter {
-  #agents = new Map<string, Agent>()
+  #streams = new Map<string, { abort: AbortController }>()
   constructor(private db: Database) {
     super()
   }
@@ -53,70 +56,85 @@ export class AgentManager extends EventEmitter {
   }
 
   async deleteSession(id: string): Promise<void> {
-    const a = this.#agents.get(id)
-    if (a) {
-      await a.cancel().catch(() => undefined)
-      await a.dispose().catch(() => undefined)
-      this.#agents.delete(id)
+    const stream = this.#streams.get(id)
+    if (stream) {
+      stream.abort.abort()
+      this.#streams.delete(id)
     }
     this.db.deleteSession(id)
   }
 
-  async sendMessage(sessionId: string, text: string, attachments?: Attachment[]): Promise<void> {
-    const session = this.db.getSession(sessionId)
-    if (!session) throw new Error(`session ${sessionId} not found`)
-    this.db.updateSession(sessionId, { status: 'running' })
-    const agent = this.ensureAgent(session)
-
-    const cleanup = (): void => {
-      this.db.updateSession(sessionId, { status: 'idle' })
-    }
-    const onDone = (): void => {
-      cleanup()
-      agent.off('done', onDone)
-      agent.off('error', onError)
-    }
-    const onError = (): void => {
-      this.db.updateSession(sessionId, { status: 'error' })
-      agent.off('done', onDone)
-      agent.off('error', onError)
-    }
-    agent.once('done', onDone)
-    agent.once('error', onError)
-
-    await agent.sendMessage(text, attachments)
+  dispose(): void {
+    for (const { abort } of this.#streams.values()) abort.abort()
+    this.#streams.clear()
   }
 
   async cancel(sessionId: string): Promise<void> {
-    const agent = this.#agents.get(sessionId)
-    if (!agent) return
-    await agent.cancel().catch(() => undefined)
+    const stream = this.#streams.get(sessionId)
+    if (stream) {
+      stream.abort.abort()
+      this.#streams.delete(sessionId)
+    }
     this.db.updateSession(sessionId, { status: 'cancelled' })
   }
 
-  dispose(): void {
-    for (const a of this.#agents.values()) {
-      void a.dispose().catch(() => undefined)
-    }
-    this.#agents.clear()
-  }
-
-  // exposed so Task 13 can augment
-  protected ensureAgent(session: Session): Agent {
-    const existing = this.#agents.get(session.id)
-    if (existing) return existing
+  async sendMessage(
+    sessionId: string,
+    text: string,
+    _attachments?: Attachment[]
+  ): Promise<void> {
+    const session = this.db.getSession(sessionId)
+    if (!session) throw new Error(`session ${sessionId} not found`)
     const provider = this.#resolveProvider(session.modelId)
-    const agent = createAgent({
-      model: session.modelId,
-      workingDirectory: session.workingDir,
-      apiKey: provider.apiKey,
-      baseUrl: provider.baseUrl ?? undefined,
-      mcpServers: this.db.listMCPs().filter((m) => m.isEnabled),
-      extraFlags: session.flags ?? ''
+
+    this.db.updateSession(sessionId, { status: 'running' })
+
+    const abort = new AbortController()
+    this.#streams.set(sessionId, { abort })
+
+    const envOverlay: Record<string, string | undefined> = {
+      ANTHROPIC_API_KEY: provider.apiKey
+    }
+    if (provider.baseUrl) envOverlay.ANTHROPIC_BASE_URL = provider.baseUrl
+
+    const mcpMap: Record<string, McpServerConfig> = {}
+    for (const m of this.db.listMCPs().filter((x) => x.isEnabled)) {
+      if (m.transport === 'stdio' && m.command) {
+        mcpMap[m.name] = {
+          type: 'stdio',
+          command: m.command,
+          args: m.args ?? [],
+          env: m.env ?? undefined
+        }
+      }
+    }
+
+    const q = query({
+      prompt: text,
+      options: {
+        cwd: session.workingDir,
+        model: session.modelId,
+        env: envOverlay,
+        mcpServers: mcpMap,
+        abortController: abort,
+        extraArgs: this.#parseExtraArgs(session.flags)
+      }
     })
-    this.#wire(session.id, agent)
-    this.#agents.set(session.id, agent)
-    return agent
+
+    try {
+      for await (const msg of q) {
+        this.#dispatchMessage(sessionId, msg as unknown)
+      }
+      this.db.updateSession(sessionId, { status: 'idle' })
+    } catch (err) {
+      const agentErr = mapError(sessionId, err as Error & { code?: string })
+      this.emit('error', agentErr)
+      this.db.updateSession(sessionId, {
+        status: agentErr.code === 'cancelled' ? 'cancelled' : 'error'
+      })
+    } finally {
+      this.#streams.delete(sessionId)
+    }
   }
 
   #resolveProvider(modelId: string) {
@@ -126,20 +144,73 @@ export class AgentManager extends EventEmitter {
     return match
   }
 
-  #wire(sessionId: string, agent: Agent): void {
-    agent.on('chunk', (e: { text: string }) => this.emit('chunk', { sessionId, text: e.text }))
-    agent.on('thinking', (e: { text: string }) =>
-      this.emit('thinking', { sessionId, text: e.text })
-    )
-    agent.on('toolCall', (e: { callId: string; tool: string; input: unknown }) =>
-      this.emit('toolCall', { sessionId, ...e })
-    )
-    agent.on('toolResult', (e: { callId: string; tool: string; output: unknown }) =>
-      this.emit('toolResult', { sessionId, ...e })
-    )
-    agent.on('done', () => this.emit('done', { sessionId }))
-    agent.on('error', (err: Error & { code?: string }) =>
-      this.emit('error', mapError(sessionId, err))
-    )
+  #parseExtraArgs(flags: string | null): Record<string, string | null> | undefined {
+    if (!flags) return undefined
+    const out: Record<string, string | null> = {}
+    for (const part of flags.split(/\s+/)) {
+      if (!part) continue
+      const m = part.match(/^--([^=]+)(?:=(.*))?$/)
+      if (!m) continue
+      out[m[1]!] = m[2] ?? null
+    }
+    return out
+  }
+
+  #dispatchMessage(sessionId: string, msg: unknown): void {
+    const m = msg as {
+      type: string
+      message?: { content?: Array<Record<string, unknown>> }
+      subtype?: string
+      is_error?: boolean
+      result?: string
+    }
+    if (m.type === 'assistant' && m.message?.content) {
+      for (const block of m.message.content) {
+        const b = block as {
+          type: string
+          text?: string
+          thinking?: string
+          id?: string
+          name?: string
+          input?: unknown
+        }
+        if (b.type === 'text' && b.text != null) {
+          this.emit('chunk', { sessionId, text: b.text })
+        } else if (b.type === 'thinking' && b.thinking != null) {
+          this.emit('thinking', { sessionId, text: b.thinking })
+        } else if (b.type === 'tool_use' && b.id && b.name) {
+          this.emit('toolCall', {
+            sessionId,
+            callId: b.id,
+            tool: b.name,
+            input: b.input
+          })
+        }
+      }
+    } else if (m.type === 'user' && m.message?.content) {
+      for (const block of m.message.content) {
+        const b = block as {
+          type: string
+          tool_use_id?: string
+          content?: unknown
+          is_error?: boolean
+        }
+        if (b.type === 'tool_result' && b.tool_use_id) {
+          this.emit('toolResult', {
+            sessionId,
+            callId: b.tool_use_id,
+            tool: 'unknown',
+            output: b.content,
+            isError: !!b.is_error
+          })
+        }
+      }
+    } else if (m.type === 'result') {
+      if (m.subtype === 'error' || m.is_error) {
+        this.emit('error', mapError(sessionId, new Error(m.result ?? 'agent error')))
+      }
+      this.emit('done', { sessionId })
+    }
+    // Ignore system, compact_boundary, stream_event, and all other message types for v0.
   }
 }

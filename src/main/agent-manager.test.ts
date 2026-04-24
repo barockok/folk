@@ -1,10 +1,10 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { AgentManager } from './agent-manager'
 import { Database } from './database'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { __setFactory, ErrorAgent, Agent as MockAgent } from './__mocks__/claude-agent-sdk'
+import { __setQueryImpl, __resetQueryImpl, makeQuery } from './__mocks__/claude-agent-sdk'
 import type { AgentError } from '@shared/types'
 
 describe('AgentManager.createSession', () => {
@@ -105,11 +105,15 @@ describe('AgentManager.cancel & error mapping', () => {
     mgr.dispose()
     db.close()
     rmSync(dir, { recursive: true, force: true })
-    __setFactory((opts) => new MockAgent(opts))
+    __resetQueryImpl()
   })
 
   it('maps 401 to auth error, not retryable', async () => {
-    __setFactory((opts) => new ErrorAgent(opts, '401'))
+    __setQueryImpl(() =>
+      makeQuery([], {
+        throwBefore: Object.assign(new Error('401 unauthorized'), { code: '401' })
+      })
+    )
     const s = await mgr.createSession({ modelId: 'm', workingDir: dir })
     const err = new Promise<AgentError>((res) => mgr.once('error', (e) => res(e)))
     await mgr.sendMessage(s.id, 'hi').catch(() => undefined)
