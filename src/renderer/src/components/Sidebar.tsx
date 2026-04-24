@@ -1,0 +1,109 @@
+import { Icon } from './icons'
+import { useUIStore } from '../stores/useUIStore'
+import { useProfileStore } from '../stores/useProfileStore'
+import type { PageKey } from '../stores/useUIStore'
+
+interface NavItem {
+  id: PageKey
+  label: string
+  icon: string
+}
+
+interface NavGroup {
+  group: string
+  items: NavItem[]
+}
+
+const NAV_GROUPS: NavGroup[] = [
+  {
+    group: 'Workspace',
+    items: [
+      { id: 'sessions', label: 'Sessions', icon: 'terminal' },
+      { id: 'mcp', label: 'MCP Servers', icon: 'server' },
+      { id: 'skills', label: 'Skills', icon: 'sparkles' },
+      { id: 'plugins', label: 'Plugins', icon: 'puzzle' },
+    ],
+  },
+  {
+    group: 'Discover',
+    items: [{ id: 'marketplace', label: 'Marketplace', icon: 'store' }],
+  },
+  {
+    group: 'Configure',
+    items: [
+      { id: 'model', label: 'Models', icon: 'cpu' },
+      { id: 'keybindings', label: 'Keybindings', icon: 'keyboard' },
+    ],
+  },
+]
+
+export function Sidebar() {
+  const page = useUIStore((s) => s.page)
+  const setPage = useUIStore((s) => s.setPage)
+  const collapsed = useUIStore((s) => s.sidebarCollapsed)
+  const toggleSidebar = useUIStore((s) => s.toggleSidebar)
+  const nickname = useProfileStore((s) => s.profile?.nickname)
+
+  const initial = (nickname || 'Y').slice(0, 1).toUpperCase()
+  const displayName = nickname || 'You'
+
+  return (
+    <aside className={`sb${collapsed ? ' sb-collapsed' : ''}`}>
+      <div className="sb-brand">
+        <div className="sb-logo" title={collapsed ? 'folk' : undefined}>
+          <span>f</span>
+        </div>
+        {!collapsed && (
+          <div className="sb-brand-name" style={{ flex: 1 }}>
+            folk
+          </div>
+        )}
+        {!collapsed && (
+          <button className="sb-collapse" onClick={toggleSidebar} title="Collapse sidebar">
+            <Icon name="chevronLeft" size={13} />
+          </button>
+        )}
+      </div>
+
+      {collapsed && (
+        <button className="sb-expand" onClick={toggleSidebar} title="Expand sidebar">
+          <Icon name="chevronRight" size={13} />
+        </button>
+      )}
+
+      <nav className="sb-nav scroll">
+        {NAV_GROUPS.map((g) => (
+          <div key={g.group}>
+            {!collapsed && <div className="sb-group">{g.group}</div>}
+            {g.items.map((it) => (
+              <div
+                key={it.id}
+                className={`sb-item${page === it.id ? ' active' : ''}`}
+                onClick={() => setPage(it.id)}
+                title={collapsed ? it.label : undefined}
+              >
+                <Icon name={it.icon} size={16} className="sb-ico" />
+                {!collapsed && <span>{it.label}</span>}
+              </div>
+            ))}
+          </div>
+        ))}
+      </nav>
+
+      <div
+        className={`sb-profile${page === 'profile' ? ' on' : ''}`}
+        onClick={() => setPage('profile')}
+        title={collapsed ? `${displayName} — profile` : undefined}
+      >
+        <div className="sb-profile-av">{initial}</div>
+        {!collapsed && (
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div className="sb-profile-name trunc">{displayName}</div>
+            <div className="sb-profile-sub trunc">How folk refers to you</div>
+          </div>
+        )}
+        {!collapsed && <Icon name="chevronRight" size={13} className="sb-profile-caret" />}
+      </div>
+    </aside>
+  )
+}
