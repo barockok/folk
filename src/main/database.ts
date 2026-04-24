@@ -1,6 +1,6 @@
 import BetterSqlite3, { Database as SQLiteDB } from 'better-sqlite3'
 import { safeStorage } from 'electron'
-import type { Session, SessionConfig, ProviderConfig, ModelConfig } from '@shared/types'
+import type { Session, SessionConfig, ProviderConfig, ModelConfig, MCPServer } from '@shared/types'
 import { randomUUID } from 'node:crypto'
 
 const SCHEMA = `
@@ -194,6 +194,61 @@ export class Database {
 
   deleteProvider(id: string): void {
     this.db.prepare(`DELETE FROM providers WHERE id = ?`).run(id)
+  }
+
+  saveMCP(m: MCPServer): void {
+    this.db
+      .prepare(
+        `INSERT INTO mcp_servers (id, name, template, transport, command, args, env, url,
+           is_enabled, status, last_error, tool_count, created_at)
+         VALUES (@id, @name, @template, @transport, @command, @args, @env, @url,
+           @isEnabled, @status, @lastError, @toolCount, @createdAt)
+         ON CONFLICT(id) DO UPDATE SET
+           name = excluded.name, template = excluded.template, transport = excluded.transport,
+           command = excluded.command, args = excluded.args, env = excluded.env, url = excluded.url,
+           is_enabled = excluded.is_enabled, status = excluded.status,
+           last_error = excluded.last_error, tool_count = excluded.tool_count`
+      )
+      .run({
+        id: m.id,
+        name: m.name,
+        template: m.template,
+        transport: m.transport,
+        command: m.command,
+        args: m.args ? JSON.stringify(m.args) : null,
+        env: m.env ? JSON.stringify(m.env) : null,
+        url: m.url,
+        isEnabled: m.isEnabled ? 1 : 0,
+        status: m.status,
+        lastError: m.lastError,
+        toolCount: m.toolCount,
+        createdAt: m.createdAt
+      })
+  }
+
+  listMCPs(): MCPServer[] {
+    const rows = this.db
+      .prepare(`SELECT * FROM mcp_servers ORDER BY created_at ASC`)
+      .all() as Array<Record<string, unknown>>
+    return rows.map((r) => ({
+      id: r.id as string,
+      name: r.name as string,
+      template: (r.template as string) ?? null,
+      transport: r.transport as MCPServer['transport'],
+      command: (r.command as string) ?? null,
+      args: r.args ? (JSON.parse(r.args as string) as string[]) : null,
+      env: r.env ? (JSON.parse(r.env as string) as Record<string, string>) : null,
+      url: (r.url as string) ?? null,
+      isEnabled: Number(r.is_enabled ?? 0) === 1,
+      status: r.status as MCPServer['status'],
+      lastError: (r.last_error as string) ?? null,
+      toolCount: r.tool_count == null ? null : Number(r.tool_count),
+      createdAt: Number(r.created_at ?? 0)
+    }))
+  }
+
+  deleteMCP(id: string): void {
+    this.db.prepare(`DELETE FROM mcp_servers WHERE id = ?`).run(id)
   }
 
   #toSession = (row: Record<string, unknown>): Session => ({
