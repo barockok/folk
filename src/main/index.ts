@@ -1,9 +1,18 @@
 import { app, BrowserWindow, shell } from 'electron'
 import { join } from 'node:path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
+import { Database } from './database'
+import { AgentManager } from './agent-manager'
+import { MCPManager } from './mcp-manager'
+import { registerIpc } from './ipc-handlers'
+
+let db: Database
+let agentManager: AgentManager
+let mcpManager: MCPManager
+let mainWindow: BrowserWindow | null = null
 
 function createWindow(): void {
-  const mainWindow = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1280,
     height: 820,
     minWidth: 960,
@@ -18,7 +27,10 @@ function createWindow(): void {
     }
   })
 
-  mainWindow.on('ready-to-show', () => mainWindow.show())
+  mainWindow.on('ready-to-show', () => mainWindow!.show())
+  mainWindow.on('closed', () => {
+    mainWindow = null
+  })
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url)
     return { action: 'deny' }
@@ -36,7 +48,14 @@ app.whenReady().then(() => {
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
   })
+
+  db = new Database(join(app.getPath('userData'), 'folk.db'))
+  agentManager = new AgentManager(db)
+  mcpManager = new MCPManager(db)
+  registerIpc(db, agentManager, mcpManager)
+
   createWindow()
+  // Task 18 will call wireStreaming(agentManager, mainWindow) here.
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
@@ -45,4 +64,9 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
+})
+
+app.on('before-quit', () => {
+  agentManager?.dispose()
+  db?.close()
 })
