@@ -320,6 +320,49 @@ claude-code/releases/v2.1</pre>
         </div>
       </div>
     </section>
+    <section class="commitments" id="open-source">
+      <div class="page commitments__inner">
+        <div class="eyebrow commitments__eyebrow">THE COMMITMENTS</div>
+        <h2 class="commitments__heading">Local-first. BYO-key. No phone-home.</h2>
+        <p class="commitments__body">
+          folk doesn't have an account system, doesn't ship telemetry, and doesn't run any of your sessions through our servers. Your keys stay in macOS Keychain. Your sessions stay in <code>~/.claude/</code>. Your MCP configs stay on disk.
+        </p>
+        <div class="commitments__grid">
+          <div class="commitment">
+            <svg class="commitment__icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+              <rect x="4" y="10" width="16" height="10" rx="2"/>
+              <path d="M8 10V7a4 4 0 0 1 8 0v3"/>
+            </svg>
+            <h3 class="commitment__title">Local-first</h3>
+            <p class="commitment__body">Sessions, keys, configs, and history all live on your machine. No cloud sync, no account.</p>
+          </div>
+          <div class="commitment">
+            <svg class="commitment__icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+              <circle cx="9" cy="12" r="4"/>
+              <path d="M13 12h8M17 12v3M19 12v2"/>
+            </svg>
+            <h3 class="commitment__title">BYO-key</h3>
+            <p class="commitment__body">You bring keys for the providers you want. We're not in the inference business.</p>
+          </div>
+          <div class="commitment">
+            <svg class="commitment__icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+              <path d="M12 3v18M5 7h14M5 7l-2 6h4zM19 7l-2 6h4z"/>
+            </svg>
+            <h3 class="commitment__title">MIT licensed</h3>
+            <p class="commitment__body">Source on GitHub. Read it, fork it, audit the binary. We sign every release.</p>
+          </div>
+        </div>
+        <div class="commitments__cta">
+          <a href="https://github.com/folk-app/folk" class="btn btn-lg commitments__btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M12 .5a11.5 11.5 0 0 0-3.63 22.42c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.34-1.3-1.7-1.3-1.7-1.07-.73.08-.71.08-.71 1.18.08 1.8 1.21 1.8 1.21 1.05 1.8 2.76 1.28 3.43.98.1-.76.41-1.28.74-1.57-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.2-3.1-.12-.3-.52-1.47.11-3.06 0 0 .98-.31 3.21 1.18a11.13 11.13 0 0 1 5.85 0c2.23-1.49 3.21-1.18 3.21-1.18.63 1.59.23 2.76.11 3.06.75.81 1.2 1.84 1.2 3.1 0 4.42-2.69 5.39-5.25 5.68.42.36.8 1.07.8 2.16v3.2c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5z"/>
+            </svg>
+            View source on GitHub
+          </a>
+          <code class="commitments__clone">git clone github.com/folk-app/folk</code>
+        </div>
+      </div>
+    </section>
   </main>
   <script>
     (function () {
@@ -349,6 +392,20 @@ claude-code/releases/v2.1</pre>
           'https://github.com/folk-app/folk/releases/latest/download/folk-' + arch + '.dmg'
         );
         heroDownload.dataset.arch = arch;
+      }
+
+      // Click-to-copy on the git clone chip
+      var cloneChip = document.querySelector('.commitments__clone');
+      if (cloneChip) {
+        cloneChip.addEventListener('click', function () {
+          var text = cloneChip.textContent.trim();
+          if (navigator.clipboard) {
+            navigator.clipboard.writeText(text);
+            var orig = cloneChip.textContent;
+            cloneChip.textContent = 'copied!';
+            setTimeout(function () { cloneChip.textContent = orig; }, 1200);
+          }
+        });
       }
     })();
     (function () {
