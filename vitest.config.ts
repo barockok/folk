@@ -10,7 +10,11 @@ export default defineConfig({
   resolve: {
     alias: [
       { find: '@shared', replacement: resolve('src/shared') },
-      { find: /^electron$/, replacement: resolve('src/main/__mocks__/electron.ts') }
+      { find: /^electron$/, replacement: resolve('src/main/__mocks__/electron.ts') },
+      {
+        find: /^@anthropic-ai\/claude-agent-sdk$/,
+        replacement: resolve('src/main/__mocks__/claude-agent-sdk.ts')
+      }
     ]
   }
 })

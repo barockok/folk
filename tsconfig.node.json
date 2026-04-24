@@ -11,7 +11,8 @@
     "resolveJsonModule": true,
     "types": ["node", "electron-vite/node"],
     "paths": {
-      "@shared/*": ["src/shared/*"]
+      "@shared/*": ["src/shared/*"],
+      "@anthropic-ai/claude-agent-sdk": ["src/main/__mocks__/claude-agent-sdk.ts"]
     }
   },
   "include": ["src/main/**/*", "src/preload/**/*", "src/shared/**/*", "electron.vite.config.ts"]
