@@ -1,4 +1,3 @@
-import { Fragment } from 'react'
 import { Icon } from './icons'
 import { useUIStore } from '../stores/useUIStore'
 import type { PageKey } from '../stores/useUIStore'
@@ -28,14 +27,26 @@ export function Topbar() {
     <header className="topbar">
       <div className="crumbs">
         {crumbs.map((c, i) => (
-          <Fragment key={i}>
+          <span key={i} className={i === crumbs.length - 1 ? 'cur' : ''}>
             {i > 0 && <Icon name="chevronRight" size={12} className="sep" />}
-            <span className={i === crumbs.length - 1 ? 'cur' : ''}>{c}</span>
-          </Fragment>
+            {c}
+          </span>
         ))}
       </div>
 
-      <div className="cmdk-trigger" onClick={openCmdk}>
+      <div
+        className="cmdk-trigger"
+        role="button"
+        tabIndex={0}
+        aria-label="Search or run a command"
+        onClick={openCmdk}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            if (e.key === ' ') e.preventDefault()
+            openCmdk()
+          }
+        }}
+      >
         <Icon name="search" size={14} />
         <span>Search or run a command…</span>
         <span className="kbd">⌘K</span>
@@ -47,14 +58,14 @@ export function Topbar() {
           onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
           title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
         >
-          {theme === 'light' ? '☾' : '☀'}
+          <span aria-hidden="true">{theme === 'light' ? '☾' : '☀'}</span>
         </button>
         <button
           className="btn btn-plain"
           onClick={() => setDensity(density === 'compact' ? 'regular' : 'compact')}
           title={`Density: ${density}`}
         >
-          {density === 'compact' ? '⊞' : '⊟'}
+          <span aria-hidden="true">{density === 'compact' ? '⊞' : '⊟'}</span>
         </button>
       </div>
     </header>

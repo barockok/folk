@@ -71,7 +71,7 @@ export function Sidebar() {
         </button>
       )}
 
-      <nav className="sb-nav scroll">
+      <nav className="sb-nav scroll" aria-label="Main navigation">
         {NAV_GROUPS.map((g) => (
           <div key={g.group}>
             {!collapsed && <div className="sb-group">{g.group}</div>}
@@ -79,7 +79,16 @@ export function Sidebar() {
               <div
                 key={it.id}
                 className={`sb-item${page === it.id ? ' active' : ''}`}
+                role="button"
+                tabIndex={0}
+                aria-current={page === it.id ? 'page' : undefined}
                 onClick={() => setPage(it.id)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    if (e.key === ' ') e.preventDefault()
+                    setPage(it.id)
+                  }
+                }}
                 title={collapsed ? it.label : undefined}
               >
                 <Icon name={it.icon} size={16} className="sb-ico" />
@@ -92,7 +101,16 @@ export function Sidebar() {
 
       <div
         className={`sb-profile${page === 'profile' ? ' on' : ''}`}
+        role="button"
+        tabIndex={0}
+        aria-current={page === 'profile' ? 'page' : undefined}
         onClick={() => setPage('profile')}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            if (e.key === ' ') e.preventDefault()
+            setPage('profile')
+          }
+        }}
         title={collapsed ? `${displayName} — profile` : undefined}
       >
         <div className="sb-profile-av">{initial}</div>
