@@ -103,6 +103,21 @@
           try { localStorage.setItem(STORAGE_KEY, next); } catch (e) { /* persistence best-effort */ }
         });
       }
+
+      // Hero download CTA — point to detected macOS arch binary
+      var heroDownload = document.getElementById('heroDownload');
+      if (heroDownload) {
+        var ua = navigator.userAgent || '';
+        var isIntelMac = /Macintosh.*Intel/.test(ua) && !/Apple Silicon|arm64/i.test(ua);
+        // Apple Silicon Macs frequently report as "Intel" in UA — there's no reliable
+        // arch detection from UA alone. Default to Apple Silicon (the dominant case
+        // for new downloads); offer Intel fallback in the footer for opt-in.
+        var arch = isIntelMac ? 'intel' : 'apple-silicon';
+        heroDownload.setAttribute('href',
+          'https://github.com/folk-app/folk/releases/latest/download/folk-' + arch + '.dmg'
+        );
+        heroDownload.dataset.arch = arch;
+      }
     })();
     (function () {
       var nav = document.querySelector('.nav');
