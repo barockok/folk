@@ -5,6 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>folk — Claude Code for everyone</title>
   <meta name="description" content="A native macOS app built on the official Claude Agent SDK. Form-driven MCP editor, multi-provider models, inline rendering for images, tables, and links.">
+  <script>
+    (function () {
+      try {
+        var s = localStorage.getItem('folk-landing.theme');
+        var d = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        document.documentElement.setAttribute('data-theme', s || (d ? 'dark' : 'light'));
+      } catch (e) { /* localStorage unavailable — keep HTML default */ }
+    })();
+  </script>
   <link rel="stylesheet" href="landing.css">
 </head>
 <body>
@@ -83,24 +92,21 @@
   <script>
     (function () {
       var html = document.documentElement;
-      var nav = document.querySelector('.nav');
       var toggle = document.getElementById('themeToggle');
       var STORAGE_KEY = 'folk-landing.theme';
 
-      // Load saved preference; fall back to system preference
-      var saved = localStorage.getItem(STORAGE_KEY);
-      var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-      var initial = saved || (prefersDark ? 'dark' : 'light');
-      html.setAttribute('data-theme', initial);
-
-      toggle.addEventListener('click', function () {
-        var current = html.getAttribute('data-theme');
-        var next = current === 'dark' ? 'light' : 'dark';
-        html.setAttribute('data-theme', next);
-        localStorage.setItem(STORAGE_KEY, next);
-      });
-
-      // Scroll shadow on nav
+      if (toggle) {
+        toggle.addEventListener('click', function () {
+          var current = html.getAttribute('data-theme');
+          var next = current === 'dark' ? 'light' : 'dark';
+          html.setAttribute('data-theme', next);
+          try { localStorage.setItem(STORAGE_KEY, next); } catch (e) { /* persistence best-effort */ }
+        });
+      }
+    })();
+    (function () {
+      var nav = document.querySelector('.nav');
+      if (!nav) return;
       function onScroll() {
         if (window.scrollY > 4) nav.classList.add('is-scrolled');
         else nav.classList.remove('is-scrolled');
