@@ -580,7 +580,14 @@ export function ModelPage() {
                 <div
                   className={'switch' + (m.enabled ? ' on' : '')}
                   onClick={() => toggleModel(i)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      toggleModel(i)
+                    }
+                  }}
                   role="switch"
+                  tabIndex={0}
                   aria-checked={m.enabled}
                 />
               </div>
