@@ -3,7 +3,7 @@ import { Database } from './database'
 import { rmSync, mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { Session } from '@shared/types'
+import type { Session, ProviderConfig } from '@shared/types'
 
 describe('Database.init', () => {
   let dir: string
@@ -68,5 +68,64 @@ describe('sessions CRUD', () => {
     const s = db.createSession({ modelId: 'm', workingDir: '/a' })
     db.deleteSession(s.id)
     expect(db.getSession(s.id)).toBeNull()
+  })
+})
+
+describe('providers CRUD', () => {
+  let dir: string
+  let db: Database
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'folk-db-'))
+    db = new Database(join(dir, 'folk.db'))
+  })
+
+  afterEach(() => {
+    db.close()
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('saveProvider encrypts api key at rest', () => {
+    db.saveProvider({
+      id: 'anthropic',
+      name: 'Anthropic',
+      apiKey: 'sk-ant-xxx',
+      baseUrl: null,
+      models: [{ id: 'claude-sonnet-4-5', label: 'Sonnet', enabled: true }],
+      isEnabled: true,
+      createdAt: Date.now()
+    })
+    const raw = db.db
+      .prepare('SELECT api_key FROM providers WHERE id = ?')
+      .get('anthropic') as { api_key: Buffer }
+    expect(raw.api_key.toString('utf8')).not.toContain('sk-ant-xxx')
+  })
+
+  it('listProviders decrypts api keys', () => {
+    db.saveProvider({
+      id: 'anthropic',
+      name: 'Anthropic',
+      apiKey: 'sk-ant-xxx',
+      baseUrl: null,
+      models: [],
+      isEnabled: true,
+      createdAt: Date.now()
+    })
+    const rows = db.listProviders()
+    expect(rows[0].apiKey).toBe('sk-ant-xxx')
+  })
+
+  it('deleteProvider removes the row', () => {
+    db.saveProvider({
+      id: 'p1',
+      name: 'X',
+      apiKey: 'k',
+      baseUrl: null,
+      models: [],
+      isEnabled: true,
+      createdAt: Date.now()
+    })
+    db.deleteProvider('p1')
+    expect(db.listProviders().length).toBe(0)
   })
 })

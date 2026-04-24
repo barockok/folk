@@ -1,6 +1,6 @@
 import BetterSqlite3, { Database as SQLiteDB } from 'better-sqlite3'
 import { safeStorage } from 'electron'
-import type { Session, SessionConfig } from '@shared/types'
+import type { Session, SessionConfig, ProviderConfig, ModelConfig } from '@shared/types'
 import { randomUUID } from 'node:crypto'
 
 const SCHEMA = `
@@ -151,6 +151,49 @@ export class Database {
 
   deleteSession(id: string): void {
     this.db.prepare(`DELETE FROM sessions WHERE id = ?`).run(id)
+  }
+
+  saveProvider(p: ProviderConfig): void {
+    const encKey = this.encryptSecret(p.apiKey)
+    this.db
+      .prepare(
+        `INSERT INTO providers (id, name, api_key, base_url, models, is_enabled, created_at)
+         VALUES (@id, @name, @apiKey, @baseUrl, @models, @isEnabled, @createdAt)
+         ON CONFLICT(id) DO UPDATE SET
+           name = excluded.name,
+           api_key = excluded.api_key,
+           base_url = excluded.base_url,
+           models = excluded.models,
+           is_enabled = excluded.is_enabled`
+      )
+      .run({
+        id: p.id,
+        name: p.name,
+        apiKey: encKey,
+        baseUrl: p.baseUrl,
+        models: JSON.stringify(p.models),
+        isEnabled: p.isEnabled ? 1 : 0,
+        createdAt: p.createdAt
+      })
+  }
+
+  listProviders(): ProviderConfig[] {
+    const rows = this.db
+      .prepare(`SELECT * FROM providers ORDER BY created_at ASC`)
+      .all() as Array<Record<string, unknown>>
+    return rows.map((r) => ({
+      id: r.id as string,
+      name: r.name as string,
+      apiKey: this.decryptSecret(r.api_key as Buffer),
+      baseUrl: (r.base_url as string) ?? null,
+      models: JSON.parse((r.models as string) ?? '[]') as ModelConfig[],
+      isEnabled: Number(r.is_enabled ?? 0) === 1,
+      createdAt: Number(r.created_at ?? 0)
+    }))
+  }
+
+  deleteProvider(id: string): void {
+    this.db.prepare(`DELETE FROM providers WHERE id = ?`).run(id)
   }
 
   #toSession = (row: Record<string, unknown>): Session => ({
