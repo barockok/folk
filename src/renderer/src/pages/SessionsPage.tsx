@@ -1,30 +1,48 @@
+import { useState } from 'react'
 import { useSessions } from '../hooks/useSessions'
 import { HistoryRail } from './sessions/HistoryRail'
 import { Conversation } from './sessions/Conversation'
 import { Composer } from './sessions/Composer'
+import { SessionSetup } from '../onboarding/SessionSetup'
+import type { SessionConfig } from '@shared/types'
 
 export function SessionsPage() {
-  const { sessions, activeId, setActive, delete: del, send, cancel } = useSessions()
+  const { sessions, activeId, setActive, create, delete: del, send, cancel } = useSessions()
   const active = sessions.find((s) => s.id === activeId) ?? null
+  const [needsSetup, setNeedsSetup] = useState(false)
+
+  async function handleLaunch(config: SessionConfig) {
+    await create(config)
+    setNeedsSetup(false)
+  }
 
   return (
     <div className="sess-wrap">
       <HistoryRail
         sessions={sessions}
         activeId={activeId}
-        onPick={setActive}
+        onPick={(id) => { setActive(id); setNeedsSetup(false) }}
         onDelete={del}
-        onNew={() => setActive(null)}
+        onNew={() => { setActive(null); setNeedsSetup(true) }}
       />
       <div className="sess-main">
-        <div className="sess-body-wrap">
-          <Conversation session={active} />
-        </div>
-        <Composer
-          session={active}
-          onSend={(text, atts) => active && send(active.id, text, atts)}
-          onCancel={() => active && cancel(active.id)}
-        />
+        {needsSetup ? (
+          <SessionSetup
+            onLaunch={handleLaunch}
+            onCancel={() => setNeedsSetup(false)}
+          />
+        ) : (
+          <>
+            <div className="sess-body-wrap">
+              <Conversation session={active} />
+            </div>
+            <Composer
+              session={active}
+              onSend={(text, atts) => active && send(active.id, text, atts)}
+              onCancel={() => active && cancel(active.id)}
+            />
+          </>
+        )}
       </div>
     </div>
   )
