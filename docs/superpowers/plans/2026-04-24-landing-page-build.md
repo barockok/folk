@@ -1,6 +1,6 @@
 # folk Landing Page Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Build the public marketing landing page for folk as a standalone static site at `landing/`, decoupled from the Electron+Vite app build, using design tokens from `styles.css`.
 
@@ -11,6 +11,48 @@
 **Spec:** `docs/superpowers/specs/2026-04-24-landing-page-design.md`
 
 **Verification approach:** Each section task ends with serving the page locally (`python3 -m http.server 8000` from repo root, then visit `http://localhost:8000/landing/`) and visually confirming the section renders correctly in both light and dark themes. No automated tests — this is a static marketing page; visual review is the right verification surface.
+
+---
+
+## Status (last updated 2026-04-24)
+
+**14 of 15 tasks shipped.** Page is functional and deployable today — the `<img onerror>` fallback from Task 3 keeps it intact without screenshots. Only Task 15 (screenshot capture) remains.
+
+To preview: from repo root, `python3 -m http.server 8000`, then open `http://localhost:8000/landing/`.
+
+| # | Task | Status | Commit(s) |
+|---|------|--------|-----------|
+| 1 | Scaffold | ✅ done | `064f8a4` |
+| 2 | Top nav | ✅ done | `6df62d3` + `7f1138a` (a11y fix) |
+| 3 | Hero | ✅ done | `657d971` |
+| 4 | Theme toggle JS | ✅ done | `cd07bd9` + `f5cb7d1` (FOUC fix) |
+| 5 | Platform detection | ✅ done | `bb2871e` |
+| 6 | MCP differentiator row | ✅ done | `326ffe7` + `5f90ee8` (gap fix) |
+| 7 | Multi-provider row | ✅ done | `5bd95f7` |
+| 8 | Rich sessions comparison | ✅ done | `b90c19f` |
+| 9 | How-it-works | ✅ done | `220512f` |
+| 10 | Provider grid | ✅ done | `ddde452` |
+| 11 | Open-source dark band | ✅ done | `4da6857` |
+| 12 | Footer | ✅ done | `b5a8a4e` |
+| 13 | Responsive | ✅ done | `27f1734` |
+| 14 | A11y pass | ✅ done | `3de9879` |
+| 15 | Capture screenshots | ⏳ **pending** | — |
+
+### Follow-ups (post-launch polish, non-blocking)
+
+From the final code review. None of these block deployment of the current state.
+
+1. **Self-host or preconnect Google Fonts.** `styles.css:6` uses `@import` for Inter + Source Code Pro — render-blocking inside an imported stylesheet. Fix in `landing/index.html` with `<link rel="preconnect">` + a direct `<link rel="stylesheet">` placed *before* `landing.css`, OR self-host only the weights actually used (Inter 300/400/500/600, Source Code Pro 400/500/700).
+2. **`.compare__label--purple` dark-mode contrast.** `var(--stripe-purple)` on `var(--bg-card)` is ~4.0:1 in dark mode (fails AA for non-link UI text). Add `[data-theme="dark"] .compare__label--purple { color: var(--stripe-purple-light); }`.
+3. **`--ring` contrast on the dark commitments band.** The 22%-alpha purple focus ring is hard to see on `--brand-dark`. Add a band-scoped override: `.commitments :focus-visible { box-shadow: 0 0 0 3px rgba(185,185,249,0.55); }`.
+4. **Coming-soon footer buttons** (Windows/Linux). Currently `<span>` with `pointer-events: none` — removes them from tab order so screen-reader users can't focus to read the "coming soon" badge. Switch to `<button disabled>` semantics OR drop `pointer-events: none` and keep only `cursor: not-allowed`.
+5. **`.compare__cli-output` mobile.** `white-space: pre` produces a horizontal scrollbar inside an already-narrow comparison panel below 768px. Either switch to `pre-wrap` at the mobile breakpoint, or hide/stack the comparison row explicitly at <768px since the side-by-side comparison loses meaning when columns stack.
+6. **`scope="col"` on `.compare__table th`** cells. Cheap a11y win.
+7. **Disambiguate footer "MCP Editor" link.** Currently anchors to `#features` (same as the Features link). Either give the MCP `.diff-row` an `id="mcp"` and link there, or drop the duplicate.
+8. **Centralize release URL pattern.** The Apple Silicon DMG URL is built in hero JS (auto-detect) AND statically in the footer. When release filenames change, multiple call sites need updating. Consider data attributes or a tiny URL helper.
+9. **Promote provider monogram brand colors to classes.** Current inline `style="background:..."` requires `!important` on the custom-card monogram override (`landing.css` `provider-card__monogram--plus`). Promote to `.provider-card__monogram--anthropic` etc. for cleaner cascade.
+10. **Replace placeholder `folk-app/folk` GitHub URLs** with the real org/repo before launch. Affects: hero CTA, nav GitHub icon, commitments CTA, commitments clone chip, footer Product/Open-source/Download links, footer GitHub/RSS icons. Single grep-and-replace pass.
+11. **Once Task 15 ships real screenshots:** consider removing the `onerror` placeholder handler from the three `<img>` tags AND the `.window-frame__body--placeholder` CSS rule — they were dev-only fallbacks. (Or keep the CSS rule as a documented dev fallback.)
 
 ---
 
@@ -40,13 +82,13 @@ landing/
 - Create: `landing/screenshots/.gitkeep`
 - Create: `landing/README.md`
 
-- [ ] **Step 1: Create the directory structure**
+- [x] **Step 1: Create the directory structure**
 
 ```bash
 mkdir -p landing/screenshots && touch landing/screenshots/.gitkeep
 ```
 
-- [ ] **Step 2: Write the HTML skeleton with token-importing CSS link**
+- [x] **Step 2: Write the HTML skeleton with token-importing CSS link**
 
 Create `landing/index.html`:
 
@@ -68,7 +110,7 @@ Create `landing/index.html`:
 </html>
 ```
 
-- [ ] **Step 3: Write `landing/landing.css` with the token import + base reset**
+- [x] **Step 3: Write `landing/landing.css` with the token import + base reset**
 
 Create `landing/landing.css`:
 
@@ -106,7 +148,7 @@ body {
 }
 ```
 
-- [ ] **Step 4: Write `landing/README.md` with run/deploy notes**
+- [x] **Step 4: Write `landing/README.md` with run/deploy notes**
 
 Create `landing/README.md`:
 
@@ -132,7 +174,7 @@ Static-host friendly. Push the `landing/` folder to GitHub Pages, Vercel, Netlif
 Run the prototype `index.html` at the repo root, navigate to each page, and capture at 2x resolution. Save to `screenshots/` with the names referenced in `index.html` (`hero-app.png`, `mcp-editor.png`, `model-providers.png`).
 ```
 
-- [ ] **Step 5: Verify the skeleton serves and loads tokens**
+- [x] **Step 5: Verify the skeleton serves and loads tokens**
 
 Run from the repo root:
 
@@ -147,7 +189,7 @@ kill $SERVER_PID
 
 Expected: HTML returned with `<title>folk — Claude Code for everyone</title>`, CSS returns `200 OK`. Open in a browser and confirm the page is blank but the Inter font is loading (check DevTools Network tab for `styles.css` → triggers Google Fonts load).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add landing/
@@ -164,7 +206,7 @@ git commit -m "feat(landing): scaffold landing page with token-importing CSS"
 
 The theme-toggle button is rendered in this task but has no behavior yet — JS comes in Task 4.
 
-- [ ] **Step 1: Add the nav HTML**
+- [x] **Step 1: Add the nav HTML**
 
 In `landing/index.html`, replace the `<body>` opener and add the nav as the first child of `<body>` before `<main>`:
 
@@ -200,7 +242,7 @@ In `landing/index.html`, replace the `<body>` opener and add the nav as the firs
   <main id="top">
 ```
 
-- [ ] **Step 2: Add nav styles to `landing/landing.css`**
+- [x] **Step 2: Add nav styles to `landing/landing.css`**
 
 Append:
 
@@ -296,7 +338,7 @@ Append:
 }
 ```
 
-- [ ] **Step 3: Add inline JS for the scroll-shadow on the nav**
+- [x] **Step 3: Add inline JS for the scroll-shadow on the nav**
 
 Just before `</body>` in `landing/index.html`, add:
 
@@ -315,7 +357,7 @@ Just before `</body>` in `landing/index.html`, add:
 </body>
 ```
 
-- [ ] **Step 4: Verify in browser**
+- [x] **Step 4: Verify in browser**
 
 Run `python3 -m http.server 8000` from repo root and visit `http://localhost:8000/landing/`. Confirm:
 - Sticky bar at top with purple chevron + "folk" wordmark on left
@@ -324,7 +366,7 @@ Run `python3 -m http.server 8000` from repo root and visit `http://localhost:800
 - After scrolling more than a few pixels, a hairline border appears under the nav
 - Theme toggle button hovers but does nothing yet (Task 4 wires it)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add landing/
@@ -341,7 +383,7 @@ git commit -m "feat(landing): top nav with brand, links, and theme toggle button
 
 The hero visual is a placeholder window-chrome frame containing an empty `--bg-sub` panel for now. Real screenshot is swapped in during Task 15.
 
-- [ ] **Step 1: Add hero HTML**
+- [x] **Step 1: Add hero HTML**
 
 Inside `<main id="top">`, add:
 
@@ -391,7 +433,7 @@ Inside `<main id="top">`, add:
     </section>
 ```
 
-- [ ] **Step 2: Add hero styles + window-frame primitive + button-large variant + eyebrow primitive**
+- [x] **Step 2: Add hero styles + window-frame primitive + button-large variant + eyebrow primitive**
 
 Append to `landing/landing.css`:
 
@@ -562,7 +604,7 @@ Append to `landing/landing.css`:
 }
 ```
 
-- [ ] **Step 3: Verify in browser, both themes**
+- [x] **Step 3: Verify in browser, both themes**
 
 Reload the page. Confirm:
 - Eyebrow row, 56px headline, subhead with mono inline code chip
@@ -573,7 +615,7 @@ Reload the page. Confirm:
 - Soft purple halo behind the window frame
 - Click the theme toggle in the nav — wait, it's not wired yet, fine. Manually set `<html data-theme="dark">` in DevTools and confirm everything still reads correctly in dark mode (no white-on-white text)
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add landing/
@@ -587,7 +629,7 @@ git commit -m "feat(landing): hero with headline, CTAs, credibility strip, and v
 **Files:**
 - Modify: `landing/index.html` (extend the inline script block)
 
-- [ ] **Step 1: Replace the inline script with theme-toggle support**
+- [x] **Step 1: Replace the inline script with theme-toggle support**
 
 Replace the existing `<script>` block at the bottom of `landing/index.html` with:
 
@@ -623,7 +665,7 @@ Replace the existing `<script>` block at the bottom of `landing/index.html` with
   </script>
 ```
 
-- [ ] **Step 2: Verify the toggle works and persists**
+- [x] **Step 2: Verify the toggle works and persists**
 
 Reload the page. Click the sun icon in the nav. Confirm:
 - The page switches to dark mode (background goes navy, text goes light)
@@ -631,7 +673,7 @@ Reload the page. Click the sun icon in the nav. Confirm:
 - Click again — back to light mode, and reload-persists
 - Open in a private/incognito window with system set to dark mode — page loads in dark mode by default
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add landing/
@@ -647,7 +689,7 @@ git commit -m "feat(landing): theme toggle with localStorage and system-preferen
 
 The hero CTA labels itself "Download for macOS" but should point to the right binary based on detected architecture. We update the `href` based on `navigator.userAgent`. If detection fails or runs on a non-macOS platform, default to Apple Silicon.
 
-- [ ] **Step 1: Add platform detection to the inline script**
+- [x] **Step 1: Add platform detection to the inline script**
 
 Inside the existing IIFE in `landing/index.html`, before the closing `})();`, add:
 
@@ -668,7 +710,7 @@ Inside the existing IIFE in `landing/index.html`, before the closing `})();`, ad
       }
 ```
 
-- [ ] **Step 2: Verify behavior**
+- [x] **Step 2: Verify behavior**
 
 Reload the page in Safari/Chrome on macOS. Open DevTools console and run:
 
@@ -681,7 +723,7 @@ Expected: `href` ends with either `folk-apple-silicon.dmg` or `folk-intel.dmg`; 
 
 To force the other branch for verification, in DevTools Network conditions or via `Object.defineProperty` override `navigator.userAgent` to a Linux UA and reload — should default to `apple-silicon`.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add landing/
@@ -696,7 +738,7 @@ git commit -m "feat(landing): auto-detect macOS arch for hero download CTA"
 - Modify: `landing/index.html` (add features section + first row)
 - Modify: `landing/landing.css` (append differentiator row styles)
 
-- [ ] **Step 1: Add the section + first row HTML**
+- [x] **Step 1: Add the section + first row HTML**
 
 After the `</section>` closing the hero, add:
 
@@ -734,7 +776,7 @@ After the `</section>` closing the hero, add:
     </section>
 ```
 
-- [ ] **Step 2: Add diff-row styles**
+- [x] **Step 2: Add diff-row styles**
 
 Append to `landing/landing.css`:
 
@@ -814,7 +856,7 @@ Append to `landing/landing.css`:
 }
 ```
 
-- [ ] **Step 3: Verify in browser**
+- [x] **Step 3: Verify in browser**
 
 Reload. Confirm:
 - Two-column row, text on left, window-frame visual on right
@@ -823,7 +865,7 @@ Reload. Confirm:
 - Visual is a placeholder window-frame (since no screenshot yet)
 - Resize browser to ~700px wide — the row stays side-by-side (responsive media queries come in Task 13)
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add landing/
@@ -837,7 +879,7 @@ git commit -m "feat(landing): MCP editor differentiator row"
 **Files:**
 - Modify: `landing/index.html` (add second row inside `.features` section)
 
-- [ ] **Step 1: Add the second row HTML**
+- [x] **Step 1: Add the second row HTML**
 
 Inside the existing `<div class="page">` of the `.features` section, after the first `.diff-row`, add:
 
@@ -871,11 +913,11 @@ Inside the existing `<div class="page">` of the `.features` section, after the f
         </div>
 ```
 
-- [ ] **Step 2: Verify**
+- [x] **Step 2: Verify**
 
 Reload. Confirm the second row renders with text on the right, visual on the left (mirrored layout). 80px gap above it from the first row.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add landing/
@@ -892,7 +934,7 @@ git commit -m "feat(landing): multi-provider differentiator row"
 
 The comparison panel is built entirely in HTML/CSS — no screenshot needed. Two cards side-by-side inside a window-frame: the left simulates terminal output (mono, ASCII), the right simulates folk's render (HTML table, inline thumbnail, real link).
 
-- [ ] **Step 1: Add the third row HTML with the comparison panel**
+- [x] **Step 1: Add the third row HTML with the comparison panel**
 
 Inside `.features` section, after the second `.diff-row`, add:
 
@@ -963,7 +1005,7 @@ claude-code/releases/v2.1</pre>
         </div>
 ```
 
-- [ ] **Step 2: Add comparison panel styles**
+- [x] **Step 2: Add comparison panel styles**
 
 Append to `landing/landing.css`:
 
@@ -1092,7 +1134,7 @@ Append to `landing/landing.css`:
 }
 ```
 
-- [ ] **Step 3: Verify**
+- [x] **Step 3: Verify**
 
 Reload. Confirm:
 - Third row, image on right
@@ -1101,7 +1143,7 @@ Reload. Confirm:
 - Labels at top of each side: `claude-code CLI` (faint) / `folk` (purple)
 - Switch to dark mode — the comparison stays legible (CLI side gets darker, folk side stays card-bg)
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add landing/
@@ -1116,7 +1158,7 @@ git commit -m "feat(landing): rich sessions row with CLI vs folk comparison pane
 - Modify: `landing/index.html` (add `.howitworks` section after `.features`)
 - Modify: `landing/landing.css` (append howitworks styles)
 
-- [ ] **Step 1: Add the section HTML**
+- [x] **Step 1: Add the section HTML**
 
 After the `</section>` closing `.features`, add:
 
@@ -1158,7 +1200,7 @@ After the `</section>` closing `.features`, add:
     </section>
 ```
 
-- [ ] **Step 2: Add styles**
+- [x] **Step 2: Add styles**
 
 Append to `landing/landing.css`:
 
@@ -1240,7 +1282,7 @@ Append to `landing/landing.css`:
 }
 ```
 
-- [ ] **Step 3: Verify**
+- [x] **Step 3: Verify**
 
 Reload. Confirm:
 - Section has `--bg-sub` background (subtle off-white separation from above)
@@ -1249,7 +1291,7 @@ Reload. Confirm:
 - Centered footnote line below
 - Dark mode: cards keep contrast, mono chips remain legible
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add landing/
@@ -1266,7 +1308,7 @@ git commit -m "feat(landing): how-it-works section with three step cards"
 
 7 cards: 6 brand-monogram cards + 1 "Custom endpoint" card with dashed border. Brand monograms are colored squares with single letters — no trademarked logos shipped.
 
-- [ ] **Step 1: Add the section HTML**
+- [x] **Step 1: Add the section HTML**
 
 After the `</section>` closing `.howitworks`, add:
 
@@ -1348,7 +1390,7 @@ After the `</section>` closing `.howitworks`, add:
     </section>
 ```
 
-- [ ] **Step 2: Add provider styles**
+- [x] **Step 2: Add provider styles**
 
 Append to `landing/landing.css`:
 
@@ -1448,7 +1490,7 @@ Append to `landing/landing.css`:
 }
 ```
 
-- [ ] **Step 3: Verify**
+- [x] **Step 3: Verify**
 
 Reload. Confirm:
 - 4-column grid with 7 provider cards (the 7th wraps to a second row)
@@ -1456,7 +1498,7 @@ Reload. Confirm:
 - Custom card has dashed border, no model count, plus-icon chip
 - Hover: cards lift slightly with deeper shadow
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add landing/
@@ -1473,7 +1515,7 @@ git commit -m "feat(landing): provider grid with 6 brand cards plus custom endpo
 
 This is the **only dark band** on the page — full-bleed `--brand-dark` background with white text.
 
-- [ ] **Step 1: Add the section HTML**
+- [x] **Step 1: Add the section HTML**
 
 After the `</section>` closing `.providers`, add:
 
@@ -1523,7 +1565,7 @@ After the `</section>` closing `.providers`, add:
     </section>
 ```
 
-- [ ] **Step 2: Add commitments styles**
+- [x] **Step 2: Add commitments styles**
 
 Append to `landing/landing.css`:
 
@@ -1625,7 +1667,7 @@ Append to `landing/landing.css`:
 }
 ```
 
-- [ ] **Step 3: Add a click-to-copy handler for the git clone chip**
+- [x] **Step 3: Add a click-to-copy handler for the git clone chip**
 
 In the inline `<script>` block in `landing/index.html`, before `})();`, add:
 
@@ -1645,7 +1687,7 @@ In the inline `<script>` block in `landing/index.html`, before `})();`, add:
       }
 ```
 
-- [ ] **Step 4: Verify**
+- [x] **Step 4: Verify**
 
 Reload. Scroll to the dark band. Confirm:
 - Full-width dark navy background
@@ -1655,7 +1697,7 @@ Reload. Scroll to the dark band. Confirm:
 - Click the clone chip — text briefly changes to "copied!" and the URL is in your clipboard
 - Switch to light theme — band is still dark (this is intentional — it's a brand-color band, not a theme-bound surface)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add landing/
@@ -1670,7 +1712,7 @@ git commit -m "feat(landing): open-source commitments dark band with copy-to-cli
 - Modify: `landing/index.html` (add `<footer>` after the last section, inside `<main>` or as a sibling)
 - Modify: `landing/landing.css` (append footer styles)
 
-- [ ] **Step 1: Add footer HTML**
+- [x] **Step 1: Add footer HTML**
 
 After the `</section>` closing `.commitments`, and after `</main>` if you placed it there, add (placing it as a sibling to `<main>` is cleaner semantically — put it after `</main>`):
 
@@ -1741,7 +1783,7 @@ After the `</section>` closing `.commitments`, and after `</main>` if you placed
   </footer>
 ```
 
-- [ ] **Step 2: Add footer styles**
+- [x] **Step 2: Add footer styles**
 
 Append to `landing/landing.css`:
 
@@ -1833,7 +1875,7 @@ Append to `landing/landing.css`:
 }
 ```
 
-- [ ] **Step 3: Verify**
+- [x] **Step 3: Verify**
 
 Reload. Confirm:
 - Footer with 4-column top row: brand+tag, Product links, Open source links, Download buttons
@@ -1842,7 +1884,7 @@ Reload. Confirm:
 - Bottom strip: copyright text on left, three icon links on right
 - Switch to dark mode — all colors invert correctly
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add landing/
@@ -1858,7 +1900,7 @@ git commit -m "feat(landing): footer with brand, links, downloads, and bottom st
 
 Three breakpoints: `≥1120px` (default desktop, no overrides), `768px–1119px` (tablet), `<768px` (mobile).
 
-- [ ] **Step 1: Append responsive overrides**
+- [x] **Step 1: Append responsive overrides**
 
 Append to `landing/landing.css`:
 
@@ -1915,7 +1957,7 @@ Append to `landing/landing.css`:
 }
 ```
 
-- [ ] **Step 2: Verify at three viewport widths**
+- [x] **Step 2: Verify at three viewport widths**
 
 Reload. Test responsively:
 - **1280px** (desktop): everything as designed, 4-col provider grid, side-by-side diff rows.
@@ -1924,7 +1966,7 @@ Reload. Test responsively:
 
 Use Chrome DevTools device toolbar to resize and confirm. No element overflows the viewport at 360px width.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add landing/
@@ -1939,7 +1981,7 @@ git commit -m "feat(landing): responsive breakpoints for tablet and mobile"
 - Modify: `landing/index.html` (any aria/alt fixes)
 - Modify: `landing/landing.css` (any focus-visible styles)
 
-- [ ] **Step 1: Run an audit checklist manually**
+- [x] **Step 1: Run an audit checklist manually**
 
 Open the page in Chrome, press `Tab` repeatedly from the top. Confirm:
 - Every interactive element gets a visible focus ring (purple `--ring` glow)
@@ -1948,7 +1990,7 @@ Open the page in Chrome, press `Tab` repeatedly from the top. Confirm:
 - All `<img>` tags have meaningful `alt` attributes (already in Tasks 3, 6, 7)
 - All decorative SVGs have `aria-hidden="true"` (already in Tasks 2, 3, 11, 12)
 
-- [ ] **Step 2: Add focus-visible coverage to footer download placeholders + clone chip**
+- [x] **Step 2: Add focus-visible coverage to footer download placeholders + clone chip**
 
 Append to `landing/landing.css`:
 
@@ -2001,11 +2043,11 @@ And in the inline script's clone-copy handler, also handle `Enter`/`Space`:
       }
 ```
 
-- [ ] **Step 3: Run a contrast check**
+- [x] **Step 3: Run a contrast check**
 
 Open the page in Chrome DevTools → Lighthouse → Run accessibility audit. Confirm score is 95+ and there are no contrast warnings on body text. If any warnings appear, the most likely culprits are `--fg-faint` over `--bg-sub` — adjust by darkening the offending color slightly in landing.css with an override only on the landing page, not in styles.css.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add landing/
