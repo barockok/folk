@@ -1,0 +1,31 @@
+/* ============================================================
+   folk landing page
+   Reuses tokens from ../styles.css (purple, Inter, shadows, etc.)
+   No app-shell styles imported.
+   ============================================================ */
+
+@import url('../styles.css');
+
+/* Override body — the app's styles.css sets overflow:hidden for the desktop
+   shell. The landing page needs vertical scroll. */
+body {
+  overflow: auto;
+  height: auto;
+}
+
+#root, html, body { height: auto; }
+
+/* Page container */
+.page {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 0 32px;
+}
+
+/* Section rhythm */
+.section {
+  padding: 120px 0;
+}
+.section--sub {
+  background: var(--bg-sub);
+}
