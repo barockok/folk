@@ -9,7 +9,8 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@shared': resolve('src/shared')
+      '@shared': resolve('src/shared'),
+      electron: resolve('src/main/__mocks__/electron.ts')
     }
   }
 })
