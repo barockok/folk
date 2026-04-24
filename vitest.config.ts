@@ -8,9 +8,9 @@ export default defineConfig({
     globals: false
   },
   resolve: {
-    alias: {
-      '@shared': resolve('src/shared'),
-      electron: resolve('src/main/__mocks__/electron.ts')
-    }
+    alias: [
+      { find: '@shared', replacement: resolve('src/shared') },
+      { find: /^electron$/, replacement: resolve('src/main/__mocks__/electron.ts') }
+    ]
   }
 })

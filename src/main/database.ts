@@ -4,14 +4,14 @@ import { safeStorage } from 'electron'
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS sessions (
   id TEXT PRIMARY KEY,
-  title TEXT,
-  model_id TEXT,
-  working_dir TEXT,
+  title TEXT NOT NULL,
+  model_id TEXT NOT NULL,
+  working_dir TEXT NOT NULL,
   goal TEXT,
   flags TEXT,
-  status TEXT DEFAULT 'idle',
-  created_at INTEGER,
-  updated_at INTEGER
+  status TEXT NOT NULL DEFAULT 'idle',
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS providers (
@@ -20,8 +20,8 @@ CREATE TABLE IF NOT EXISTS providers (
   api_key BLOB NOT NULL,
   base_url TEXT,
   models TEXT NOT NULL,
-  is_enabled INTEGER DEFAULT 1,
-  created_at INTEGER
+  is_enabled INTEGER NOT NULL DEFAULT 1,
+  created_at INTEGER NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS mcp_servers (
@@ -33,11 +33,11 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
   args TEXT,
   env TEXT,
   url TEXT,
-  is_enabled INTEGER DEFAULT 1,
-  status TEXT DEFAULT 'stopped',
+  is_enabled INTEGER NOT NULL DEFAULT 1,
+  status TEXT NOT NULL DEFAULT 'stopped',
   last_error TEXT,
   tool_count INTEGER,
-  created_at INTEGER
+  created_at INTEGER NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS profile (

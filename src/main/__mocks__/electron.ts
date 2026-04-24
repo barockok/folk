@@ -1,3 +1,6 @@
+// Test-only stub for Electron's safeStorage API. Aliased from vitest.config.ts.
+// Do not import from production code — the electron-vite build does not include this file.
+
 export const safeStorage = {
   isEncryptionAvailable: () => true,
   encryptString: (s: string) =>
