@@ -40,3 +40,41 @@ describe('AgentManager.createSession', () => {
     expect(mgr.getSession(s.id)).toBeTruthy()
   })
 })
+
+describe('AgentManager.sendMessage', () => {
+  let db: Database
+  let dir: string
+  let mgr: AgentManager
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'folk-agent-'))
+    db = new Database(join(dir, 'folk.db'))
+    mgr = new AgentManager(db)
+    db.saveProvider({
+      id: 'anthropic',
+      name: 'Anthropic',
+      apiKey: 'sk',
+      baseUrl: null,
+      models: [{ id: 'm', label: 'M', enabled: true }],
+      isEnabled: true,
+      createdAt: Date.now()
+    })
+  })
+
+  afterEach(() => {
+    mgr.dispose()
+    db.close()
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('emits chunk and done events and sets status', async () => {
+    const s = await mgr.createSession({ modelId: 'm', workingDir: dir })
+    const chunks: string[] = []
+    mgr.on('chunk', (e) => chunks.push(e.text))
+    const done = new Promise<void>((res) => mgr.once('done', () => res()))
+    await mgr.sendMessage(s.id, 'hi')
+    await done
+    expect(chunks).toEqual(['hello'])
+    expect(mgr.getSession(s.id)?.status).toBe('idle')
+  })
+})

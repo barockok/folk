@@ -7,7 +7,8 @@ import type {
   AgentChunk,
   AgentToolCall,
   AgentToolResult,
-  AgentError
+  AgentError,
+  Attachment
 } from '@shared/types'
 
 export interface AgentManagerEvents {
@@ -45,6 +46,31 @@ export class AgentManager extends EventEmitter {
       this.#agents.delete(id)
     }
     this.db.deleteSession(id)
+  }
+
+  async sendMessage(sessionId: string, text: string, attachments?: Attachment[]): Promise<void> {
+    const session = this.db.getSession(sessionId)
+    if (!session) throw new Error(`session ${sessionId} not found`)
+    this.db.updateSession(sessionId, { status: 'running' })
+    const agent = this.ensureAgent(session)
+
+    const cleanup = (): void => {
+      this.db.updateSession(sessionId, { status: 'idle' })
+    }
+    const onDone = (): void => {
+      cleanup()
+      agent.off('done', onDone)
+      agent.off('error', onError)
+    }
+    const onError = (): void => {
+      this.db.updateSession(sessionId, { status: 'error' })
+      agent.off('done', onDone)
+      agent.off('error', onError)
+    }
+    agent.once('done', onDone)
+    agent.once('error', onError)
+
+    await agent.sendMessage(text, attachments)
   }
 
   dispose(): void {
