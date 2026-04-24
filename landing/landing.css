@@ -298,3 +298,77 @@ body {
   position: relative;
   z-index: 1;
 }
+
+/* ============================================================ Differentiator rows */
+.features {
+  padding: 120px 0;
+}
+.diff-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5%;
+  align-items: center;
+  margin-bottom: 80px;
+}
+.diff-row:last-child { margin-bottom: 0; }
+.diff-row--image-right .diff-row__visual { order: 2; }
+.diff-row--image-left  .diff-row__visual { order: 1; }
+.diff-row--image-right .diff-row__text   { order: 1; }
+.diff-row--image-left  .diff-row__text   { order: 2; }
+
+.diff-row__heading {
+  font-size: 36px;
+  font-weight: 300;
+  letter-spacing: -0.015em;
+  color: var(--heading);
+  margin: 12px 0 16px;
+  line-height: 1.15;
+}
+.diff-row__body {
+  font-size: 16px;
+  color: var(--body);
+  max-width: 460px;
+  line-height: 1.55;
+  margin: 0 0 24px;
+}
+.diff-row__body code {
+  font-family: var(--ff-mono);
+  font-size: 14px;
+  background: var(--bg-sub);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xs);
+  padding: 1px 5px;
+  color: var(--heading);
+}
+.diff-row__bullets {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.diff-row__bullets li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--fg-muted);
+}
+.diff-row__check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  background: var(--stripe-purple-bg);
+  color: var(--stripe-purple);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  flex: none;
+}
+
+.diff-row__visual {
+  width: 100%;
+}
