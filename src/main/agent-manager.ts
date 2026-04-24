@@ -20,6 +20,20 @@ export interface AgentManagerEvents {
   error: (e: AgentError) => void
 }
 
+function mapError(sessionId: string, err: Error & { code?: string }): AgentError {
+  const code = err.code
+  if (code === '401') {
+    return { sessionId, code: 'auth', message: err.message, retryable: false }
+  }
+  if (code === '429') {
+    return { sessionId, code: 'quota', message: err.message, retryable: true }
+  }
+  if (code === 'ECONNREFUSED' || code === 'ENETUNREACH') {
+    return { sessionId, code: 'offline', message: err.message, retryable: true }
+  }
+  return { sessionId, code: 'crash', message: err.message, retryable: true }
+}
+
 export class AgentManager extends EventEmitter {
   #agents = new Map<string, Agent>()
   constructor(private db: Database) {
@@ -73,6 +87,13 @@ export class AgentManager extends EventEmitter {
     await agent.sendMessage(text, attachments)
   }
 
+  async cancel(sessionId: string): Promise<void> {
+    const agent = this.#agents.get(sessionId)
+    if (!agent) return
+    await agent.cancel().catch(() => undefined)
+    this.db.updateSession(sessionId, { status: 'cancelled' })
+  }
+
   dispose(): void {
     for (const a of this.#agents.values()) {
       void a.dispose().catch(() => undefined)
@@ -117,13 +138,8 @@ export class AgentManager extends EventEmitter {
       this.emit('toolResult', { sessionId, ...e })
     )
     agent.on('done', () => this.emit('done', { sessionId }))
-    agent.on('error', (err: Error) =>
-      this.emit('error', {
-        sessionId,
-        code: 'crash',
-        message: err.message,
-        retryable: true
-      })
+    agent.on('error', (err: Error & { code?: string }) =>
+      this.emit('error', mapError(sessionId, err))
     )
   }
 }

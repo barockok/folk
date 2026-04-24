@@ -25,6 +25,21 @@ export class Agent extends EventEmitter {
   }
 }
 
+export class ErrorAgent extends Agent {
+  errorCode: string
+  constructor(opts: Record<string, unknown>, code: string) {
+    super(opts)
+    this.errorCode = code
+  }
+  async sendMessage(): Promise<void> {
+    queueMicrotask(() => {
+      const err = new Error(`simulated:${this.errorCode}`)
+      ;(err as unknown as { code: string }).code = this.errorCode
+      this.emit('error', err)
+    })
+  }
+}
+
 let factory: (opts: Record<string, unknown>) => Agent = (opts) => new Agent(opts)
 
 export function __setFactory(fn: (opts: Record<string, unknown>) => Agent): void {

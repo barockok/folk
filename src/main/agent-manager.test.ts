@@ -4,6 +4,8 @@ import { Database } from './database'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { __setFactory, ErrorAgent, Agent as MockAgent } from './__mocks__/claude-agent-sdk'
+import type { AgentError } from '@shared/types'
 
 describe('AgentManager.createSession', () => {
   let db: Database
@@ -76,5 +78,50 @@ describe('AgentManager.sendMessage', () => {
     await done
     expect(chunks).toEqual(['hello'])
     expect(mgr.getSession(s.id)?.status).toBe('idle')
+  })
+})
+
+describe('AgentManager.cancel & error mapping', () => {
+  let db: Database
+  let dir: string
+  let mgr: AgentManager
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'folk-agent-'))
+    db = new Database(join(dir, 'folk.db'))
+    mgr = new AgentManager(db)
+    db.saveProvider({
+      id: 'anthropic',
+      name: 'Anthropic',
+      apiKey: 'sk',
+      baseUrl: null,
+      models: [{ id: 'm', label: 'M', enabled: true }],
+      isEnabled: true,
+      createdAt: Date.now()
+    })
+  })
+
+  afterEach(() => {
+    mgr.dispose()
+    db.close()
+    rmSync(dir, { recursive: true, force: true })
+    __setFactory((opts) => new MockAgent(opts))
+  })
+
+  it('maps 401 to auth error, not retryable', async () => {
+    __setFactory((opts) => new ErrorAgent(opts, '401'))
+    const s = await mgr.createSession({ modelId: 'm', workingDir: dir })
+    const err = new Promise<AgentError>((res) => mgr.once('error', (e) => res(e)))
+    await mgr.sendMessage(s.id, 'hi').catch(() => undefined)
+    const e = await err
+    expect(e.code).toBe('auth')
+    expect(e.retryable).toBe(false)
+  })
+
+  it('cancel sets session status to cancelled', async () => {
+    const s = await mgr.createSession({ modelId: 'm', workingDir: dir })
+    await mgr.sendMessage(s.id, 'hi').catch(() => undefined)
+    await mgr.cancel(s.id)
+    expect(mgr.getSession(s.id)?.status).toBe('cancelled')
   })
 })
