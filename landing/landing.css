@@ -61,6 +61,15 @@ body {
   font-weight: 500;
   font-size: 15px;
   letter-spacing: -0.01em;
+  transition: opacity .12s;
+}
+.nav__brand:hover {
+  opacity: 0.85;
+}
+.nav__brand:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+  border-radius: var(--r-xs);
 }
 .nav__chevron {
   display: inline-flex;
@@ -91,6 +100,11 @@ body {
 }
 .nav__link:hover {
   color: var(--heading);
+}
+.nav__link:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+  border-radius: var(--r-xs);
 }
 
 .nav__actions {
