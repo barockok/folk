@@ -22,7 +22,7 @@ export function SessionsPage() {
         </div>
         <Composer
           session={active}
-          onSend={(text) => active && send(active.id, text)}
+          onSend={(text, atts) => active && send(active.id, text, atts)}
           onCancel={() => active && cancel(active.id)}
         />
       </div>

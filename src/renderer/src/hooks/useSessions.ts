@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { useSessionStore } from '../stores/useSessionStore'
-import type { SessionConfig } from '@shared/types'
+import type { Attachment, SessionConfig } from '@shared/types'
 
 export function useSessions() {
   const { sessions, activeId, setSessions, upsertSession, removeSession, setActive } =
@@ -24,9 +24,9 @@ export function useSessions() {
       await window.folk.sessions.delete(id)
       removeSession(id)
     },
-    async send(sessionId: string, text: string) {
+    async send(sessionId: string, text: string, attachments?: Attachment[]) {
       useSessionStore.getState().pushUserMessage(sessionId, text)
-      await window.folk.agent.sendMessage(sessionId, text)
+      await window.folk.agent.sendMessage(sessionId, text, attachments)
     },
     async cancel(sessionId: string) {
       await window.folk.agent.cancel(sessionId)
