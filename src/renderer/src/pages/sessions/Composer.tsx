@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useProviders } from '../../hooks/useProviders'
+import { useSessionStore } from '../../stores/useSessionStore'
+import { useUIStore } from '../../stores/useUIStore'
 import type { Attachment, Session } from '@shared/types'
 
 interface ComposerProps {
@@ -162,6 +164,78 @@ export function Composer({ session, onSend, onCancel }: ComposerProps) {
 
   const isRunning = session?.status === 'running'
 
+  // Error banner: last assistant message error for this session
+  const lastErr = useSessionStore((s) => {
+    if (!session) return null
+    const msgs = s.messages[session.id] ?? []
+    const lastAsst = [...msgs].reverse().find((m) => m.role === 'assistant')
+    return lastAsst?.error ?? null
+  })
+
+  // Last user message for crash retry
+  const lastUser = useSessionStore((s) => {
+    if (!session) return null
+    const msgs = s.messages[session.id] ?? []
+    return [...msgs].reverse().find((m) => m.role === 'user') ?? null
+  })
+
+  const setPage = useUIStore((s) => s.setPage)
+  const hasProvider = enabledModels.length > 0
+
+  // Determine banner to show (no-provider takes precedence over error)
+  const showNoBanner = !hasProvider
+  const showErrBanner = !showNoBanner && lastErr != null && lastErr.code !== 'cancelled'
+
+  // Derive error message + action from code
+  const bannerMsg = lastErr
+    ? lastErr.code === 'auth'
+      ? 'Invalid API key.'
+      : lastErr.code === 'quota'
+        ? 'Rate limited. Try again in a moment.'
+        : lastErr.code === 'offline'
+          ? 'No connection.'
+          : lastErr.code === 'crash'
+            ? 'Agent crashed.'
+            : lastErr.code === 'invalid-model'
+              ? 'Selected model is invalid or unavailable.'
+              : lastErr.message
+    : ''
+
+  const bannerStyles: React.CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    padding: '7px 12px',
+    margin: '0 0 6px 0',
+    background: 'color-mix(in srgb, var(--err) 10%, transparent)',
+    border: '1px solid color-mix(in srgb, var(--err) 30%, transparent)',
+    borderRadius: 'var(--r-sm)',
+    fontSize: 12,
+    color: 'var(--err)',
+    fontFamily: 'var(--ff-sans)'
+  }
+
+  const noBannerStyles: React.CSSProperties = {
+    ...bannerStyles,
+    background: 'color-mix(in srgb, var(--warn) 10%, transparent)',
+    border: '1px solid color-mix(in srgb, var(--warn) 30%, transparent)',
+    color: 'var(--warn)'
+  }
+
+  const bannerBtnStyles: React.CSSProperties = {
+    marginLeft: 'auto',
+    background: 'none',
+    border: '1px solid currentColor',
+    borderRadius: 'var(--r-sm)',
+    cursor: 'pointer',
+    color: 'inherit',
+    fontSize: 11,
+    fontFamily: 'var(--ff-sans)',
+    padding: '2px 8px',
+    lineHeight: 1.6,
+    flexShrink: 0
+  }
+
   return (
     <div
       className={`composer${isDragging ? ' is-dragging' : ''}`}
@@ -192,6 +266,37 @@ export function Composer({ session, onSend, onCancel }: ComposerProps) {
       )}
 
       <div className="composer-inner">
+        {/* No-provider banner */}
+        {showNoBanner && (
+          <div style={noBannerStyles} role="alert">
+            <span>Add a provider first.</span>
+            <button type="button" style={bannerBtnStyles} onClick={() => setPage('model')}>
+              Open Model &amp; API
+            </button>
+          </div>
+        )}
+
+        {/* Error banner */}
+        {showErrBanner && lastErr && (
+          <div style={bannerStyles} role="alert">
+            <span>{bannerMsg}</span>
+            {lastErr.code === 'auth' && (
+              <button type="button" style={bannerBtnStyles} onClick={() => setPage('model')}>
+                Open Model &amp; API
+              </button>
+            )}
+            {lastErr.code === 'crash' && lastUser && (
+              <button
+                type="button"
+                style={bannerBtnStyles}
+                onClick={() => onSend(lastUser.text)}
+              >
+                Retry
+              </button>
+            )}
+          </div>
+        )}
+
         {attachments.length > 0 && (
           <div className="composer-atts">
             {attachments.map((att, i) => (
@@ -368,7 +473,7 @@ export function Composer({ session, onSend, onCancel }: ComposerProps) {
           <button
             className="btn composer-send"
             onClick={handleSend}
-            disabled={disabled || !text.trim() || isRunning}
+            disabled={disabled || !text.trim() || isRunning || !hasProvider}
             type="button"
           >
             Send
