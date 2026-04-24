@@ -29,3 +29,93 @@ body {
 .section--sub {
   background: var(--bg-sub);
 }
+
+/* ============================================================ Top nav */
+.nav {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: var(--bg);
+  height: 56px;
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid transparent;
+  transition: border-color .12s, background .12s;
+}
+.nav.is-scrolled {
+  border-bottom-color: var(--border);
+}
+
+.nav__inner {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+}
+
+.nav__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  text-decoration: none;
+  color: var(--heading);
+  font-weight: 500;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+}
+.nav__chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  background: var(--stripe-purple);
+  color: #fff;
+  border-radius: var(--r-xs);
+  font-weight: 600;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.nav__links {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  margin-left: auto;
+  margin-right: auto;
+}
+.nav__link {
+  color: var(--fg-muted);
+  text-decoration: none;
+  font-size: 13px;
+  transition: color .12s;
+}
+.nav__link:hover {
+  color: var(--heading);
+}
+
+.nav__actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.nav__icon-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: transparent;
+  color: var(--fg-muted);
+  border: none;
+  border-radius: var(--r-xs);
+  cursor: pointer;
+  transition: background .12s, color .12s;
+}
+.nav__icon-link:hover {
+  background: var(--bg-sub);
+  color: var(--heading);
+}
+.nav__icon-link:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
