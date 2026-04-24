@@ -36,7 +36,7 @@ To preview: from repo root, `python3 -m http.server 8000`, then open `http://loc
 | 12 | Footer | ✅ done | `b5a8a4e` |
 | 13 | Responsive | ✅ done | `27f1734` |
 | 14 | A11y pass | ✅ done | `3de9879` |
-| 15 | Capture screenshots | ⏳ **pending** | — |
+| 15 | Capture screenshots | ✅ done | `54e9e65` |
 
 ### Follow-ups (post-launch polish, non-blocking)
 
@@ -2065,7 +2065,7 @@ git commit -m "feat(landing): a11y pass — keyboard support for clone chip, foc
 
 The placeholder fallback (`onerror` handler from Task 3) means the page works even without these files. This task replaces the placeholders with real screenshots from the prototype at the repo root.
 
-- [ ] **Step 1: Run the prototype locally**
+- [x] **Step 1: Run the prototype locally**
 
 The prototype is the standalone React app at `/Users/zidnimubarok/code-at-amartha/folk/index.html`. Serve it:
 
@@ -2077,7 +2077,7 @@ open "http://localhost:9000/"
 
 The prototype loads in the browser. Complete the first-run onboarding (or skip it) so the app shell is visible.
 
-- [ ] **Step 2: Capture three screenshots**
+- [x] **Step 2: Capture three screenshots**
 
 For each, use Chrome's DevTools device emulation set to a 1440×900 viewport at 2x DPR, then take a full-element screenshot of the main content area (not the OS chrome — the in-page window-frame in `landing/index.html` provides that).
 
@@ -2087,7 +2087,7 @@ For each, use Chrome's DevTools device emulation set to a 1440×900 viewport at 
 
 Save each as PNG to `landing/screenshots/` with the names above. Target file size <300KB per image (use `pngquant` or `oxipng` to compress if needed).
 
-- [ ] **Step 3: Verify the screenshots load in the landing page**
+- [x] **Step 3: Verify the screenshots load in the landing page**
 
 Reload `http://localhost:8000/landing/`. Confirm:
 - Hero visual now shows the real Sessions screenshot (no more diagonal-stripe placeholder)
@@ -2095,7 +2095,7 @@ Reload `http://localhost:8000/landing/`. Confirm:
 - Differentiator row 2.3 still shows the HTML/CSS comparison panel (not screenshot-based — correct)
 - Resize the browser — screenshots scale down inside their window-frames
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add landing/screenshots/
