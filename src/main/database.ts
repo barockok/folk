@@ -1,5 +1,7 @@
 import BetterSqlite3, { Database as SQLiteDB } from 'better-sqlite3'
 import { safeStorage } from 'electron'
+import type { Session, SessionConfig } from '@shared/types'
+import { randomUUID } from 'node:crypto'
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS sessions (
@@ -92,4 +94,74 @@ export class Database {
     }
     return safeStorage.decryptString(buf)
   }
+
+  createSession(config: SessionConfig): Session {
+    const now = Date.now()
+    const row: Session = {
+      id: randomUUID(),
+      title: config.title ?? 'Untitled session',
+      modelId: config.modelId,
+      workingDir: config.workingDir,
+      goal: config.goal ?? null,
+      flags: config.flags ?? null,
+      status: 'idle',
+      createdAt: now,
+      updatedAt: now
+    }
+    this.db
+      .prepare(
+        `INSERT INTO sessions (id, title, model_id, working_dir, goal, flags, status, created_at, updated_at)
+         VALUES (@id, @title, @modelId, @workingDir, @goal, @flags, @status, @createdAt, @updatedAt)`
+      )
+      .run(row)
+    return row
+  }
+
+  listSessions(): Session[] {
+    const rows = this.db
+      .prepare(`SELECT * FROM sessions ORDER BY updated_at DESC`)
+      .all() as Array<Record<string, unknown>>
+    return rows.map(this.#toSession)
+  }
+
+  getSession(id: string): Session | null {
+    const row = this.db.prepare(`SELECT * FROM sessions WHERE id = ?`).get(id) as
+      | Record<string, unknown>
+      | undefined
+    return row ? this.#toSession(row) : null
+  }
+
+  updateSession(id: string, patch: Partial<Session>): void {
+    const existing = this.getSession(id)
+    if (!existing) throw new Error(`session ${id} not found`)
+    // Guarantee monotonic increase so listSessions ordering is stable even
+    // when Date.now() resolution (1ms) is coarser than operation latency.
+    const maxRow = this.db
+      .prepare(`SELECT MAX(updated_at) AS m FROM sessions`)
+      .get() as { m: number | null }
+    const nextTs = Math.max(Date.now(), (maxRow.m ?? 0) + 1)
+    const merged = { ...existing, ...patch, updatedAt: nextTs }
+    this.db
+      .prepare(
+        `UPDATE sessions SET title = @title, model_id = @modelId, working_dir = @workingDir,
+         goal = @goal, flags = @flags, status = @status, updated_at = @updatedAt WHERE id = @id`
+      )
+      .run(merged)
+  }
+
+  deleteSession(id: string): void {
+    this.db.prepare(`DELETE FROM sessions WHERE id = ?`).run(id)
+  }
+
+  #toSession = (row: Record<string, unknown>): Session => ({
+    id: row.id as string,
+    title: (row.title as string) ?? '',
+    modelId: (row.model_id as string) ?? '',
+    workingDir: (row.working_dir as string) ?? '',
+    goal: (row.goal as string) ?? null,
+    flags: (row.flags as string) ?? null,
+    status: (row.status as Session['status']) ?? 'idle',
+    createdAt: Number(row.created_at ?? 0),
+    updatedAt: Number(row.updated_at ?? 0)
+  })
 }
