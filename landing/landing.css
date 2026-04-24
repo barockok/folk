@@ -500,3 +500,79 @@ body {
   font-weight: 700;
   border-radius: 3px;
 }
+
+/* ============================================================ How it works */
+.howitworks__head {
+  text-align: center;
+  margin-bottom: 48px;
+}
+.howitworks__heading {
+  font-size: 36px;
+  font-weight: 300;
+  letter-spacing: -0.015em;
+  color: var(--heading);
+  margin: 12px 0 0;
+}
+.howitworks__grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+}
+.step-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--sh-ambient);
+  padding: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.step-card__num {
+  font-family: var(--ff-mono);
+  font-size: 32px;
+  font-weight: 500;
+  color: var(--stripe-purple);
+  font-feature-settings: "tnum";
+  line-height: 1;
+}
+.step-card__title {
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--heading);
+  margin: 0;
+}
+.step-card__body {
+  font-size: 14px;
+  color: var(--body);
+  line-height: 1.55;
+  margin: 0;
+}
+.step-card__body code {
+  font-family: var(--ff-mono);
+  font-size: 12px;
+  background: var(--bg-sub);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xs);
+  padding: 1px 4px;
+  color: var(--heading);
+}
+.step-card__chip {
+  display: block;
+  font-family: var(--ff-mono);
+  font-size: 12px;
+  background: var(--bg-sink);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xs);
+  padding: 8px 10px;
+  color: var(--fg-muted);
+  margin-top: auto;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+.howitworks__footnote {
+  text-align: center;
+  font-size: 13px;
+  color: var(--fg-faint);
+  margin-top: 40px;
+}
