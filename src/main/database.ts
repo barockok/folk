@@ -1,6 +1,6 @@
 import BetterSqlite3, { Database as SQLiteDB } from 'better-sqlite3'
 import { safeStorage } from 'electron'
-import type { Session, SessionConfig, ProviderConfig, ModelConfig, MCPServer } from '@shared/types'
+import type { Session, SessionConfig, ProviderConfig, ModelConfig, MCPServer, Profile } from '@shared/types'
 import { randomUUID } from 'node:crypto'
 
 const SCHEMA = `
@@ -52,6 +52,15 @@ CREATE TABLE IF NOT EXISTS profile (
   about TEXT
 );
 `
+
+const DEFAULT_PROFILE: Profile = {
+  nickname: '',
+  pronouns: '',
+  role: '',
+  tone: '',
+  avatarColor: '#635bff',
+  about: ''
+}
 
 export class Database {
   readonly db: SQLiteDB
@@ -249,6 +258,34 @@ export class Database {
 
   deleteMCP(id: string): void {
     this.db.prepare(`DELETE FROM mcp_servers WHERE id = ?`).run(id)
+  }
+
+  getProfile(): Profile {
+    const row = this.db.prepare(`SELECT * FROM profile WHERE id = 1`).get() as
+      | Record<string, unknown>
+      | undefined
+    if (!row) return { ...DEFAULT_PROFILE }
+    return {
+      nickname: (row.nickname as string) ?? '',
+      pronouns: (row.pronouns as string) ?? '',
+      role: (row.role as string) ?? '',
+      tone: (row.tone as string) ?? '',
+      avatarColor: (row.avatar_color as string) ?? DEFAULT_PROFILE.avatarColor,
+      about: (row.about as string) ?? ''
+    }
+  }
+
+  saveProfile(p: Profile): void {
+    this.db
+      .prepare(
+        `INSERT INTO profile (id, nickname, pronouns, role, tone, avatar_color, about)
+         VALUES (1, @nickname, @pronouns, @role, @tone, @avatarColor, @about)
+         ON CONFLICT(id) DO UPDATE SET
+           nickname = excluded.nickname, pronouns = excluded.pronouns,
+           role = excluded.role, tone = excluded.tone,
+           avatar_color = excluded.avatar_color, about = excluded.about`
+      )
+      .run(p)
   }
 
   #toSession = (row: Record<string, unknown>): Session => ({

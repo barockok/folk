@@ -165,3 +165,39 @@ describe('mcp servers CRUD', () => {
     expect(got.env).toEqual({ DEBUG: '1' })
   })
 })
+
+describe('profile', () => {
+  let dir: string
+  let db: Database
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'folk-db-'))
+    db = new Database(join(dir, 'folk.db'))
+  })
+
+  afterEach(() => {
+    db.close()
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('getProfile returns defaults when empty', () => {
+    const p = db.getProfile()
+    expect(p.nickname).toBe('')
+    expect(p.avatarColor).toBeTruthy()
+  })
+
+  it('saveProfile upserts singleton row', () => {
+    db.saveProfile({
+      nickname: 'Z',
+      pronouns: 'they/them',
+      role: 'dev',
+      tone: 'direct',
+      avatarColor: '#635bff',
+      about: 'hi'
+    })
+    const p = db.getProfile()
+    expect(p.nickname).toBe('Z')
+    db.saveProfile({ ...p, nickname: 'Zid' })
+    expect(db.getProfile().nickname).toBe('Zid')
+  })
+})
