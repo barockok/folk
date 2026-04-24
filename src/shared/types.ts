@@ -1,3 +1,7 @@
+// Convention:
+//   `| null`  — persisted column that always exists but may be empty.
+//   `?`       — optional key in an input/DTO/nested-JSON shape.
+
 export type SessionStatus = 'idle' | 'running' | 'error' | 'cancelled'
 
 export interface Session {
@@ -100,7 +104,16 @@ export interface AgentToolResult {
 
 export interface AgentError {
   sessionId: string
-  code: 'auth' | 'quota' | 'offline' | 'crash' | 'unknown'
+  code: 'auth' | 'quota' | 'offline' | 'cancelled' | 'invalid-model' | 'crash' | 'unknown'
   message: string
   retryable: boolean
+}
+
+export interface MCPTemplate {
+  id: string
+  label: string
+  command?: string
+  baseArgs?: string[]
+  transport: MCPTransport
+  fields: Array<{ key: string; label: string; placeholder?: string; secret?: boolean }>
 }
