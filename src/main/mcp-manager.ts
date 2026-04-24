@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
-import type { MCPServer, MCPTemplate } from '@shared/types'
+import { spawn } from 'node:child_process'
+import type { MCPServer, MCPTemplate, ToolInfo } from '@shared/types'
 import { Database } from './database'
 
 export const MCP_TEMPLATES: Record<string, MCPTemplate> = {
@@ -107,5 +108,85 @@ export class MCPManager {
 
   delete(id: string): void {
     this.db.deleteMCP(id)
+  }
+
+  async testConnection(
+    id: string
+  ): Promise<{ ok: boolean; tools: ToolInfo[]; error?: string }> {
+    const server = this.db.listMCPs().find((m) => m.id === id)
+    if (!server) return { ok: false, tools: [], error: 'not found' }
+    if (server.transport !== 'stdio' || !server.command) {
+      return { ok: false, tools: [], error: 'only stdio transport supported in test-connect' }
+    }
+
+    return new Promise((resolve) => {
+      const child = spawn(server.command!, server.args ?? [], {
+        env: { ...process.env, ...(server.env ?? {}) },
+        stdio: ['pipe', 'pipe', 'pipe']
+      })
+      let stderr = ''
+      let resolved = false
+      const finish = (out: { ok: boolean; tools: ToolInfo[]; error?: string }): void => {
+        if (resolved) return
+        resolved = true
+        try {
+          child.kill('SIGTERM')
+        } catch {
+          /* ignore */
+        }
+        resolve(out)
+      }
+      child.on('error', (err) => finish({ ok: false, tools: [], error: err.message }))
+      child.stderr.on('data', (b) => (stderr += b.toString()))
+
+      const initReq = {
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'initialize',
+        params: {
+          protocolVersion: '2024-11-05',
+          capabilities: {},
+          clientInfo: { name: 'folk', version: '0.1' }
+        }
+      }
+      const listReq = { jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} }
+      try {
+        child.stdin.write(JSON.stringify(initReq) + '\n')
+        child.stdin.write(JSON.stringify(listReq) + '\n')
+      } catch {
+        /* finish is called via child.on('error') */
+      }
+
+      let buf = ''
+      child.stdout.on('data', (b) => {
+        buf += b.toString()
+        const lines = buf.split('\n')
+        buf = lines.pop() ?? ''
+        for (const line of lines) {
+          if (!line.trim()) continue
+          try {
+            const msg = JSON.parse(line)
+            if (msg.id === 2 && msg.result?.tools) {
+              const tools: ToolInfo[] = msg.result.tools.map(
+                (t: { name: string; description?: string }) => ({
+                  name: t.name,
+                  description: t.description
+                })
+              )
+              this.db.saveMCP({ ...server, toolCount: tools.length, lastError: null })
+              finish({ ok: true, tools })
+              return
+            }
+          } catch {
+            /* ignore */
+          }
+        }
+      })
+
+      setTimeout(() => {
+        this.db.saveMCP({ ...server, lastError: stderr || 'timed out' })
+        finish({ ok: false, tools: [], error: stderr || 'timed out' })
+      }, 8000)
+    })
   }
 }
