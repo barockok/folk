@@ -576,3 +576,97 @@ body {
   color: var(--fg-faint);
   margin-top: 40px;
 }
+
+/* ============================================================ Provider grid */
+.providers__head {
+  text-align: center;
+  margin-bottom: 48px;
+}
+.providers__heading {
+  font-size: 36px;
+  font-weight: 300;
+  letter-spacing: -0.015em;
+  color: var(--heading);
+  margin: 12px 0 16px;
+}
+.providers__subhead {
+  font-size: 16px;
+  color: var(--body);
+  max-width: 600px;
+  line-height: 1.55;
+  margin: 0 auto;
+}
+.providers__grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+.provider-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  box-shadow: var(--sh-ambient);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 140px;
+  transition: box-shadow .12s, transform .12s;
+}
+.provider-card:hover {
+  box-shadow: var(--sh-standard);
+  transform: translateY(-1px);
+}
+.provider-card--custom {
+  border: 1px dashed var(--border-dashed);
+  background: transparent;
+  box-shadow: none;
+}
+.provider-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.provider-card__monogram {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-xs);
+  color: #fff;
+  font-weight: 600;
+  font-size: 14px;
+  font-family: var(--ff-sans);
+}
+.provider-card__monogram--plus {
+  background: var(--stripe-purple-bg) !important;
+  color: var(--stripe-purple);
+  font-weight: 400;
+  font-size: 18px;
+  border: 1px dashed var(--border-dashed);
+}
+.provider-card__name {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--heading);
+  margin: 0;
+}
+.provider-card__body {
+  font-size: 13px;
+  color: var(--body);
+  line-height: 1.5;
+  margin: 0;
+}
+.provider-card__id {
+  display: inline-block;
+  font-family: var(--ff-mono);
+  font-size: 11px;
+  color: var(--fg-muted);
+  background: var(--bg-sink);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xs);
+  padding: 2px 6px;
+  margin-top: auto;
+  align-self: flex-start;
+}
