@@ -5,6 +5,7 @@ import { Database } from './database'
 import { AgentManager } from './agent-manager'
 import { MCPManager } from './mcp-manager'
 import { registerIpc } from './ipc-handlers'
+import { wireStreaming } from './ipc-streaming'
 
 let db: Database
 let agentManager: AgentManager
@@ -55,7 +56,7 @@ app.whenReady().then(() => {
   registerIpc(db, agentManager, mcpManager)
 
   createWindow()
-  // Task 18 will call wireStreaming(agentManager, mainWindow) here.
+  if (mainWindow) wireStreaming(agentManager, mainWindow)
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
