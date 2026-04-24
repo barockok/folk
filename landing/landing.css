@@ -306,11 +306,16 @@ body {
 .diff-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 5%;
+  gap: 48px;
   align-items: center;
   margin-bottom: 80px;
 }
 .diff-row:last-child { margin-bottom: 0; }
+/* image-right/image-left modifiers flip column visual order via CSS `order`,
+   not DOM order. Safe today because the visual column contains only a non-focusable
+   <img>. If a future image-left row needs focusable content inside .diff-row__visual,
+   prefer DOM-order swap (move .diff-row__visual before .diff-row__text in HTML)
+   to keep tab order matching visual order (WCAG 2.4.3). */
 .diff-row--image-right .diff-row__visual { order: 2; }
 .diff-row--image-left  .diff-row__visual { order: 1; }
 .diff-row--image-right .diff-row__text   { order: 1; }
