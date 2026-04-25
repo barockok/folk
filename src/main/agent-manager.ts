@@ -338,25 +338,17 @@ export class AgentManager extends EventEmitter {
   }
 
   async deleteSession(id: string): Promise<void> {
-    const stream = this.#streams.get(id)
-    if (stream) {
-      stream.abort.abort()
-      this.#streams.delete(id)
-    }
+    await this.#teardown(id, 'delete')
     this.db.deleteSession(id)
   }
 
   dispose(): void {
-    for (const { abort } of this.#streams.values()) abort.abort()
-    this.#streams.clear()
+    const ids = [...this.#live.keys()]
+    void Promise.all(ids.map((id) => this.#teardown(id, 'dispose')))
   }
 
   async cancel(sessionId: string): Promise<void> {
-    const stream = this.#streams.get(sessionId)
-    if (stream) {
-      stream.abort.abort()
-      this.#streams.delete(sessionId)
-    }
+    await this.#teardown(sessionId, 'cancel')
     this.db.updateSession(sessionId, { status: 'cancelled' })
   }
 
