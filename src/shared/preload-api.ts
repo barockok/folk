@@ -10,7 +10,9 @@ import type {
   AgentChunk,
   AgentToolCall,
   AgentToolResult,
-  AgentError
+  AgentError,
+  ClaudeCodeAuthStatus,
+  PersistedMessage
 } from './types'
 
 export interface FolkAPI {
@@ -19,6 +21,7 @@ export interface FolkAPI {
     get: (id: string) => Promise<Session | null>
     create: (config: SessionConfig) => Promise<Session>
     delete: (id: string) => Promise<void>
+    loadMessages: (id: string) => Promise<PersistedMessage[]>
   }
   agent: {
     sendMessage: (sessionId: string, text: string, attachments?: Attachment[]) => Promise<void>
@@ -46,5 +49,11 @@ export interface FolkAPI {
   profile: {
     get: () => Promise<Profile>
     save: (p: Profile) => Promise<void>
+  }
+  auth: {
+    claudeCodeStatus: () => Promise<ClaudeCodeAuthStatus>
+  }
+  dialog: {
+    openFolder: (defaultPath?: string) => Promise<string | null>
   }
 }

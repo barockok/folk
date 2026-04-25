@@ -3,12 +3,19 @@ import { useSessionStore } from '../stores/useSessionStore'
 import type { Attachment, SessionConfig } from '@shared/types'
 
 export function useSessions() {
-  const { sessions, activeId, setSessions, upsertSession, removeSession, setActive } =
+  const { sessions, activeId, setSessions, upsertSession, removeSession, setActive, hydrateMessages } =
     useSessionStore()
 
   useEffect(() => {
     void window.folk.sessions.list().then(setSessions)
   }, [setSessions])
+
+  // Rehydrate the transcript from the SDK's on-disk store whenever the active
+  // session changes. Idempotent — hydrateMessages skips if state is non-empty.
+  useEffect(() => {
+    if (!activeId) return
+    void hydrateMessages(activeId)
+  }, [activeId, hydrateMessages])
 
   return {
     sessions,
@@ -25,7 +32,10 @@ export function useSessions() {
       removeSession(id)
     },
     async send(sessionId: string, text: string, attachments?: Attachment[]) {
-      useSessionStore.getState().pushUserMessage(sessionId, text)
+      const st = useSessionStore.getState()
+      st.pushUserMessage(sessionId, text)
+      st.pushPendingAssistant(sessionId)
+      st.markStreaming(sessionId)
       await window.folk.agent.sendMessage(sessionId, text, attachments)
     },
     async cancel(sessionId: string) {

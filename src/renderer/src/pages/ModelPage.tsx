@@ -1,9 +1,46 @@
 // ModelPage.tsx — multi-provider manager (Task 30)
 import { useState, useEffect } from 'react'
-import type { ProviderConfig, ModelConfig } from '@shared/types'
+import type { ProviderConfig, ProviderAuthMode, ModelConfig, ClaudeCodeAuthStatus } from '@shared/types'
 import { useProvidersStore } from '../stores/useProvidersStore'
 import { useUIStore } from '../stores/useUIStore'
 import { Icon } from '../components/icons'
+
+function ClaudeCodeStatusField() {
+  const status = useClaudeCodeAuth(true)
+  return (
+    <div className="field">
+      <label className="label">Claude Code status</label>
+      {status == null ? (
+        <div className="hint">Checking…</div>
+      ) : status.loggedIn ? (
+        <div className="hint" style={{ color: 'var(--ok)' }}>
+          <Icon name="check" size={12} /> Logged in
+          {status.source === 'keychain' ? ' (macOS Keychain)' : ''}
+          {status.email ? ` as ${status.email}` : ''}
+        </div>
+      ) : (
+        <div className="hint" style={{ color: 'var(--warn)' }}>
+          Not logged in. Run <code className="mono">claude login</code> in a terminal.
+        </div>
+      )}
+    </div>
+  )
+}
+
+function useClaudeCodeAuth(enabled: boolean): ClaudeCodeAuthStatus | null {
+  const [status, setStatus] = useState<ClaudeCodeAuthStatus | null>(null)
+  useEffect(() => {
+    if (!enabled) return
+    let cancelled = false
+    void window.folk.auth.claudeCodeStatus().then((s) => {
+      if (!cancelled) setStatus(s)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [enabled])
+  return status
+}
 
 // ---------------------------------------------------------------------------
 // Preset data (verbatim from spec)
@@ -117,13 +154,16 @@ function AddProviderModal({ usedIds, onAdd, onClose }: AddProviderModalProps) {
   const [name, setName] = useState('')
   const [baseUrl, setBaseUrl] = useState('')
   const [apiKey, setApiKey] = useState('')
+  const [authMode, setAuthMode] = useState<ProviderAuthMode>('api-key')
   const [saving, setSaving] = useState(false)
+  const ccStatus = useClaudeCodeAuth(selectedId === 'anthropic' && authMode === 'claude-code')
 
   const available = PROVIDER_PRESETS.filter((p) => !usedIds.includes(p.id))
   const preset = selectedId && selectedId !== CUSTOM_PRESET_ID ? presetFor(selectedId) : null
 
   const handlePresetChange = (id: string) => {
     setSelectedId(id)
+    setAuthMode('api-key')
     if (id === CUSTOM_PRESET_ID) {
       setName('')
       setBaseUrl('')
@@ -144,7 +184,8 @@ function AddProviderModal({ usedIds, onAdd, onClose }: AddProviderModalProps) {
     const newProvider: ProviderConfig = {
       id: selectedId === CUSTOM_PRESET_ID ? crypto.randomUUID() : selectedId || crypto.randomUUID(),
       name: resolvedName,
-      apiKey: apiKey.trim(),
+      apiKey: authMode === 'claude-code' ? '' : apiKey.trim(),
+      authMode: selectedId === 'anthropic' ? authMode : 'api-key',
       baseUrl: baseUrl.trim() || null,
       models: resolvedModels,
       isEnabled: true,
@@ -155,7 +196,11 @@ function AddProviderModal({ usedIds, onAdd, onClose }: AddProviderModalProps) {
     onAdd(newProvider)
   }
 
-  const canAdd = selectedId.length > 0 && (selectedId !== CUSTOM_PRESET_ID || name.trim().length > 0)
+  const needsKey = !(selectedId === 'anthropic' && authMode === 'claude-code')
+  const canAdd =
+    selectedId.length > 0 &&
+    (selectedId !== CUSTOM_PRESET_ID || name.trim().length > 0) &&
+    (!needsKey || apiKey.trim().length > 0)
 
   return (
     <div className="modal-scrim" onClick={onClose}>
@@ -247,19 +292,68 @@ function AddProviderModal({ usedIds, onAdd, onClose }: AddProviderModalProps) {
                 />
               </div>
 
-              <div className="field">
-                <label className="label">
-                  {preset?.keyLabel ?? 'API key'}
-                </label>
-                <input
-                  className="input mono"
-                  type="password"
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  placeholder="Paste key"
-                />
-                <div className="hint">Stored locally. Never synced.</div>
-              </div>
+              {selectedId === 'anthropic' && (
+                <div className="field">
+                  <label className="label">How to authenticate</label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                    <button
+                      type="button"
+                      className={'model-opt' + (authMode === 'api-key' ? ' selected' : '')}
+                      onClick={() => setAuthMode('api-key')}
+                      style={{ padding: 12, textAlign: 'left' }}
+                    >
+                      <span className="name" style={{ fontSize: 13 }}>API key</span>
+                      <span className="desc" style={{ fontSize: 11, marginTop: 2 }}>
+                        Paste an Anthropic API key
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      className={'model-opt' + (authMode === 'claude-code' ? ' selected' : '')}
+                      onClick={() => setAuthMode('claude-code')}
+                      style={{ padding: 12, textAlign: 'left' }}
+                    >
+                      <span className="name" style={{ fontSize: 13 }}>Use Claude Code login</span>
+                      <span className="desc" style={{ fontSize: 11, marginTop: 2 }}>
+                        Reuse your existing subscription
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {needsKey ? (
+                <div className="field">
+                  <label className="label">
+                    {preset?.keyLabel ?? 'API key'}
+                  </label>
+                  <input
+                    className="input mono"
+                    type="password"
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    placeholder="Paste key"
+                  />
+                  <div className="hint">Stored locally. Never synced.</div>
+                </div>
+              ) : (
+                <div className="field">
+                  <label className="label">Claude Code status</label>
+                  {ccStatus == null ? (
+                    <div className="hint">Checking…</div>
+                  ) : ccStatus.loggedIn ? (
+                    <div className="hint" style={{ color: 'var(--ok)' }}>
+                      <Icon name="check" size={12} /> Logged in
+                      {ccStatus.source === 'keychain' ? ' (macOS Keychain)' : ''}
+                      {ccStatus.email ? ` as ${ccStatus.email}` : ''}
+                    </div>
+                  ) : (
+                    <div className="hint" style={{ color: 'var(--warn)' }}>
+                      Not logged in. Run <code className="mono">claude login</code> in a terminal, then reopen this dialog.
+                    </div>
+                  )}
+                </div>
+              )}
             </>
           )}
         </div>
@@ -507,27 +601,61 @@ export function ModelPage() {
               <h2 className="h2">Credentials</h2>
             </div>
 
-            <div className="field">
-              <label className="label">{preset?.keyLabel ?? 'API key'}</label>
-              <div style={{ position: 'relative' }}>
-                <input
-                  className="input mono"
-                  type={reveal ? 'text' : 'password'}
-                  value={draft.apiKey}
-                  placeholder="Paste key"
-                  onChange={(e) => updateDraft({ apiKey: e.target.value })}
-                  style={{ paddingRight: 80 }}
-                />
-                <button
-                  className="btn btn-sm btn-plain"
-                  style={{ position: 'absolute', right: 4, top: 3 }}
-                  onClick={() => setReveal((r) => !r)}
-                >
-                  {reveal ? 'Hide' : 'Show'}
-                </button>
+            {active.id === 'anthropic' && (
+              <div className="field">
+                <label className="label">How to authenticate</label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  <button
+                    type="button"
+                    className={'model-opt' + (draft.authMode !== 'claude-code' ? ' selected' : '')}
+                    onClick={() => updateDraft({ authMode: 'api-key' })}
+                    style={{ padding: 12, textAlign: 'left' }}
+                  >
+                    <span className="name" style={{ fontSize: 13 }}>API key</span>
+                    <span className="desc" style={{ fontSize: 11, marginTop: 2 }}>
+                      Paste an Anthropic API key
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    className={'model-opt' + (draft.authMode === 'claude-code' ? ' selected' : '')}
+                    onClick={() => updateDraft({ authMode: 'claude-code', apiKey: '' })}
+                    style={{ padding: 12, textAlign: 'left' }}
+                  >
+                    <span className="name" style={{ fontSize: 13 }}>Use Claude Code login</span>
+                    <span className="desc" style={{ fontSize: 11, marginTop: 2 }}>
+                      Reuse your existing subscription
+                    </span>
+                  </button>
+                </div>
               </div>
-              <div className="hint">Stored locally. Never synced.</div>
-            </div>
+            )}
+
+            {draft.authMode === 'claude-code' ? (
+              <ClaudeCodeStatusField />
+            ) : (
+              <div className="field">
+                <label className="label">{preset?.keyLabel ?? 'API key'}</label>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    className="input mono"
+                    type={reveal ? 'text' : 'password'}
+                    value={draft.apiKey}
+                    placeholder="Paste key"
+                    onChange={(e) => updateDraft({ apiKey: e.target.value })}
+                    style={{ paddingRight: 80 }}
+                  />
+                  <button
+                    className="btn btn-sm btn-plain"
+                    style={{ position: 'absolute', right: 4, top: 3 }}
+                    onClick={() => setReveal((r) => !r)}
+                  >
+                    {reveal ? 'Hide' : 'Show'}
+                  </button>
+                </div>
+                <div className="hint">Stored locally. Never synced.</div>
+              </div>
+            )}
 
             <div className="field">
               <label className="label">

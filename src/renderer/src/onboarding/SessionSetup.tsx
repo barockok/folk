@@ -212,8 +212,10 @@ export function SessionSetup({ onLaunch, onCancel }: SessionSetupProps) {
               <button
                 className="btn"
                 type="button"
-                disabled
-                title="Coming soon"
+                onClick={async () => {
+                  const picked = await window.folk.dialog.openFolder(folder.trim() || undefined)
+                  if (picked) setFolder(picked)
+                }}
               >
                 Browse
               </button>

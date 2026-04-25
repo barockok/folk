@@ -54,18 +54,20 @@ export function Topbar() {
 
       <div className="tb-actions">
         <button
-          className="btn btn-plain"
+          className="btn btn-plain btn-icon"
           onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
           title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
+          aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
         >
-          <span aria-hidden="true">{theme === 'light' ? '☾' : '☀'}</span>
+          <Icon name={theme === 'light' ? 'moon' : 'sun'} size={14} />
         </button>
         <button
-          className="btn btn-plain"
+          className="btn btn-plain btn-icon"
           onClick={() => setDensity(density === 'compact' ? 'regular' : 'compact')}
           title={`Density: ${density}`}
+          aria-label={`Toggle density (currently ${density})`}
         >
-          <span aria-hidden="true">{density === 'compact' ? '⊞' : '⊟'}</span>
+          <Icon name="density" size={14} />
         </button>
       </div>
     </header>

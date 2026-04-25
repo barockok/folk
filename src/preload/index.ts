@@ -13,7 +13,8 @@ const folk: FolkAPI = {
     list: () => ipcRenderer.invoke('sessions:list'),
     get: (id) => ipcRenderer.invoke('sessions:get', id),
     create: (config) => ipcRenderer.invoke('sessions:create', config),
-    delete: (id) => ipcRenderer.invoke('sessions:delete', id)
+    delete: (id) => ipcRenderer.invoke('sessions:delete', id),
+    loadMessages: (id) => ipcRenderer.invoke('sessions:loadMessages', id)
   },
   agent: {
     sendMessage: (sessionId, text, attachments) =>
@@ -42,6 +43,12 @@ const folk: FolkAPI = {
   profile: {
     get: () => ipcRenderer.invoke('profile:get'),
     save: (p) => ipcRenderer.invoke('profile:save', p)
+  },
+  auth: {
+    claudeCodeStatus: () => ipcRenderer.invoke('auth:claudeCodeStatus')
+  },
+  dialog: {
+    openFolder: (defaultPath) => ipcRenderer.invoke('dialog:openFolder', defaultPath)
   }
 }
 

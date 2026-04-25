@@ -68,7 +68,9 @@ export function Composer({ session, onSend, onCancel }: ComposerProps) {
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+      // Enter sends. Shift+Enter inserts a newline (default behavior).
+      // IME composition (e.nativeEvent.isComposing) must not trigger send.
+      if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
         e.preventDefault()
         handleSend()
       }
@@ -285,15 +287,20 @@ export function Composer({ session, onSend, onCancel }: ComposerProps) {
                 Open Model &amp; API
               </button>
             )}
-            {lastErr.code === 'crash' && lastUser && (
-              <button
-                type="button"
-                style={bannerBtnStyles}
-                onClick={() => onSend(lastUser.text)}
-              >
-                Retry
-              </button>
-            )}
+            {lastErr.code === 'crash' && lastUser && (() => {
+              const firstText = lastUser.blocks.find((b) => b.kind === 'text')
+              const retryText = firstText?.kind === 'text' ? firstText.text : ''
+              return (
+                <button
+                  type="button"
+                  style={bannerBtnStyles}
+                  onClick={() => retryText && onSend(retryText)}
+                  disabled={!retryText}
+                >
+                  Retry
+                </button>
+              )
+            })()}
           </div>
         )}
 

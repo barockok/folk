@@ -1,5 +1,28 @@
-import { app, BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, net, protocol, shell } from 'electron'
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
+
+// Register the custom scheme BEFORE app.whenReady so the renderer treats it
+// as privileged (secure context, fetch-capable, streamable).
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'folk-file',
+    privileges: {
+      secure: true,
+      standard: true,
+      supportFetchAPI: true,
+      stream: true,
+      bypassCSP: true
+    }
+  }
+])
+
+// Whitelist of extensions we'll serve. Keeps the blast radius narrow — this
+// protocol exists for inline images in chat markdown, not arbitrary file
+// access. Add more extensions if other safe media types are needed.
+const ALLOWED_EXT = new Set([
+  '.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp', '.ico', '.avif'
+])
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { Database } from './database'
 import { AgentManager } from './agent-manager'
@@ -48,6 +71,24 @@ app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.folk.app')
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
+  })
+
+  // folk-file://<absolute-path> → stream the on-disk file. The hostname slot
+  // is unused; we treat everything after the scheme as the absolute path.
+  protocol.handle('folk-file', async (req) => {
+    try {
+      // The renderer rewrites paths to folk-file://localhost/<absolute-path>.
+      // We only care about the pathname — host is a placeholder.
+      const url = new URL(req.url)
+      const rawPath = decodeURIComponent(url.pathname)
+      const ext = rawPath.slice(rawPath.lastIndexOf('.')).toLowerCase()
+      if (!ALLOWED_EXT.has(ext)) {
+        return new Response('Disallowed file type', { status: 403 })
+      }
+      return await net.fetch(pathToFileURL(rawPath).toString())
+    } catch (err) {
+      return new Response(`Bad request: ${(err as Error).message}`, { status: 400 })
+    }
   })
 
   db = new Database(join(app.getPath('userData'), 'folk.db'))

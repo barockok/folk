@@ -1,6 +1,14 @@
 import BetterSqlite3, { Database as SQLiteDB } from 'better-sqlite3'
 import { safeStorage } from 'electron'
-import type { Session, SessionConfig, ProviderConfig, ModelConfig, MCPServer, Profile } from '@shared/types'
+import type {
+  Session,
+  SessionConfig,
+  ProviderConfig,
+  ProviderAuthMode,
+  ModelConfig,
+  MCPServer,
+  Profile
+} from '@shared/types'
 import { randomUUID } from 'node:crypto'
 
 const SCHEMA = `
@@ -12,6 +20,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   goal TEXT,
   flags TEXT,
   status TEXT NOT NULL DEFAULT 'idle',
+  claude_started INTEGER NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
@@ -20,6 +29,7 @@ CREATE TABLE IF NOT EXISTS providers (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   api_key BLOB NOT NULL,
+  auth_mode TEXT NOT NULL DEFAULT 'api-key',
   base_url TEXT,
   models TEXT NOT NULL,
   is_enabled INTEGER NOT NULL DEFAULT 1,
@@ -70,6 +80,26 @@ export class Database {
     this.db.pragma('journal_mode = WAL')
     this.db.pragma('foreign_keys = ON')
     this.db.exec(SCHEMA)
+    this.#migrate()
+  }
+
+  #migrate(): void {
+    const provCols = this.db
+      .prepare(`PRAGMA table_info(providers)`)
+      .all() as Array<{ name: string }>
+    if (!provCols.some((c) => c.name === 'auth_mode')) {
+      this.db
+        .prepare(`ALTER TABLE providers ADD COLUMN auth_mode TEXT NOT NULL DEFAULT 'api-key'`)
+        .run()
+    }
+    const sessCols = this.db
+      .prepare(`PRAGMA table_info(sessions)`)
+      .all() as Array<{ name: string }>
+    if (!sessCols.some((c) => c.name === 'claude_started')) {
+      this.db
+        .prepare(`ALTER TABLE sessions ADD COLUMN claude_started INTEGER NOT NULL DEFAULT 0`)
+        .run()
+    }
   }
 
   close(): void {
@@ -114,15 +144,16 @@ export class Database {
       goal: config.goal ?? null,
       flags: config.flags ?? null,
       status: 'idle',
+      claudeStarted: false,
       createdAt: now,
       updatedAt: now
     }
     this.db
       .prepare(
-        `INSERT INTO sessions (id, title, model_id, working_dir, goal, flags, status, created_at, updated_at)
-         VALUES (@id, @title, @modelId, @workingDir, @goal, @flags, @status, @createdAt, @updatedAt)`
+        `INSERT INTO sessions (id, title, model_id, working_dir, goal, flags, status, claude_started, created_at, updated_at)
+         VALUES (@id, @title, @modelId, @workingDir, @goal, @flags, @status, @claudeStarted, @createdAt, @updatedAt)`
       )
-      .run(row)
+      .run({ ...row, claudeStarted: row.claudeStarted ? 1 : 0 })
     return row
   }
 
@@ -153,9 +184,10 @@ export class Database {
     this.db
       .prepare(
         `UPDATE sessions SET title = @title, model_id = @modelId, working_dir = @workingDir,
-         goal = @goal, flags = @flags, status = @status, updated_at = @updatedAt WHERE id = @id`
+         goal = @goal, flags = @flags, status = @status, claude_started = @claudeStarted,
+         updated_at = @updatedAt WHERE id = @id`
       )
-      .run(merged)
+      .run({ ...merged, claudeStarted: merged.claudeStarted ? 1 : 0 })
   }
 
   deleteSession(id: string): void {
@@ -163,14 +195,16 @@ export class Database {
   }
 
   saveProvider(p: ProviderConfig): void {
-    const encKey = this.encryptSecret(p.apiKey)
+    // When using Claude Code auth, there may be no API key — encrypt empty string.
+    const encKey = this.encryptSecret(p.apiKey ?? '')
     this.db
       .prepare(
-        `INSERT INTO providers (id, name, api_key, base_url, models, is_enabled, created_at)
-         VALUES (@id, @name, @apiKey, @baseUrl, @models, @isEnabled, @createdAt)
+        `INSERT INTO providers (id, name, api_key, auth_mode, base_url, models, is_enabled, created_at)
+         VALUES (@id, @name, @apiKey, @authMode, @baseUrl, @models, @isEnabled, @createdAt)
          ON CONFLICT(id) DO UPDATE SET
            name = excluded.name,
            api_key = excluded.api_key,
+           auth_mode = excluded.auth_mode,
            base_url = excluded.base_url,
            models = excluded.models,
            is_enabled = excluded.is_enabled`
@@ -179,6 +213,7 @@ export class Database {
         id: p.id,
         name: p.name,
         apiKey: encKey,
+        authMode: p.authMode ?? 'api-key',
         baseUrl: p.baseUrl,
         models: JSON.stringify(p.models),
         isEnabled: p.isEnabled ? 1 : 0,
@@ -194,6 +229,7 @@ export class Database {
       id: r.id as string,
       name: r.name as string,
       apiKey: this.decryptSecret(r.api_key as Buffer),
+      authMode: ((r.auth_mode as string) ?? 'api-key') as ProviderAuthMode,
       baseUrl: (r.base_url as string) ?? null,
       models: JSON.parse((r.models as string) ?? '[]') as ModelConfig[],
       isEnabled: Number(r.is_enabled ?? 0) === 1,
@@ -296,6 +332,7 @@ export class Database {
     goal: (row.goal as string) ?? null,
     flags: (row.flags as string) ?? null,
     status: (row.status as Session['status']) ?? 'idle',
+    claudeStarted: Number(row.claude_started ?? 0) === 1,
     createdAt: Number(row.created_at ?? 0),
     updatedAt: Number(row.updated_at ?? 0)
   })

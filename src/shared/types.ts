@@ -12,6 +12,9 @@ export interface Session {
   goal: string | null
   flags: string | null
   status: SessionStatus
+  // True once the underlying Claude Code SDK session has been started at least
+  // once. First turn passes `sessionId`, subsequent turns pass `resume`.
+  claudeStarted: boolean
   createdAt: number
   updatedAt: number
 }
@@ -24,14 +27,23 @@ export interface SessionConfig {
   flags?: string
 }
 
+export type ProviderAuthMode = 'api-key' | 'claude-code'
+
 export interface ProviderConfig {
   id: string
   name: string
   apiKey: string
+  authMode: ProviderAuthMode
   baseUrl: string | null
   models: ModelConfig[]
   isEnabled: boolean
   createdAt: number
+}
+
+export interface ClaudeCodeAuthStatus {
+  loggedIn: boolean
+  source: 'keychain' | 'file' | null
+  email: string | null
 }
 
 export interface ModelConfig {
@@ -100,6 +112,29 @@ export interface AgentToolResult {
   tool: string
   output: unknown
   isError?: boolean
+}
+
+export interface PersistedToolCall {
+  callId: string
+  tool: string
+  input: unknown
+  output?: unknown
+  isError?: boolean
+}
+
+// Ordered units that make up a single message turn — preserves the actual
+// arrival order of the model's text / thinking / tool-use output instead of
+// flattening them into separate buckets.
+export type MessageBlock =
+  | { kind: 'text'; text: string }
+  | { kind: 'thinking'; text: string }
+  | { kind: 'tool'; call: PersistedToolCall }
+
+export interface PersistedMessage {
+  id: string
+  role: 'user' | 'assistant'
+  blocks: MessageBlock[]
+  createdAt: number
 }
 
 export interface AgentError {

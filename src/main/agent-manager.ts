@@ -1,7 +1,9 @@
 import { EventEmitter } from 'node:events'
-import { query, AbortError } from '@anthropic-ai/claude-agent-sdk'
+import { query, AbortError, getSessionMessages } from '@anthropic-ai/claude-agent-sdk'
 import type { McpServerConfig } from '@anthropic-ai/claude-agent-sdk'
+import { randomUUID } from 'node:crypto'
 import { Database } from './database'
+import { FOLK_PRESENTATION_PROMPT } from './system-prompt'
 import type {
   Session,
   SessionConfig,
@@ -9,8 +11,97 @@ import type {
   AgentChunk,
   AgentToolCall,
   AgentToolResult,
-  AgentError
+  AgentError,
+  PersistedMessage,
+  PersistedToolCall,
+  MessageBlock
 } from '@shared/types'
+
+// Walk the SDK's flat SessionMessage[] list and fold it into folk's chat
+// shape: one PersistedMessage per turn, with `blocks` carrying text /
+// thinking / tool entries in the same order they appear in the transcript.
+// tool_result blocks (which arrive in subsequent user envelopes) are matched
+// back to the originating tool block by callId.
+function mapSessionMessages(
+  raw: Array<{ type: 'user' | 'assistant' | 'system'; uuid: string; message: unknown }>
+): PersistedMessage[] {
+  const out: PersistedMessage[] = []
+  // callId → reference to the tool block that the SDK tool_result should patch
+  const callIndex = new Map<string, PersistedToolCall>()
+
+  for (const entry of raw) {
+    const m = entry.message as
+      | { content?: Array<Record<string, unknown>> | string; id?: string }
+      | undefined
+    const content = m?.content
+    const ts = Date.now()
+
+    if (entry.type === 'assistant') {
+      const blocks: MessageBlock[] = []
+      if (Array.isArray(content)) {
+        for (const blk of content) {
+          const b = blk as {
+            type: string
+            text?: string
+            thinking?: string
+            id?: string
+            name?: string
+            input?: unknown
+          }
+          if (b.type === 'text' && b.text) {
+            blocks.push({ kind: 'text', text: b.text })
+          } else if (b.type === 'thinking' && b.thinking) {
+            blocks.push({ kind: 'thinking', text: b.thinking })
+          } else if (b.type === 'tool_use' && b.id && b.name) {
+            const call: PersistedToolCall = { callId: b.id, tool: b.name, input: b.input }
+            blocks.push({ kind: 'tool', call })
+            callIndex.set(b.id, call)
+          }
+        }
+      }
+      out.push({
+        id: (m?.id as string) ?? entry.uuid ?? randomUUID(),
+        role: 'assistant',
+        blocks,
+        createdAt: ts
+      })
+    } else if (entry.type === 'user') {
+      // tool_result blocks belong to the prior assistant turn — patch them in.
+      let userText = ''
+      if (typeof content === 'string') userText = content
+      else if (Array.isArray(content)) {
+        for (const blk of content) {
+          const b = blk as {
+            type: string
+            text?: string
+            tool_use_id?: string
+            content?: unknown
+            is_error?: boolean
+          }
+          if (b.type === 'text' && b.text) userText += b.text
+          else if (b.type === 'tool_result' && b.tool_use_id) {
+            const ref = callIndex.get(b.tool_use_id)
+            if (ref) {
+              ref.output = b.content
+              ref.isError = !!b.is_error
+            }
+          }
+        }
+      }
+      // Skip user entries that are pure tool_result envelopes — SDK plumbing.
+      if (userText.trim()) {
+        out.push({
+          id: entry.uuid ?? randomUUID(),
+          role: 'user',
+          blocks: [{ kind: 'text', text: userText }],
+          createdAt: ts
+        })
+      }
+    }
+  }
+
+  return out
+}
 
 function mapError(sessionId: string, err: Error & { code?: string }): AgentError {
   if (err instanceof AbortError || err.name === 'AbortError') {
@@ -55,6 +146,21 @@ export class AgentManager extends EventEmitter {
     return this.db.listSessions()
   }
 
+  // Load the persisted transcript from the SDK's on-disk session store
+  // (~/.claude/projects/<encoded-cwd>/<sessionId>.jsonl). Returns [] for
+  // sessions that have never been started — those have no transcript yet.
+  async loadMessages(sessionId: string): Promise<PersistedMessage[]> {
+    const session = this.db.getSession(sessionId)
+    if (!session || !session.claudeStarted) return []
+    let raw: Awaited<ReturnType<typeof getSessionMessages>>
+    try {
+      raw = await getSessionMessages(sessionId, { dir: session.workingDir })
+    } catch {
+      return []
+    }
+    return mapSessionMessages(raw)
+  }
+
   async deleteSession(id: string): Promise<void> {
     const stream = this.#streams.get(id)
     if (stream) {
@@ -92,8 +198,17 @@ export class AgentManager extends EventEmitter {
     const abort = new AbortController()
     this.#streams.set(sessionId, { abort })
 
-    const envOverlay: Record<string, string | undefined> = {
-      ANTHROPIC_API_KEY: provider.apiKey
+    // Start from the main process env so PATH, HOME, and Keychain access work.
+    // The SDK spawns `node cli.js` — without PATH the spawn fails with ENOENT
+    // and the SDK reports it as "Claude Code executable not found at cli.js".
+    const envOverlay: Record<string, string | undefined> = { ...process.env }
+    // When authMode is 'claude-code', let the SDK resolve auth from
+    // ~/.claude/.credentials.json (Linux) or macOS Keychain (service
+    // "Claude Code-credentials"). Setting ANTHROPIC_API_KEY would override it.
+    if (provider.authMode !== 'claude-code') {
+      envOverlay.ANTHROPIC_API_KEY = provider.apiKey
+    } else {
+      delete envOverlay.ANTHROPIC_API_KEY
     }
     if (provider.baseUrl) envOverlay.ANTHROPIC_BASE_URL = provider.baseUrl
 
@@ -109,6 +224,13 @@ export class AgentManager extends EventEmitter {
       }
     }
 
+    // First turn → use our Session.id as the SDK sessionId so it persists at
+    // ~/.claude/projects/<cwd>/<id>.jsonl. Subsequent turns → resume that
+    // session so the model keeps full conversation memory across turns.
+    const continuity = session.claudeStarted
+      ? { resume: session.id }
+      : { sessionId: session.id }
+
     const q = query({
       prompt: text,
       options: {
@@ -117,7 +239,16 @@ export class AgentManager extends EventEmitter {
         env: envOverlay,
         mcpServers: mcpMap,
         abortController: abort,
-        extraArgs: this.#parseExtraArgs(session.flags)
+        includePartialMessages: true,
+        // Keep the Claude Code default behavior, append folk's presentation rules
+        // so the model formats output for folk's rich markdown renderer.
+        systemPrompt: {
+          type: 'preset',
+          preset: 'claude_code',
+          append: FOLK_PRESENTATION_PROMPT
+        },
+        extraArgs: this.#parseExtraArgs(session.flags),
+        ...continuity
       }
     })
 
@@ -125,7 +256,7 @@ export class AgentManager extends EventEmitter {
       for await (const msg of q) {
         this.#dispatchMessage(sessionId, msg as unknown)
       }
-      this.db.updateSession(sessionId, { status: 'idle' })
+      this.db.updateSession(sessionId, { status: 'idle', claudeStarted: true })
     } catch (err) {
       const agentErr = mapError(sessionId, err as Error & { code?: string })
       this.emit('error', agentErr)
@@ -156,15 +287,42 @@ export class AgentManager extends EventEmitter {
     return out
   }
 
+  // Tracks which assistant messages were fully streamed (so we don't replay
+  // the final 'assistant' snapshot and duplicate text in the UI).
+  #streamedMessages = new Set<string>()
+
   #dispatchMessage(sessionId: string, msg: unknown): void {
     const m = msg as {
       type: string
-      message?: { content?: Array<Record<string, unknown>> }
+      message?: { id?: string; content?: Array<Record<string, unknown>> }
+      event?: Record<string, unknown>
       subtype?: string
       is_error?: boolean
       result?: string
     }
+
+    // Incremental deltas when includePartialMessages is on.
+    if (m.type === 'stream_event' && m.event) {
+      const ev = m.event as {
+        type: string
+        message?: { id?: string }
+        delta?: { type?: string; text?: string; thinking?: string }
+      }
+      if (ev.type === 'message_start' && ev.message?.id) {
+        this.#streamedMessages.add(ev.message.id)
+      } else if (ev.type === 'content_block_delta' && ev.delta) {
+        if (ev.delta.type === 'text_delta' && ev.delta.text) {
+          this.emit('chunk', { sessionId, text: ev.delta.text })
+        } else if (ev.delta.type === 'thinking_delta' && ev.delta.thinking) {
+          this.emit('thinking', { sessionId, text: ev.delta.thinking })
+        }
+      }
+      return
+    }
+
     if (m.type === 'assistant' && m.message?.content) {
+      // If we already streamed this message via stream_event, don't replay.
+      const wasStreamed = m.message.id && this.#streamedMessages.has(m.message.id)
       for (const block of m.message.content) {
         const b = block as {
           type: string
@@ -174,11 +332,12 @@ export class AgentManager extends EventEmitter {
           name?: string
           input?: unknown
         }
-        if (b.type === 'text' && b.text != null) {
+        if (!wasStreamed && b.type === 'text' && b.text != null) {
           this.emit('chunk', { sessionId, text: b.text })
-        } else if (b.type === 'thinking' && b.thinking != null) {
+        } else if (!wasStreamed && b.type === 'thinking' && b.thinking != null) {
           this.emit('thinking', { sessionId, text: b.thinking })
         } else if (b.type === 'tool_use' && b.id && b.name) {
+          // Tool-use blocks aren't emitted as deltas, so always dispatch.
           this.emit('toolCall', {
             sessionId,
             callId: b.id,
@@ -209,6 +368,7 @@ export class AgentManager extends EventEmitter {
       if (m.subtype === 'error' || m.is_error) {
         this.emit('error', mapError(sessionId, new Error(m.result ?? 'agent error')))
       }
+      this.#streamedMessages.clear()
       this.emit('done', { sessionId })
     }
     // Ignore system, compact_boundary, stream_event, and all other message types for v0.

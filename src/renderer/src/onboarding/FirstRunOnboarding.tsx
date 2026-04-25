@@ -1,6 +1,12 @@
 // FirstRunOnboarding.tsx — 4-step first-run walkthrough (Task 34)
-import { useState } from 'react'
-import type { Profile, ProviderConfig, ModelConfig } from '@shared/types'
+import { useState, useEffect } from 'react'
+import type {
+  Profile,
+  ProviderConfig,
+  ProviderAuthMode,
+  ModelConfig,
+  ClaudeCodeAuthStatus
+} from '@shared/types'
 import { useProfileStore } from '../stores/useProfileStore'
 import { useProvidersStore } from '../stores/useProvidersStore'
 import { useUIStore } from '../stores/useUIStore'
@@ -141,12 +147,35 @@ export function FirstRunOnboarding() {
   // Step 2 — provider pick
   const [providerId, setProviderId] = useState('anthropic')
 
-  // Step 3 — API key
+  // Step 3 — API key / Claude Code auth
   const [apiKey, setApiKey] = useState('')
   const [verified, setVerified] = useState(false)
   const [testing, setTesting] = useState(false)
+  const [authMode, setAuthMode] = useState<ProviderAuthMode>('api-key')
+  const [ccStatus, setCcStatus] = useState<ClaudeCodeAuthStatus | null>(null)
 
   const preset = PROVIDER_PRESETS.find((p) => p.id === providerId)!
+  const canUseClaudeCode = providerId === 'anthropic'
+
+  // Reset auth mode + verification when provider changes away from Anthropic
+  useEffect(() => {
+    if (!canUseClaudeCode && authMode === 'claude-code') setAuthMode('api-key')
+    setVerified(false)
+  }, [providerId])
+
+  // Poll Claude Code auth status when that mode is active
+  useEffect(() => {
+    if (step !== 3 || authMode !== 'claude-code') return
+    let cancelled = false
+    void window.folk.auth.claudeCodeStatus().then((s) => {
+      if (cancelled) return
+      setCcStatus(s)
+      setVerified(s.loggedIn)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [step, authMode])
 
   const next = () => setStep((s) => Math.min(STEPS.length - 1, s + 1))
   const back = () => setStep((s) => Math.max(0, s - 1))
@@ -195,9 +224,10 @@ export function FirstRunOnboarding() {
         enabled: true
       }))
       const provider: ProviderConfig = {
-        id: crypto.randomUUID(),
+        id: providerId === 'anthropic' ? 'anthropic' : crypto.randomUUID(),
         name: preset.name,
-        apiKey,
+        apiKey: authMode === 'claude-code' ? '' : apiKey,
+        authMode,
         baseUrl: preset.baseUrl,
         models,
         isEnabled: true,
@@ -414,12 +444,14 @@ export function FirstRunOnboarding() {
             </div>
           )}
 
-          {/* Step 3 — API Key */}
+          {/* Step 3 — API Key / Claude Code auth */}
           {step === 3 && (
             <div className="ob-step-body">
               <h2 className="ob-step-title">Sign in to {preset.name}.</h2>
               <p className="ob-step-sub">
-                Paste your {preset.keyLabel.toLowerCase()} — we'll verify it and store it in macOS Keychain.
+                {authMode === 'claude-code'
+                  ? 'Reuse your existing Claude Code login — no key to paste.'
+                  : `Paste your ${preset.keyLabel.toLowerCase()} — we'll verify it and store it in macOS Keychain.`}
               </p>
 
               <div className="ob-key-panel">
@@ -440,52 +472,113 @@ export function FirstRunOnboarding() {
                   </div>
                 </div>
 
-                <div className="field" style={{ marginTop: 12 }}>
-                  <label className="label">{preset.keyLabel}</label>
-                  <input
-                    className="input mono"
-                    type="password"
-                    placeholder={preset.keyPrefix ? `${preset.keyPrefix}…` : 'Paste your key'}
-                    value={apiKey}
-                    autoFocus
-                    onChange={(e) => {
-                      setApiKey(e.target.value)
-                      setVerified(false)
-                    }}
-                  />
-                  <div className="hint">Stored in macOS Keychain. Never synced to folk.</div>
-                </div>
-
-                <div className="ob-key-actions">
-                  {!verified && (
-                    <button
-                      className="btn btn-primary"
-                      onClick={handleTest}
-                      disabled={!apiKey.trim() || testing}
-                    >
-                      {testing ? (
-                        <><span className="spinner" /> Verifying…</>
-                      ) : (
-                        <>Verify key</>
-                      )}
-                    </button>
-                  )}
-                  {verified && (
-                    <div className="ob-verified">
-                      <div className="ob-verified-ic">
-                        <Icon name="check" size={14} />
-                      </div>
-                      <div>
-                        <div style={{ fontWeight: 500, color: 'var(--heading)', fontSize: 13 }}>
-                          Connected to {preset.name}
-                        </div>
-                        <div className="sub" style={{ fontSize: 12 }}>
-                          {preset.models.length} models ready to use.
-                        </div>
-                      </div>
+                {canUseClaudeCode && (
+                  <div className="field" style={{ marginTop: 12 }}>
+                    <label className="label">How to authenticate</label>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                      <button
+                        type="button"
+                        className={'ob-prov' + (authMode === 'api-key' ? ' on' : '')}
+                        onClick={() => {
+                          setAuthMode('api-key')
+                          setVerified(false)
+                        }}
+                        style={{ padding: 12, alignItems: 'flex-start', textAlign: 'left' }}
+                      >
+                        <span className="ob-prov-name">API key</span>
+                        <span className="ob-prov-sub">Paste an Anthropic API key</span>
+                      </button>
+                      <button
+                        type="button"
+                        className={'ob-prov' + (authMode === 'claude-code' ? ' on' : '')}
+                        onClick={() => {
+                          setAuthMode('claude-code')
+                          setVerified(false)
+                        }}
+                        style={{ padding: 12, alignItems: 'flex-start', textAlign: 'left' }}
+                      >
+                        <span className="ob-prov-name">Use Claude Code login</span>
+                        <span className="ob-prov-sub">Reuse existing subscription</span>
+                      </button>
                     </div>
-                  )}
-                </div>
+                  </div>
+                )}
+
+                {authMode === 'api-key' ? (
+                  <>
+                    <div className="field" style={{ marginTop: 12 }}>
+                      <label className="label">{preset.keyLabel}</label>
+                      <input
+                        className="input mono"
+                        type="password"
+                        placeholder={preset.keyPrefix ? `${preset.keyPrefix}…` : 'Paste your key'}
+                        value={apiKey}
+                        autoFocus
+                        onChange={(e) => {
+                          setApiKey(e.target.value)
+                          setVerified(false)
+                        }}
+                      />
+                      <div className="hint">Stored in macOS Keychain. Never synced to folk.</div>
+                    </div>
+
+                    <div className="ob-key-actions">
+                      {!verified && (
+                        <button
+                          className="btn btn-primary"
+                          onClick={handleTest}
+                          disabled={!apiKey.trim() || testing}
+                        >
+                          {testing ? (
+                            <><span className="spinner" /> Verifying…</>
+                          ) : (
+                            <>Verify key</>
+                          )}
+                        </button>
+                      )}
+                      {verified && (
+                        <div className="ob-verified">
+                          <div className="ob-verified-ic">
+                            <Icon name="check" size={14} />
+                          </div>
+                          <div>
+                            <div style={{ fontWeight: 500, color: 'var(--heading)', fontSize: 13 }}>
+                              Connected to {preset.name}
+                            </div>
+                            <div className="sub" style={{ fontSize: 12 }}>
+                              {preset.models.length} models ready to use.
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <div className="ob-key-actions" style={{ marginTop: 12 }}>
+                    {ccStatus == null ? (
+                      <div className="hint">Checking Claude Code login…</div>
+                    ) : ccStatus.loggedIn ? (
+                      <div className="ob-verified">
+                        <div className="ob-verified-ic">
+                          <Icon name="check" size={14} />
+                        </div>
+                        <div>
+                          <div style={{ fontWeight: 500, color: 'var(--heading)', fontSize: 13 }}>
+                            Claude Code logged in
+                            {ccStatus.source === 'keychain' ? ' (macOS Keychain)' : ''}
+                          </div>
+                          <div className="sub" style={{ fontSize: 12 }}>
+                            {ccStatus.email ?? 'Your subscription will be used for Anthropic models.'}
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="hint" style={{ color: 'var(--warn)' }}>
+                        Not logged in. Run <code className="mono">claude login</code> in a terminal, then return here.
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="ob-skip">
