@@ -270,6 +270,46 @@ export class AgentManager extends EventEmitter {
     return live
   }
 
+  #armIdleTimer(sessionId: string): void {
+    const live = this.#live.get(sessionId)
+    if (!live) return
+    if (live.idleTimer) clearTimeout(live.idleTimer)
+    live.idleTimer = setTimeout(() => {
+      void this.#teardown(sessionId, 'idle')
+    }, IDLE_MS)
+  }
+
+  async #teardown(
+    sessionId: string,
+    reason: 'idle' | 'cancel' | 'delete' | 'dispose' | 'lru'
+  ): Promise<void> {
+    const live = this.#live.get(sessionId)
+    if (!live) return
+    // Delete from the map BEFORE awaiting — a concurrent sendMessage that
+    // arrives during teardown must not see the dying LiveSession; it should
+    // lazy-start a fresh one.
+    this.#live.delete(sessionId)
+    if (live.idleTimer) {
+      clearTimeout(live.idleTimer)
+      live.idleTimer = null
+    }
+
+    if (reason === 'cancel' || reason === 'delete') {
+      live.abort.abort()
+    } else {
+      live.close()
+      const grace = new Promise<'timeout'>((r) =>
+        setTimeout(() => r('timeout'), TEARDOWN_GRACE_MS)
+      )
+      const winner = await Promise.race([
+        live.pump.then(() => 'done' as const),
+        grace
+      ])
+      if (winner === 'timeout') live.abort.abort()
+    }
+    await live.pump.catch(() => {})
+  }
+
   async createSession(config: SessionConfig): Promise<Session> {
     return this.db.createSession(config)
   }
