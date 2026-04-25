@@ -454,7 +454,7 @@ export class AgentManager extends EventEmitter {
         delta?: { type?: string; text?: string; thinking?: string }
       }
       if (ev.type === 'message_start' && ev.message?.id) {
-        this.#streamedMessages.add(ev.message.id)
+        this.#live.get(sessionId)?.streamedMessages.add(ev.message.id)
       } else if (ev.type === 'content_block_delta' && ev.delta) {
         if (ev.delta.type === 'text_delta' && ev.delta.text) {
           this.emit('chunk', { sessionId, text: ev.delta.text })
@@ -467,7 +467,9 @@ export class AgentManager extends EventEmitter {
 
     if (m.type === 'assistant' && m.message?.content) {
       // If we already streamed this message via stream_event, don't replay.
-      const wasStreamed = m.message.id && this.#streamedMessages.has(m.message.id)
+      const liveForDedup = this.#live.get(sessionId)
+      const wasStreamed =
+        m.message.id && liveForDedup?.streamedMessages.has(m.message.id)
       for (const block of m.message.content) {
         const b = block as {
           type: string
@@ -513,7 +515,19 @@ export class AgentManager extends EventEmitter {
       if (m.subtype === 'error' || m.is_error) {
         this.emit('error', mapError(sessionId, new Error(m.result ?? 'agent error')))
       }
-      this.#streamedMessages.clear()
+      const live = this.#live.get(sessionId)
+      if (live) {
+        live.streamedMessages.clear()
+        this.db.updateSession(sessionId, {
+          status: 'idle',
+          claudeStarted: true
+        })
+        this.#armIdleTimer(sessionId)
+        const done = live.turnDone
+        live.turnDone = null
+        live.turnError = null
+        done?.()
+      }
       this.emit('done', { sessionId })
     }
     // Ignore system, compact_boundary, stream_event, and all other message types for v0.
