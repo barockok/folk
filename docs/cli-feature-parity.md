@@ -1,6 +1,6 @@
 # Claude Code ↔ folk feature parity
 
-Last updated: 2026-04-25.
+Last updated: 2026-04-25 (priority shortlist 1–10 landed).
 
 A reference inventory of what Claude Code (CLI) does, what folk (desktop app) does today, and where the gaps are. Use this when scoping new work — every "should we build X?" should start by checking what bucket it falls into here.
 
@@ -10,7 +10,7 @@ A reference inventory of what Claude Code (CLI) does, what folk (desktop app) do
 
 ## 1. Slash commands
 
-Claude Code ships ~30 slash commands plus user-defined (`.claude/commands/*.md`) and plugin-contributed ones. Folk currently has **no slash command infrastructure** — the composer treats `/foo` as plain text and pushes it to the SDK as a user message. The SDK does NOT execute slash commands; the CLI does. So today `/clear` typed in folk is a literal string the model sees.
+Claude Code ships ~30 slash commands plus user-defined (`.claude/commands/*.md`) and plugin-contributed ones. Folk now has a **slash command registry** (`src/renderer/src/slash-commands.ts`) wired into the composer: typing `/` opens an autocomplete menu (arrows / Tab / Enter), and dispatch routes to navigate / action / prompt handlers. User-defined and plugin-contributed commands are not yet discovered — see § 7.
 
 Three buckets for handling them:
 
@@ -18,14 +18,14 @@ Three buckets for handling them:
 
 | Command | CC behavior | Folk today | Gap |
 |---|---|---|---|
-| `/mcp` | manage MCP servers | MCPPage exists | wire `/mcp` → navigate |
-| `/model` | switch model | ModelPage exists; per-session picker exists | wire `/model` → picker |
-| `/sessions`, `/resume` | list/resume sessions | sidebar history exists | wire `/sessions` → focus sidebar |
-| `/config` | settings | ProfilePage + TweaksPanel exist | wire `/config` → ProfilePage |
-| `/keybindings` | (CC has no equivalent) | KeybindingsPage exists | n/a — folk-only |
-| `/agents` | manage subagents | ❌ no folk page; SkillsPage uses seed data only | build real agents page or alias to skills |
-| `/skills` | manage skills | ⚠️ SkillsPage exists but renders `INITIAL_SKILLS` from `data.ts`, not real on-disk skills | hydrate from `~/.claude/skills` |
-| `/plugins` | manage plugins | ⚠️ PluginsPage exists; same — seed data only | hydrate from real plugin manifests |
+| `/mcp` | manage MCP servers | ✅ `/mcp` → MCPPage |
+| `/model` | switch model | ✅ `/model` → opens composer model popover |
+| `/sessions`, `/resume` | list/resume sessions | ✅ `/sessions` (alias `/resume`) → SessionsPage |
+| `/config` | settings | ✅ `/config` → ProfilePage |
+| `/keybindings` | (CC has no equivalent) | ✅ `/keybindings` → KeybindingsPage |
+| `/agents` | manage subagents | ✅ `/agents` aliased to SkillsPage (still seed data — see § 7) |
+| `/skills` | manage skills | ⚠️ `/skills` navigates; SkillsPage still renders `INITIAL_SKILLS` — hydrate from `~/.claude/skills` |
+| `/plugins` | manage plugins | ⚠️ `/plugins` navigates; PluginsPage still seed data — hydrate from real manifests |
 
 ### 1b. Should pass through to the live SDK session
 
@@ -33,14 +33,14 @@ These are agent-loop directives or canned prompts the SDK already understands.
 
 | Command | CC behavior | Folk today | Gap |
 |---|---|---|---|
-| `/clear` | drop conversation memory | ❌ user starts a new folk session manually | folk-side: "new session" button, or have `/clear` create+switch |
-| `/compact` | manual context compaction | ❌ SDK does auto-compaction silently; folk ignores `compact_boundary` events | (a) push `/compact` into iterable; (b) render `compact_boundary` separator in transcript |
-| `/init` | generate CLAUDE.md | ❌ | push as prompt |
-| `/review` | review current PR | ❌ | push as prompt |
-| `/security-review` | security review of pending changes | ❌ | push as prompt |
-| `/pr-comments` | fetch PR comments | ❌ | push as prompt |
-| user commands (`.claude/commands/*.md`) | template expansion + push | ❌ none discovered | scan dir at session start, expose in autocomplete |
-| plugin-contributed commands | depends on plugin | ❌ | discover from plugin manifests |
+| `/clear` | drop conversation memory | ✅ creates fresh session reusing model + cwd, switches active |
+| `/compact` | manual context compaction | ✅ pushes `/compact` to SDK as user prompt; SDK-emitted boundaries render as a separator |
+| `/init` | generate CLAUDE.md | ✅ pushed as prompt |
+| `/review` | review current PR | ✅ pushed as prompt |
+| `/security-review` | security review of pending changes | ✅ pushed as prompt |
+| `/pr-comments` | fetch PR comments | ✅ pushed as prompt |
+| user commands (`.claude/commands/*.md`) | template expansion + push | ✅ scanned from `~/.claude/commands` and `<cwd>/.claude/commands`; appear in slash autocomplete and run by reading the file body and pushing it as a prompt |
+| plugin-contributed commands | depends on plugin | ⚠️ plugin install paths discovered (§ 7); commands inside plugin packages not yet scanned |
 
 ### 1c. Don't apply to a desktop GUI
 
@@ -50,14 +50,14 @@ These are agent-loop directives or canned prompts the SDK already understands.
 
 | Command | CC behavior | Folk today | Build or punt? |
 |---|---|---|---|
-| `/cost` | show token usage | ❌ | **build** — small, useful (per-session + total spend) |
-| `/status` | session state | ⚠️ implicit (sidebar shows status icons) | build status bar; small |
-| `/memory` | edit CLAUDE.md | ❌ | small editor inside ProfilePage or per-session sheet |
+| `/cost` | show token usage | ✅ reads cumulative SDK `result.total_cost_usd` + token usage and renders an inline divider with the totals (cumulative + last turn) |
+| `/status` | session state | ✅ inline divider with model, cwd, status, last-turn duration / tokens |
+| `/memory` | edit CLAUDE.md | ⚠️ slash entry exists; pushes prompt to open file. No inline editor yet |
 | `/hooks` | configure hooks | ❌ | niche; defer |
 | `/permissions` | tool-use permission rules | ❌ | pairs with elicitation/forms work (§ 4) |
 | `/output-style` | change response style | ❌ | low priority |
 | `/add-dir` | add working directory | ⚠️ folk sets cwd per-session at creation | n/a — folk model is one cwd per session |
-| `/export` | export transcript | ❌ | small (write JSON / markdown to disk) |
+| `/export` | export transcript | ✅ writes a markdown blob via download dialog |
 
 ---
 
@@ -72,7 +72,7 @@ These are agent-loop directives or canned prompts the SDK already understands.
 | `user` (tool_result blocks) | tool output | ✅ → `toolResult` event (matched by callId) |
 | `result` | turn complete | ✅ → `done` event + status update |
 | `system` | env/init info | ❌ ignored |
-| `compact_boundary` | "context compacted here" marker | ❌ ignored — should render a separator |
+| `compact_boundary` | "context compacted here" marker | ✅ emits `notice` event → renders horizontal separator in transcript |
 | `SDKHookStartedMessage` / `Progress` / `Response` | hook lifecycle | ❌ ignored |
 | `SDKToolProgressMessage` | tool progress updates (e.g., "reading 3/10 files") | ❌ ignored |
 | `SDKTaskStartedMessage` / `Updated` / `Progress` | subagent activity | ❌ ignored — see § 3 |
@@ -99,10 +99,10 @@ CC CLI special-cases several tools for richer rendering. Folk renders **everythi
 
 | Tool | CC CLI rendering | Folk today | Gap |
 |---|---|---|---|
-| `TodoWrite` | inline checklist with checkboxes, persistent task tracker | generic JSON dump | special-case → checklist component |
-| `Task` (subagent dispatch) | nested spinner + child agent's output | one generic card; child activity invisible | wire `SDKTask*` messages, render nested cards under the parent |
+| `TodoWrite` | inline checklist with checkboxes, persistent task tracker | ✅ special-cased — checklist with status boxes (pending / in_progress / completed) |
+| `Task` (subagent dispatch) | nested spinner + child agent's output | ✅ child tool calls are nested under the parent via `parent_tool_use_id` envelope, rendered as collapsible sub-cards inside the parent ToolCard. `SDKTaskProgress`/`Notification` panels still ignored — see § 2 |
 | `Read` | file path + line range | generic | minor — show pretty path |
-| `Edit` / `Write` | colored diff | generic | medium — render unified diff |
+| `Edit` / `Write` / `NotebookEdit` | colored diff | ✅ DiffCard renders unified diff (red/green) with file path; Write shown as all-additions |
 | `Bash` | command + stdout/stderr separated | generic | small — split output panes |
 | `Grep` / `Glob` | match table | generic | small |
 | `WebFetch` / `WebSearch` | rich link preview | generic | small |
@@ -118,7 +118,7 @@ CC CLI presents inline UIs for three things folk can't do today:
 
 | Surface | CC behavior | Folk today | Gap |
 |---|---|---|---|
-| Tool-use permission prompt ("Allow Bash to run `rm -rf`?") | inline allow/deny/always | ❌ permissions are bypassed at the SDK level (no prompt fires) | depends on whether folk wants to gate tool use; design needed |
+| Tool-use permission prompt ("Allow Bash to run `rm -rf`?") | inline allow/deny/always | ⚠️ folk now exposes the SDK `permissionMode` (Ask / Auto-edit / Plan / Bypass) per session via a composer chip and persists it in SQLite. Tool-by-tool inline allow/deny prompt still TODO — needs `canUseTool` callback wiring through IPC |
 | `AskUserQuestion` tool | inline form, blocks turn until answered | tool call shows but no input UI; the agent is stuck waiting | render form from elicitation payload; push response back into iterable |
 | MCP `elicitation/create` | inline form | ❌ ignored | same as AskUserQuestion |
 
@@ -131,10 +131,8 @@ The infrastructure piece: folk needs an event from main → renderer ("agent is 
 CC CLI's `Task` tool spawns child agents — they show up as nested progress with their own tool-use stream.
 
 - **CC behavior:** parent emits `tool_use` for `Task`; SDK runs the child agent; child emits its own `assistant` / `tool_use` / `result` events nested under the parent; CLI shows them as a tree.
-- **Folk today:** parent's `tool_use` renders as a single generic card. The child's events arrive as `SDKTaskStartedMessage` / `SDKTaskUpdatedMessage` / `SDKTaskProgressMessage` and are **ignored**.
-- **Gap:** wire the three Task messages into events; render nested tool cards under the parent Task card; collapse/expand UI.
-
-This is where folk would feel most behind for power users — multi-agent workflows look opaque.
+- **Folk today:** parent's `tool_use` and the child's `tool_use` envelopes carry `parent_tool_use_id`. Folk threads that into `appendToolCall` and `appendToolResult` so child calls render as nested cards inside the parent's ToolCard (live + persisted via `mapSessionMessages`). `SDKTaskStartedMessage` / `Updated` / `Progress` / `Notification` are still ignored — they would add a richer task-status panel (description, status, usage) but the core nesting works without them.
+- **Gap:** wire the SDK Task lifecycle messages into a task-status header.
 
 ---
 
@@ -161,10 +159,10 @@ The `.claude/` directory tree is the plugin/skill/command source of truth for CC
 
 | Surface | CC behavior | Folk today | Gap |
 |---|---|---|---|
-| `~/.claude/skills/*` | auto-loaded | ⚠️ `SkillsPage` shows `INITIAL_SKILLS` constant | scan and hydrate |
-| `.claude/commands/*.md` (project) | listed in slash menu | ❌ not discovered | scan and expose in slash autocomplete |
-| `~/.claude/commands/*.md` (user) | listed in slash menu | ❌ | same |
-| Plugins (`.claude/plugins/*`) | auto-loaded | ⚠️ `PluginsPage` shows seed | scan and hydrate |
+| `~/.claude/skills/*` | auto-loaded | ✅ SkillsPage hydrated from `~/.claude/skills` (+ project `<cwd>/.claude/skills`) via `discover:skills` IPC, frontmatter parsed |
+| `.claude/commands/*.md` (project) | listed in slash menu | ✅ discovered from `<cwd>/.claude/commands` and surfaced in composer slash menu |
+| `~/.claude/commands/*.md` (user) | listed in slash menu | ✅ discovered from `~/.claude/commands` and surfaced in composer slash menu |
+| Plugins (`.claude/plugins/*`) | auto-loaded | ✅ PluginsPage hydrated from `~/.claude/plugins/installed_plugins.json`; descriptions read from each plugin's manifest where available |
 | Plugin marketplace | `/install`, `/marketplace` | ⚠️ `MarketplacePage` exists with seed catalog | wire to a real source |
 | Hooks (`~/.claude/settings.json`) | executed by harness | ❌ no folk surface | low priority |
 
@@ -251,7 +249,7 @@ Low priority unless folk plans to install its own hooks.
 |---|---|---|
 | Global settings | `~/.claude/settings.json` | ⚠️ folk has its own SQLite-backed settings; some overlap (model defaults, MCP) |
 | Project settings | `.claude/settings.json` | ❌ folk doesn't read project settings |
-| Permissions config | `~/.claude/settings.json` permissions | ❌ |
+| Permissions config | `~/.claude/settings.json` permissions | ⚠️ per-session `permissionMode` persisted in SQLite (default / acceptEdits / plan / bypassPermissions) and passed to the SDK |
 | Theme | `/config` | ✅ light/dark via `data-theme` |
 | Density | n/a | ✅ folk-only (`data-density`) |
 | Keybindings | `~/.claude/keybindings.json` | ✅ KeybindingsPage |
@@ -259,22 +257,27 @@ Low priority unless folk plans to install its own hooks.
 
 ---
 
-## Priority shortlist for next work
+## Priority shortlist — status
 
-Roughly ordered by impact-per-effort:
+The 2026-04-25 shortlist of 10 is now mostly landed. Outstanding work:
 
-1. **`compact_boundary` separator** — tiny event handler + a horizontal rule in the transcript. Big future-proofing win.
-2. **TodoWrite checklist component** — special-case in `ToolCard`. Most-used tool, currently ugliest render.
-3. **Slash command autocomplete in composer** — bucket #1 navigation only at first. Half a day. Sets the pattern.
-4. **`/clear` and `/compact` pass-through** — first two bucket-#2 items; small.
-5. **Real skills/plugins/commands hydration** — replace seed data with on-disk scans. SkillsPage and PluginsPage are currently misleading.
-6. **`SDKTaskStartedMessage` etc. → nested tool cards** — high-impact for power users; medium effort.
-7. **Edit/Write diff rendering** — visible quality improvement.
-8. **Elicitation form** — unblocks `AskUserQuestion`-using tools.
-9. **`/cost` and `/status`** — small new pages; useful.
-10. **Permissions UI** — design needed; depends on whether folk wants to gate tool use at all.
+1. ✅ **`compact_boundary` separator** — handler in `AgentManager`, divider in `Conversation`.
+2. ✅ **TodoWrite checklist component** — `ToolCard` special-case with status boxes.
+3. ✅ **Slash command autocomplete** — `slash-commands.ts` registry + composer menu (arrows / Tab / Enter).
+4. ✅ **`/clear` and `/compact` pass-through** — `/clear` clones session; `/compact` ships as a prompt.
+5. ✅ **Skills / plugins / user commands hydration** — `disk-discovery.ts` IPC, SkillsPage + PluginsPage rebuilt, user commands fold into the slash menu.
+6. ✅ **Subagent nested cards** — `parent_tool_use_id` threaded into `appendToolCall` / `appendToolResult` and `mapSessionMessages`; `ToolCard` recurses.
+7. ✅ **Edit / Write diff rendering** — DiffCard with red/green unified diff (covers `Edit`, `Write`, `NotebookEdit`).
+8. ⚠️ **Elicitation form** — punted; needs SDK control-message wiring (push tool_result back into the iterable for `AskUserQuestion` / MCP `elicitation/create`). UI design also TBD.
+9. ✅ **`/cost` and `/status`** — `result.total_cost_usd` + usage aggregated into per-session `stats`; both commands render an inline divider with the totals.
+10. ⚠️ **Permissions** — SDK `permissionMode` (Ask / Auto-edit / Plan / Bypass) persisted per session and surfaced via a composer chip; tool-by-tool inline allow/deny still TODO (needs `canUseTool` over IPC).
 
-Below this line lives `/memory`, `/output-style`, hooks UI, status line — defer until someone asks.
+Next up beyond the shortlist:
+- Inline `canUseTool` permission prompts (rounds out § 4 + § 13).
+- Plug `SDKTaskStartedMessage` / `Updated` / `Progress` / `Notification` into a task-status header on Task tool cards.
+- Plugin-bundled commands (scan plugin install paths for `commands/*.md`).
+- `/memory` editor (currently a pass-through prompt).
+- `/output-style`, hooks UI, status line — defer until someone asks.
 
 ---
 

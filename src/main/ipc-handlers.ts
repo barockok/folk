@@ -7,13 +7,15 @@ import { join } from 'node:path'
 import { Database } from './database'
 import { AgentManager } from './agent-manager'
 import { MCPManager, MCP_TEMPLATES } from './mcp-manager'
+import { discoverCommands, discoverPlugins, discoverSkills } from './disk-discovery'
 import type {
   SessionConfig,
   ProviderConfig,
   MCPServer,
   Profile,
   Attachment,
-  ClaudeCodeAuthStatus
+  ClaudeCodeAuthStatus,
+  PermissionMode
 } from '@shared/types'
 
 const execFileP = promisify(execFile)
@@ -58,6 +60,11 @@ export function registerIpc(
   ipcMain.handle('sessions:create', (_e, config: SessionConfig) => agent.createSession(config))
   ipcMain.handle('sessions:delete', (_e, id: string) => agent.deleteSession(id))
   ipcMain.handle('sessions:loadMessages', (_e, id: string) => agent.loadMessages(id))
+  ipcMain.handle('sessions:backfillTitle', (_e, id: string) => agent.backfillTitle(id))
+  ipcMain.handle(
+    'sessions:setPermissionMode',
+    (_e, id: string, mode: PermissionMode) => agent.setPermissionMode(id, mode)
+  )
 
   ipcMain.handle(
     'agent:sendMessage',
@@ -78,11 +85,34 @@ export function registerIpc(
         ? { ok: true }
         : { ok: false, error: 'Claude Code login not found — run `claude login` in a terminal' }
     }
+    // Probe shape depends on the provider's API style.
+    // Anthropic / anthropic-proxy: x-api-key + /v1/models
+    // OpenAI-compatible (OpenAI, DeepSeek default, GLM, Moonshot, Qwen,
+    // Gemini-OpenAI, custom): Bearer token at <baseUrl>/models (the SDK's
+    // OpenAI client appends `/models` directly to baseUrl).
+    const base = p.baseUrl ?? 'https://api.anthropic.com'
+    const looksAnthropic =
+      /anthropic/i.test(base) || base === 'https://api.anthropic.com'
     try {
-      const res = await fetch((p.baseUrl ?? 'https://api.anthropic.com') + '/v1/models', {
-        headers: { 'x-api-key': p.apiKey, 'anthropic-version': '2023-06-01' }
-      })
-      return { ok: res.ok, error: res.ok ? undefined : `HTTP ${res.status}` }
+      let url: string
+      let headers: Record<string, string>
+      if (looksAnthropic) {
+        url = base.replace(/\/+$/, '') + '/v1/models'
+        headers = { 'x-api-key': p.apiKey, 'anthropic-version': '2023-06-01' }
+      } else {
+        // baseUrl typically already includes /v1 for OpenAI-style — just append /models.
+        url = base.replace(/\/+$/, '') + '/models'
+        headers = { Authorization: `Bearer ${p.apiKey}` }
+      }
+      const res = await fetch(url, { headers })
+      if (res.ok) return { ok: true }
+      let body = ''
+      try {
+        body = (await res.text()).slice(0, 200)
+      } catch {
+        // ignore
+      }
+      return { ok: false, error: `HTTP ${res.status}${body ? `: ${body}` : ''}` }
     } catch (err) {
       return { ok: false, error: (err as Error).message }
     }
@@ -112,4 +142,19 @@ export function registerIpc(
 
   ipcMain.handle('profile:get', () => db.getProfile())
   ipcMain.handle('profile:save', (_e, p: Profile) => db.saveProfile(p))
+
+  ipcMain.handle('discover:skills', (_e, workingDir?: string) =>
+    discoverSkills(workingDir ?? null)
+  )
+  ipcMain.handle('discover:commands', (_e, workingDir?: string) =>
+    discoverCommands(workingDir ?? null)
+  )
+  ipcMain.handle('discover:plugins', () => discoverPlugins())
+  ipcMain.handle('discover:readCommand', async (_e, path: string) => {
+    try {
+      return await readFile(path, 'utf8')
+    } catch (err) {
+      return { error: (err as Error).message }
+    }
+  })
 }

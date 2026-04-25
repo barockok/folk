@@ -226,31 +226,65 @@ export function SessionSetup({ onLaunch, onCancel }: SessionSetupProps) {
               Section 2: Model
           ---------------------------------------------------------------- */}
           <div>
-            <SectionLabel>Model</SectionLabel>
+            <SectionLabel>Provider &amp; model</SectionLabel>
             {enabledModels.length === 0 ? (
               <div className="ob-note">
                 <Icon name="info" size={14} />
                 <span>Configure a provider in <strong>Model &amp; API</strong> first.</span>
               </div>
             ) : (
-              <div className="ss-model-grid">
-                {enabledModels.slice(0, 6).map((m) => (
-                  <button
-                    key={`${m.providerId}:${m.id}`}
-                    type="button"
-                    className={`ss-model${selectedModelId === m.id ? ' on' : ''}`}
-                    onClick={() => setSelectedModelId(m.id)}
-                  >
-                    <div>
-                      <span className="ss-model-name">{m.label || m.id}</span>
-                      <span className="ss-model-sub">{m.providerName}</span>
-                    </div>
-                    {selectedModelId === m.id && (
-                      <Icon name="check" size={13} style={{ marginLeft: 'auto', color: 'var(--stripe-purple)' }} />
-                    )}
-                  </button>
-                ))}
-              </div>
+              (() => {
+                const byProvider = enabledModels.reduce<
+                  Record<string, { providerName: string; models: typeof enabledModels }>
+                >((acc, m) => {
+                  if (!acc[m.providerId])
+                    acc[m.providerId] = { providerName: m.providerName, models: [] }
+                  acc[m.providerId].models.push(m)
+                  return acc
+                }, {})
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    {Object.entries(byProvider).map(([provId, { providerName, models }]) => (
+                      <div key={provId}>
+                        <div
+                          style={{
+                            fontSize: 11,
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.06em',
+                            color: 'var(--fg-faint)',
+                            marginBottom: 6,
+                            fontFamily: 'var(--ff-mono)'
+                          }}
+                        >
+                          {providerName}
+                        </div>
+                        <div className="ss-model-grid">
+                          {models.map((m) => (
+                            <button
+                              key={`${m.providerId}:${m.id}`}
+                              type="button"
+                              className={`ss-model${selectedModelId === m.id ? ' on' : ''}`}
+                              onClick={() => setSelectedModelId(m.id)}
+                            >
+                              <div>
+                                <span className="ss-model-name">{m.label || m.id}</span>
+                                <span className="ss-model-sub">{m.id}</span>
+                              </div>
+                              {selectedModelId === m.id && (
+                                <Icon
+                                  name="check"
+                                  size={13}
+                                  style={{ marginLeft: 'auto', color: 'var(--stripe-purple)' }}
+                                />
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )
+              })()
             )}
           </div>
 

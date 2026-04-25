@@ -2,14 +2,10 @@
 import { useState } from 'react'
 import { Icon } from '../../components/icons'
 
+import type { PersistedToolCall } from '@shared/types'
+
 export interface ToolCardProps {
-  call: {
-    callId: string
-    tool: string
-    input: unknown
-    output?: unknown
-    isError?: boolean
-  }
+  call: PersistedToolCall
 }
 
 // Map class is keyed to existing CSS in components.css (.tool-card.running /
@@ -19,6 +15,31 @@ function statusClass(s: 'running' | 'success' | 'error'): string {
   if (s === 'running') return 'running'
   if (s === 'error') return 'failed'
   return 'done'
+}
+
+// Pretty-print a tool name. MCP tools arrive as
+// `mcp__<namespace>_<server>__<tool>` (sometimes with `plugin_` prefix on the
+// namespace, and the server name duplicated). Strip the noise and surface
+// `<server> · <tool>` in title-friendly form.
+export function humanizeToolName(name: string): { label: string; server?: string } {
+  if (!name) return { label: name }
+  const m = name.match(/^mcp__([^_]+(?:[-_][^_]+)*?)__(.+)$/)
+  if (m) {
+    let ns = m[1]
+    const tool = m[2].replace(/_/g, ' ')
+    ns = ns.replace(/^plugin[-_]/, '')
+    // Many MCP IDs duplicate the server: `superpowers-chrome_chrome`. Collapse
+    // the dup so we show just the leaf.
+    const parts = ns.split(/[-_]/)
+    const dedup: string[] = []
+    for (const p of parts) {
+      if (dedup[dedup.length - 1] !== p) dedup.push(p)
+    }
+    const server = dedup[dedup.length - 1] ?? ns
+    return { label: `${server} · ${tool}`, server }
+  }
+  // Plain SDK tools — keep as-is, they're already short.
+  return { label: name }
 }
 
 function summarizeInput(input: unknown): string | null {
@@ -35,18 +56,176 @@ function summarizeInput(input: unknown): string | null {
   return null
 }
 
+// Edit / Write tools — surface a colored diff instead of dumping JSON. We
+// produce a unified diff: Edit shows old_string → new_string, Write shows the
+// whole file as additions, NotebookEdit shows old_source → new_source.
+function buildDiffLines(call: PersistedToolCall): { path: string; lines: string[] } | null {
+  if (!call.input || typeof call.input !== 'object') return null
+  const o = call.input as Record<string, unknown>
+  const path =
+    (typeof o.file_path === 'string' && o.file_path) ||
+    (typeof o.path === 'string' && o.path) ||
+    (typeof o.notebook_path === 'string' && o.notebook_path) ||
+    ''
+  let oldText = ''
+  let newText = ''
+  if (call.tool === 'Write') {
+    newText = typeof o.content === 'string' ? o.content : ''
+  } else if (call.tool === 'Edit') {
+    oldText = typeof o.old_string === 'string' ? o.old_string : ''
+    newText = typeof o.new_string === 'string' ? o.new_string : ''
+  } else if (call.tool === 'NotebookEdit') {
+    oldText = typeof o.old_source === 'string' ? o.old_source : ''
+    newText = typeof o.new_source === 'string' ? o.new_source : ''
+  }
+  if (!path && !oldText && !newText) return null
+  const lines: string[] = []
+  for (const l of oldText.split('\n')) lines.push('-' + l)
+  for (const l of newText.split('\n')) lines.push('+' + l)
+  return { path, lines }
+}
+
+function renderDiffPanel(call: PersistedToolCall): JSX.Element | null {
+  const built = buildDiffLines(call)
+  if (!built) return null
+  const status: 'running' | 'success' | 'error' =
+    call.output === undefined ? 'running' : call.isError ? 'error' : 'success'
+  return (
+    <DiffCard
+      call={call}
+      status={status}
+      path={built.path}
+      lines={built.lines}
+    />
+  )
+}
+
+function DiffCard({
+  call,
+  status,
+  path,
+  lines
+}: {
+  call: PersistedToolCall
+  status: 'running' | 'success' | 'error'
+  path: string
+  lines: string[]
+}) {
+  const [open, setOpen] = useState(true)
+  return (
+    <div className={`tool-card diff-card ${statusClass(status)}`} data-open={open ? 'true' : 'false'}>
+      <button type="button" className="tool-hd" onClick={() => setOpen((v) => !v)}>
+        <span className="tool-ic">
+          <Icon name="terminal" size={12} />
+        </span>
+        <span className="tool-name" title={call.tool}>{humanizeToolName(call.tool).label}</span>
+        {path && <span className="tool-srv" title={path}>{path}</span>}
+        <span className="tool-status">
+          {status === 'running' && <span className="spinner" />}
+          {status}
+        </span>
+        <span className="tool-caret">
+          <Icon name="chevronRight" size={12} />
+        </span>
+      </button>
+      {open && (
+        <div className="tool-body">
+          <pre className="diff-pre">
+            {lines.map((l, i) => (
+              <div
+                key={i}
+                className={l.startsWith('+') ? 'diff-add' : l.startsWith('-') ? 'diff-del' : ''}
+              >
+                {l}
+              </div>
+            ))}
+          </pre>
+          {call.output !== undefined && call.isError && (
+            <div className="tool-section">
+              <div className="tool-label">error</div>
+              <pre>{typeof call.output === 'string' ? call.output : JSON.stringify(call.output, null, 2)}</pre>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+interface TodoItem {
+  content: string
+  status: 'pending' | 'in_progress' | 'completed'
+  activeForm?: string
+}
+
+function extractTodos(input: unknown): TodoItem[] | null {
+  if (!input || typeof input !== 'object') return null
+  const todos = (input as { todos?: unknown }).todos
+  if (!Array.isArray(todos)) return null
+  const out: TodoItem[] = []
+  for (const t of todos) {
+    if (!t || typeof t !== 'object') return null
+    const o = t as Record<string, unknown>
+    const content = typeof o.content === 'string' ? o.content : null
+    const status = o.status
+    if (!content || (status !== 'pending' && status !== 'in_progress' && status !== 'completed'))
+      return null
+    out.push({
+      content,
+      status,
+      activeForm: typeof o.activeForm === 'string' ? o.activeForm : undefined
+    })
+  }
+  return out
+}
+
 export function ToolCard({ call }: ToolCardProps) {
   const [open, setOpen] = useState(false)
   const status: 'running' | 'success' | 'error' =
     call.output === undefined ? 'running' : call.isError ? 'error' : 'success'
   const summary = summarizeInput(call.input)
+
+  if (call.tool === 'Edit' || call.tool === 'Write' || call.tool === 'NotebookEdit') {
+    const diffNode = renderDiffPanel(call)
+    if (diffNode) return diffNode
+  }
+
+  if (call.tool === 'TodoWrite') {
+    const todos = extractTodos(call.input)
+    if (todos) {
+      const done = todos.filter((t) => t.status === 'completed').length
+      return (
+        <div className={`tool-card todo-card ${statusClass(status)}`}>
+          <div className="todo-head">
+            <Icon name="terminal" size={12} />
+            <span className="todo-title">Todos</span>
+            <span className="todo-count">{done}/{todos.length}</span>
+          </div>
+          <ul className="todo-list">
+            {todos.map((t, i) => {
+              const label =
+                t.status === 'in_progress' && t.activeForm ? t.activeForm : t.content
+              return (
+                <li key={i} className={`todo-item todo-${t.status}`}>
+                  <span className={`todo-box todo-box-${t.status}`} aria-hidden="true">
+                    {t.status === 'completed' ? '✓' : t.status === 'in_progress' ? '◐' : ''}
+                  </span>
+                  <span className="todo-label">{label}</span>
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      )
+    }
+  }
   return (
     <div className={`tool-card ${statusClass(status)}`} data-open={open ? 'true' : 'false'}>
       <button type="button" className="tool-hd" onClick={() => setOpen((v) => !v)}>
         <span className="tool-ic">
           <Icon name="terminal" size={12} />
         </span>
-        <span className="tool-name">{call.tool}</span>
+        <span className="tool-name" title={call.tool}>{humanizeToolName(call.tool).label}</span>
         {summary && <span className="tool-srv" title={summary}>{summary}</span>}
         <span className="tool-status">
           {status === 'running' && <span className="spinner" />}
@@ -68,6 +247,16 @@ export function ToolCard({ call }: ToolCardProps) {
             <div className="tool-section">
               <div className="tool-label">{call.isError ? 'error' : 'output'}</div>
               <pre>{typeof call.output === 'string' ? call.output : JSON.stringify(call.output, null, 2)}</pre>
+            </div>
+          )}
+          {call.children && call.children.length > 0 && (
+            <div className="tool-section">
+              <div className="tool-label">subagent ({call.children.length})</div>
+              <div className="tool-children">
+                {call.children.map((c) => (
+                  <ToolCard key={c.callId} call={c} />
+                ))}
+              </div>
             </div>
           )}
         </div>

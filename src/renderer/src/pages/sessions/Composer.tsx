@@ -1,8 +1,21 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useProviders } from '../../hooks/useProviders'
 import { useSessionStore } from '../../stores/useSessionStore'
 import { useUIStore } from '../../stores/useUIStore'
-import type { Attachment, Session } from '@shared/types'
+import {
+  filterCommands,
+  findCommand,
+  type SlashCommand,
+  type SlashContext
+} from '../../slash-commands'
+import type { Attachment, DiscoveredCommand, PermissionMode, Session } from '@shared/types'
+
+const PERMISSION_LABELS: Record<PermissionMode, { label: string; hint: string }> = {
+  default: { label: 'Ask', hint: 'Prompt before risky tools' },
+  acceptEdits: { label: 'Auto-edit', hint: 'Allow file edits without asking' },
+  plan: { label: 'Plan', hint: 'Read-only planning mode' },
+  bypassPermissions: { label: 'Bypass', hint: 'Skip all permission checks' }
+}
 
 interface ComposerProps {
   session: Session | null
@@ -40,10 +53,64 @@ export function Composer({ session, onSend, onCancel }: ComposerProps) {
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null)
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [isDragging, setIsDragging] = useState(false)
+  const [slashIndex, setSlashIndex] = useState(0)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const popRef = useRef<HTMLDivElement>(null)
   const dragCounterRef = useRef(0)
   const { enabledModels } = useProviders()
+
+  // Discover user/project commands from ~/.claude/commands and project dir.
+  // These extend the built-in slash registry as `prompt`-kind entries: when
+  // picked, we read the file body and ship it to the agent verbatim.
+  const [diskCommands, setDiskCommands] = useState<DiscoveredCommand[]>([])
+  useEffect(() => {
+    let cancelled = false
+    void window.folk.discover.commands(session?.workingDir).then((list) => {
+      if (!cancelled) setDiskCommands(list)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [session?.workingDir])
+
+  const diskAsSlash: SlashCommand[] = useMemo(
+    () =>
+      diskCommands.map((c) => ({
+        name: c.name,
+        description: c.description || `${c.scope} command`,
+        kind: 'prompt' as const,
+        run: async (ctx) => {
+          const body = await window.folk.discover.readCommand(c.path)
+          if (typeof body !== 'string') {
+            ctx.toast('err', body.error)
+            return
+          }
+          // Strip frontmatter before pushing.
+          const stripped = body.replace(/^---[\s\S]*?\n---\s*\n?/, '')
+          ctx.send(stripped.trim() || `/${c.name}`)
+        }
+      })),
+    [diskCommands]
+  )
+
+  // Slash autocomplete: only when text starts with `/` and has no spaces yet
+  // (multi-token slash forms like `/foo bar` skip the menu and run the command
+  // verbatim).
+  const slashOpen = text.startsWith('/') && !text.includes(' ') && text.length > 0
+  const slashMatches = useMemo<SlashCommand[]>(() => {
+    if (!slashOpen) return []
+    const builtin = filterCommands(text)
+    const q = text.replace(/^\//, '').toLowerCase()
+    const disk = diskAsSlash.filter(
+      (c) =>
+        !q ||
+        c.name.toLowerCase().startsWith(q) ||
+        c.description.toLowerCase().includes(q)
+    )
+    // De-dup: built-in wins on name collision.
+    const have = new Set(builtin.map((c) => c.name))
+    return [...builtin, ...disk.filter((c) => !have.has(c.name))]
+  }, [slashOpen, text, diskAsSlash])
 
   const disabled = !session
 
@@ -55,19 +122,179 @@ export function Composer({ session, onSend, onCancel }: ComposerProps) {
     el.style.height = Math.min(el.scrollHeight, 180) + 'px'
   }, [])
 
+  const setPage = useUIStore((s) => s.setPage)
+  const toast = useUIStore((s) => s.toast)
+
+  const newSession = useCallback(async () => {
+    if (!session) {
+      toast({ kind: 'info', text: 'No active session to clone — start a new one from the sidebar.' })
+      return
+    }
+    const created = await window.folk.sessions.create({
+      modelId: session.modelId,
+      workingDir: session.workingDir,
+      flags: session.flags ?? undefined,
+      goal: session.goal ?? undefined
+    })
+    const st = useSessionStore.getState()
+    st.upsertSession(created)
+    st.setActive(created.id)
+    toast({ kind: 'ok', text: 'Started a fresh session.' })
+  }, [session, toast])
+
+  const exportTranscript = useCallback(async () => {
+    if (!session) return
+    const messages = useSessionStore.getState().messages[session.id] ?? []
+    const lines: string[] = [`# folk transcript — ${session.title || session.id}`, '']
+    for (const m of messages) {
+      if (m.role === 'system') {
+        const txt = m.blocks.find((b) => b.kind === 'text')?.text
+        lines.push('---', txt ? `_${txt}_` : '_context boundary_', '---', '')
+        continue
+      }
+      lines.push(`## ${m.role === 'user' ? 'You' : 'folk'}`)
+      for (const b of m.blocks) {
+        if (b.kind === 'text') lines.push(b.text)
+        else if (b.kind === 'thinking') lines.push(`> _thinking:_ ${b.text}`)
+        else if (b.kind === 'tool')
+          lines.push(`\`\`\`tool ${b.call.tool}\n${JSON.stringify(b.call.input, null, 2)}\n\`\`\``)
+      }
+      lines.push('')
+    }
+    const blob = new Blob([lines.join('\n')], { type: 'text/markdown' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `folk-${session.id}.md`
+    a.click()
+    URL.revokeObjectURL(url)
+    toast({ kind: 'ok', text: 'Transcript exported.' })
+  }, [session, toast])
+
+  const showCost = useCallback(() => {
+    if (!session) return
+    const stats = useSessionStore.getState().stats[session.id]
+    if (!stats || stats.numTurns === 0) {
+      toast({ kind: 'info', text: 'No turns yet — usage will appear after the first reply.' })
+      return
+    }
+    const fmt = (n: number) => n.toLocaleString()
+    const summary = [
+      `cost: $${stats.costUsd.toFixed(4)} over ${stats.numTurns} turn(s)`,
+      `tokens: ${fmt(stats.inputTokens)} in / ${fmt(stats.outputTokens)} out`,
+      `cache: ${fmt(stats.cacheReadTokens)} read / ${fmt(stats.cacheCreateTokens)} created`
+    ].join(' · ')
+    useSessionStore.getState().appendNotice({
+      sessionId: session.id,
+      kind: 'compact_boundary',
+      text: summary
+    })
+  }, [session, toast])
+
+  const showStatus = useCallback(() => {
+    if (!session) return
+    const stats = useSessionStore.getState().stats[session.id]
+    const last = stats
+      ? `last turn: ${(stats.lastDurationMs / 1000).toFixed(1)}s · ${stats.lastInputTokens} in / ${stats.lastOutputTokens} out`
+      : 'no turns yet'
+    const summary = [
+      `model: ${session.modelId}`,
+      `cwd: ${session.workingDir}`,
+      `state: ${session.status}`,
+      last
+    ].join(' · ')
+    useSessionStore.getState().appendNotice({
+      sessionId: session.id,
+      kind: 'compact_boundary',
+      text: summary
+    })
+  }, [session])
+
+  const slashCtx: SlashContext = useMemo(
+    () => ({
+      session,
+      setPage,
+      newSession,
+      exportTranscript,
+      toast: (kind, t) => toast({ kind, text: t }),
+      openModelPopover: () => setModelPopOpen(true),
+      send: (t) => onSend(t),
+      cancel: onCancel,
+      showCost,
+      showStatus
+    }),
+    [session, setPage, newSession, exportTranscript, toast, onSend, onCancel, showCost, showStatus]
+  )
+
+  const runSlash = useCallback(
+    async (cmd: SlashCommand) => {
+      setText('')
+      if (textareaRef.current) textareaRef.current.style.height = 'auto'
+      if (cmd.kind === 'prompt' && cmd.promptText) {
+        onSend(cmd.promptText)
+        return
+      }
+      try {
+        await cmd.run?.(slashCtx)
+      } catch (err) {
+        toast({ kind: 'err', text: (err as Error).message })
+      }
+    },
+    [slashCtx, onSend, toast]
+  )
+
   const handleSend = useCallback(() => {
     const trimmed = text.trim()
     if (!trimmed || disabled) return
+    // Slash dispatch: a single-token leading-slash entry runs as a command
+    // instead of being shipped to the agent verbatim.
+    if (trimmed.startsWith('/') && !trimmed.includes(' ')) {
+      const name = trimmed.slice(1).toLowerCase()
+      const cmd = findCommand(trimmed) ?? diskAsSlash.find((c) => c.name.toLowerCase() === name)
+      if (cmd) {
+        void runSlash(cmd)
+        return
+      }
+    }
     onSend(trimmed, attachments.length > 0 ? attachments : undefined)
     setText('')
     setAttachments([])
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto'
     }
-  }, [text, disabled, onSend, attachments])
+  }, [text, disabled, onSend, attachments, runSlash, diskAsSlash])
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (slashOpen && slashMatches.length > 0) {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault()
+          setSlashIndex((i) => (i + 1) % slashMatches.length)
+          return
+        }
+        if (e.key === 'ArrowUp') {
+          e.preventDefault()
+          setSlashIndex((i) => (i - 1 + slashMatches.length) % slashMatches.length)
+          return
+        }
+        if (e.key === 'Tab') {
+          e.preventDefault()
+          const pick = slashMatches[slashIndex] ?? slashMatches[0]
+          if (pick) setText('/' + pick.name)
+          return
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault()
+          setText('')
+          return
+        }
+        if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+          e.preventDefault()
+          const pick = slashMatches[slashIndex] ?? slashMatches[0]
+          if (pick) void runSlash(pick)
+          return
+        }
+      }
       // Enter sends. Shift+Enter inserts a newline (default behavior).
       // IME composition (e.nativeEvent.isComposing) must not trigger send.
       if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
@@ -75,8 +302,14 @@ export function Composer({ session, onSend, onCancel }: ComposerProps) {
         handleSend()
       }
     },
-    [handleSend]
+    [handleSend, slashOpen, slashMatches, slashIndex, runSlash]
   )
+
+  // Reset slash highlight whenever the menu reopens or the filter changes.
+  useEffect(() => {
+    if (!slashOpen) return
+    setSlashIndex(0)
+  }, [slashOpen, slashMatches.length])
 
   // Close popover on outside click
   useEffect(() => {
@@ -181,7 +414,6 @@ export function Composer({ session, onSend, onCancel }: ComposerProps) {
     return [...msgs].reverse().find((m) => m.role === 'user') ?? null
   })
 
-  const setPage = useUIStore((s) => s.setPage)
   const hasProvider = enabledModels.length > 0
 
   // Determine banner to show (no-provider takes precedence over error)
@@ -380,6 +612,28 @@ export function Composer({ session, onSend, onCancel }: ComposerProps) {
           </div>
         )}
 
+        {slashOpen && slashMatches.length > 0 && (
+          <div className="slash-menu" role="listbox" aria-label="Slash commands">
+            {slashMatches.map((c, i) => (
+              <button
+                key={c.name}
+                type="button"
+                role="option"
+                aria-selected={i === slashIndex}
+                className={`slash-item ${i === slashIndex ? 'on' : ''}`}
+                onMouseEnter={() => setSlashIndex(i)}
+                onMouseDown={(e) => {
+                  e.preventDefault()
+                  void runSlash(c)
+                }}
+              >
+                <span className="slash-name">/{c.name}</span>
+                <span className="slash-kind">{c.kind}</span>
+                <span className="slash-desc">{c.description}</span>
+              </button>
+            ))}
+          </div>
+        )}
         <textarea
           ref={textareaRef}
           value={text}
@@ -461,6 +715,28 @@ export function Composer({ session, onSend, onCancel }: ComposerProps) {
               </div>
             )}
           </div>
+
+          {/* Permission mode chip */}
+          {session && (
+            <select
+              className="btn btn-plain"
+              style={{ fontSize: 12, fontFamily: 'var(--ff-mono)' }}
+              value={session.permissionMode}
+              title={PERMISSION_LABELS[session.permissionMode].hint}
+              onChange={async (e) => {
+                const mode = e.target.value as PermissionMode
+                const updated = await window.folk.sessions.setPermissionMode(session.id, mode)
+                useSessionStore.getState().upsertSession(updated)
+                toast({ kind: 'ok', text: `Permissions: ${PERMISSION_LABELS[mode].label}` })
+              }}
+            >
+              {(Object.keys(PERMISSION_LABELS) as PermissionMode[]).map((m) => (
+                <option key={m} value={m}>
+                  {PERMISSION_LABELS[m].label}
+                </option>
+              ))}
+            </select>
+          )}
 
           {/* Brainstorm — placeholder */}
           <button className="btn btn-plain" disabled title="Coming soon" type="button">

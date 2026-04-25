@@ -35,6 +35,12 @@ function formatRelTime(createdAt: number): string {
   return `${days}d ago`
 }
 
+function sessionPreview(s: Session): string {
+  const base = s.workingDir.split('/').filter(Boolean).pop() ?? s.workingDir
+  if (!s.claudeStarted) return `${base} · not started`
+  return base
+}
+
 function StatusDot({ status }: { status: SessionStatus }) {
   const color =
     status === 'running'
@@ -146,7 +152,9 @@ export function HistoryRail({ sessions, activeId, onPick, onDelete, onNew }: His
                       <span className="sess-name">{s.title}</span>
                       <span className="sess-time">{formatRelTime(s.createdAt)}</span>
                     </div>
-                    <div className="sess-preview">{s.goal ?? 'No messages yet'}</div>
+                    <div className="sess-preview">
+                      {s.goal ?? sessionPreview(s)}
+                    </div>
 
                     {/* Delete on hover — always rendered, visible via CSS :hover on parent */}
                     <button

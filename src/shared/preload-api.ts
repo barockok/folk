@@ -11,8 +11,14 @@ import type {
   AgentToolCall,
   AgentToolResult,
   AgentError,
+  AgentNotice,
+  AgentUsage,
   ClaudeCodeAuthStatus,
-  PersistedMessage
+  PersistedMessage,
+  PermissionMode,
+  DiscoveredSkill,
+  DiscoveredCommand,
+  DiscoveredPlugin
 } from './types'
 
 export interface FolkAPI {
@@ -22,6 +28,8 @@ export interface FolkAPI {
     create: (config: SessionConfig) => Promise<Session>
     delete: (id: string) => Promise<void>
     loadMessages: (id: string) => Promise<PersistedMessage[]>
+    setPermissionMode: (id: string, mode: PermissionMode) => Promise<Session>
+    backfillTitle: (id: string) => Promise<Session | null>
   }
   agent: {
     sendMessage: (sessionId: string, text: string, attachments?: Attachment[]) => Promise<void>
@@ -32,6 +40,8 @@ export interface FolkAPI {
     onToolResult: (fn: (e: AgentToolResult) => void) => () => void
     onDone: (fn: (e: { sessionId: string }) => void) => () => void
     onError: (fn: (e: AgentError) => void) => () => void
+    onNotice: (fn: (e: AgentNotice) => void) => () => void
+    onUsage: (fn: (e: AgentUsage) => void) => () => void
   }
   providers: {
     list: () => Promise<ProviderConfig[]>
@@ -55,5 +65,11 @@ export interface FolkAPI {
   }
   dialog: {
     openFolder: (defaultPath?: string) => Promise<string | null>
+  }
+  discover: {
+    skills: (workingDir?: string) => Promise<DiscoveredSkill[]>
+    commands: (workingDir?: string) => Promise<DiscoveredCommand[]>
+    plugins: () => Promise<DiscoveredPlugin[]>
+    readCommand: (path: string) => Promise<string | { error: string }>
   }
 }

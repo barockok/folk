@@ -12,6 +12,8 @@ import type {
   AgentToolCall,
   AgentToolResult,
   AgentError,
+  AgentNotice,
+  AgentUsage,
   PersistedMessage,
   PersistedToolCall,
   MessageBlock
@@ -23,7 +25,13 @@ import type {
 // tool_result blocks (which arrive in subsequent user envelopes) are matched
 // back to the originating tool block by callId.
 function mapSessionMessages(
-  raw: Array<{ type: 'user' | 'assistant' | 'system'; uuid: string; message: unknown }>
+  raw: Array<{
+    type: 'user' | 'assistant' | 'system'
+    uuid: string
+    message: unknown
+    parentUuid?: string | null
+    parent_tool_use_id?: string | null
+  }>
 ): PersistedMessage[] {
   const out: PersistedMessage[] = []
   // callId → reference to the tool block that the SDK tool_result should patch
@@ -35,6 +43,8 @@ function mapSessionMessages(
       | undefined
     const content = m?.content
     const ts = Date.now()
+    const parentToolUseId =
+      (entry as { parent_tool_use_id?: string | null }).parent_tool_use_id ?? null
 
     if (entry.type === 'assistant') {
       const blocks: MessageBlock[] = []
@@ -54,11 +64,23 @@ function mapSessionMessages(
             blocks.push({ kind: 'thinking', text: b.thinking })
           } else if (b.type === 'tool_use' && b.id && b.name) {
             const call: PersistedToolCall = { callId: b.id, tool: b.name, input: b.input }
+            // Nest under parent Task tool if the envelope says so.
+            if (parentToolUseId) {
+              const parent = callIndex.get(parentToolUseId)
+              if (parent) {
+                parent.children = [...(parent.children ?? []), call]
+                callIndex.set(b.id, call)
+                continue
+              }
+            }
             blocks.push({ kind: 'tool', call })
             callIndex.set(b.id, call)
           }
         }
       }
+      // Skip empty assistant entries created by subagent dispatch (all blocks
+      // were nested into the parent's children list).
+      if (parentToolUseId && blocks.length === 0) continue
       out.push({
         id: (m?.id as string) ?? entry.uuid ?? randomUUID(),
         role: 'assistant',
@@ -103,6 +125,13 @@ function mapSessionMessages(
   return out
 }
 
+function deriveTitle(text: string): string {
+  const flat = text.replace(/\s+/g, ' ').trim()
+  if (!flat) return ''
+  const trimmed = flat.length > 60 ? flat.slice(0, 57).trimEnd() + '…' : flat
+  return trimmed
+}
+
 function mapError(sessionId: string, err: Error & { code?: string }): AgentError {
   if (err instanceof AbortError || err.name === 'AbortError') {
     return { sessionId, code: 'cancelled', message: err.message, retryable: false }
@@ -126,6 +155,8 @@ export interface AgentManagerEvents {
   toolResult: (e: AgentToolResult) => void
   done: (e: { sessionId: string }) => void
   error: (e: AgentError) => void
+  notice: (e: AgentNotice) => void
+  usage: (e: AgentUsage) => void
 }
 
 const IDLE_MS = 5 * 60_000
@@ -232,6 +263,7 @@ export class AgentManager extends EventEmitter {
           append: FOLK_PRESENTATION_PROMPT
         },
         extraArgs: this.#parseExtraArgs(session.flags),
+        permissionMode: session.permissionMode ?? 'default',
         ...continuity
       }
     })
@@ -337,9 +369,58 @@ export class AgentManager extends EventEmitter {
     return mapSessionMessages(raw)
   }
 
+  // Backfill a session's title from the first user message in its on-disk
+  // transcript. No-op when the title was already customized, when there's no
+  // transcript, or when no user text is found.
+  async backfillTitle(id: string): Promise<Session | null> {
+    const session = this.db.getSession(id)
+    if (!session) return null
+    if (session.title !== 'Untitled session') return session
+    if (!session.claudeStarted) return session
+    let raw: Awaited<ReturnType<typeof getSessionMessages>>
+    try {
+      raw = await getSessionMessages(id, { dir: session.workingDir })
+    } catch {
+      return session
+    }
+    for (const entry of raw) {
+      if (entry.type !== 'user') continue
+      const m = (entry.message as { content?: unknown }).content
+      let text = ''
+      if (typeof m === 'string') text = m
+      else if (Array.isArray(m)) {
+        for (const blk of m) {
+          const b = blk as { type?: string; text?: string }
+          if (b.type === 'text' && b.text) text += b.text
+        }
+      }
+      const derived = deriveTitle(text)
+      if (derived) {
+        this.db.updateSession(id, { title: derived })
+        return this.db.getSession(id)
+      }
+    }
+    return session
+  }
+
   async deleteSession(id: string): Promise<void> {
     await this.#teardown(id, 'delete')
     this.db.deleteSession(id)
+  }
+
+  // Update the persisted permissionMode and tear down the live SDK session so
+  // the next turn picks up the new mode (the SDK reads it at session init).
+  async setPermissionMode(
+    id: string,
+    mode: import('@shared/types').PermissionMode
+  ): Promise<Session> {
+    const existing = this.db.getSession(id)
+    if (!existing) throw new Error(`session ${id} not found`)
+    if (this.#live.has(id)) {
+      await this.#teardown(id, 'cancel')
+    }
+    this.db.updateSession(id, { permissionMode: mode })
+    return this.db.getSession(id)!
   }
 
   dispose(): void {
@@ -359,6 +440,17 @@ export class AgentManager extends EventEmitter {
   ): Promise<void> {
     const session = this.db.getSession(sessionId)
     if (!session) throw new Error(`session ${sessionId} not found`)
+
+    // Auto-title from first user message when the session is still using the
+    // placeholder. Trim to a single line and ~60 chars so the sidebar stays
+    // tidy. Sentence-case nothing — keep the user's casing.
+    if (session.title === 'Untitled session' && text.trim()) {
+      const derived = deriveTitle(text)
+      if (derived) {
+        this.db.updateSession(sessionId, { title: derived })
+        session.title = derived
+      }
+    }
 
     // Resolve provider here so config errors surface before we touch the
     // child process. #ensureLive resolves it again internally for env build.
@@ -436,7 +528,9 @@ export class AgentManager extends EventEmitter {
       subtype?: string
       is_error?: boolean
       result?: string
+      parent_tool_use_id?: string | null
     }
+    const parentCallId = m.parent_tool_use_id ?? null
 
     // Incremental deltas when includePartialMessages is on.
     if (m.type === 'stream_event' && m.event) {
@@ -481,7 +575,8 @@ export class AgentManager extends EventEmitter {
             sessionId,
             callId: b.id,
             tool: b.name,
-            input: b.input
+            input: b.input,
+            parentCallId
           })
         }
       }
@@ -499,7 +594,8 @@ export class AgentManager extends EventEmitter {
             callId: b.tool_use_id,
             tool: 'unknown',
             output: b.content,
-            isError: !!b.is_error
+            isError: !!b.is_error,
+            parentCallId
           })
         }
       }
@@ -507,6 +603,27 @@ export class AgentManager extends EventEmitter {
       if (m.subtype === 'error' || m.is_error) {
         this.emit('error', mapError(sessionId, new Error(m.result ?? 'agent error')))
       }
+      const r = msg as {
+        total_cost_usd?: number
+        duration_ms?: number
+        num_turns?: number
+        usage?: {
+          input_tokens?: number
+          output_tokens?: number
+          cache_read_input_tokens?: number
+          cache_creation_input_tokens?: number
+        }
+      }
+      this.emit('usage', {
+        sessionId,
+        totalCostUsd: r.total_cost_usd ?? 0,
+        durationMs: r.duration_ms ?? 0,
+        numTurns: r.num_turns ?? 0,
+        inputTokens: r.usage?.input_tokens ?? 0,
+        outputTokens: r.usage?.output_tokens ?? 0,
+        cacheReadTokens: r.usage?.cache_read_input_tokens ?? 0,
+        cacheCreateTokens: r.usage?.cache_creation_input_tokens ?? 0
+      })
       const live = this.#live.get(sessionId)
       if (live) {
         live.streamedMessages.clear()
@@ -521,7 +638,15 @@ export class AgentManager extends EventEmitter {
         done?.()
       }
       this.emit('done', { sessionId })
+    } else if (m.type === 'compact_boundary') {
+      const trigger = (msg as { compact_metadata?: { trigger?: string } })
+        .compact_metadata?.trigger
+      this.emit('notice', {
+        sessionId,
+        kind: 'compact_boundary',
+        text: trigger === 'manual' ? 'Context compacted (manual)' : 'Context compacted'
+      })
     }
-    // Ignore system, compact_boundary, stream_event, and all other message types for v0.
+    // Ignore other system / stream_event / unknown SDK message types for v0.
   }
 }

@@ -1,39 +1,40 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Icon } from '../components/icons'
-import { useUIStore } from '../stores/useUIStore'
-import { INITIAL_SKILLS, UISkill } from '../data'
+import { useSessionStore } from '../stores/useSessionStore'
+import type { DiscoveredSkill } from '@shared/types'
 
 export function SkillsPage() {
-  const toast = useUIStore((s) => s.toast)
-  const [skills, setSkills] = useState<UISkill[]>(INITIAL_SKILLS)
+  const activeId = useSessionStore((s) => s.activeId)
+  const sessions = useSessionStore((s) => s.sessions)
+  const activeWd = useMemo(
+    () => sessions.find((x) => x.id === activeId)?.workingDir ?? null,
+    [sessions, activeId]
+  )
+
+  const [skills, setSkills] = useState<DiscoveredSkill[]>([])
+  const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
-  const [dragId, setDragId] = useState<string | null>(null)
-  const [overId, setOverId] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    void window.folk.discover.skills(activeWd ?? undefined).then((list) => {
+      if (!cancelled) {
+        setSkills(list)
+        setLoading(false)
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [activeWd])
 
   const filtered = skills.filter(
     (s) =>
       !query.trim() ||
       s.name.toLowerCase().includes(query.toLowerCase()) ||
-      s.desc.toLowerCase().includes(query.toLowerCase())
+      s.description.toLowerCase().includes(query.toLowerCase())
   )
-
-  const onDrop = (toId: string) => {
-    if (!dragId || dragId === toId) return
-    setSkills((prev) => {
-      const copy = [...prev]
-      const fromIdx = copy.findIndex((s) => s.id === dragId)
-      const toIdx = copy.findIndex((s) => s.id === toId)
-      const [m] = copy.splice(fromIdx, 1)
-      copy.splice(toIdx, 0, m)
-      return copy
-    })
-    setDragId(null)
-    setOverId(null)
-    toast({ kind: 'ok', text: 'Reordered' })
-  }
-
-  const toggle = (id: string) =>
-    setSkills((prev) => prev.map((s) => (s.id === id ? { ...s, enabled: !s.enabled } : s)))
 
   return (
     <div className="page">
@@ -42,13 +43,9 @@ export function SkillsPage() {
           <div className="eyebrow" style={{ marginBottom: 8 }}>Agent</div>
           <h1 className="h1">Skills</h1>
           <div className="sub">
-            Named behaviors Claude will follow when a trigger matches. Drag to reorder — the first
-            match wins.
+            Loaded from <code>~/.claude/skills</code>{activeWd ? <> and <code>{activeWd}/.claude/skills</code></> : null}.
           </div>
         </div>
-        <button className="btn btn-primary">
-          <Icon name="plus" size={14} /> New skill
-        </button>
       </div>
 
       <div className="toolbar">
@@ -61,72 +58,37 @@ export function SkillsPage() {
             onChange={(e: React.ChangeEvent<HTMLInputElement>) => setQuery(e.target.value)}
           />
         </div>
-        <div className="segmented">
-          <button className="on">All</button>
-          <button>Yours</button>
-          <button>Installed</button>
-        </div>
       </div>
+
+      {loading && <div className="sub">Scanning…</div>}
+      {!loading && filtered.length === 0 && (
+        <div className="sub">No skills found on disk.</div>
+      )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {filtered.map((s) => (
-          <div
-            key={s.id}
-            className={
-              'skill-row' +
-              (dragId === s.id ? ' dragging' : '') +
-              (overId === s.id && dragId !== s.id ? ' drop-target' : '')
-            }
-            draggable
-            onDragStart={() => setDragId(s.id)}
-            onDragOver={(e) => {
-              e.preventDefault()
-              setOverId(s.id)
-            }}
-            onDragLeave={() => setOverId(null)}
-            onDrop={() => onDrop(s.id)}
-            onDragEnd={() => {
-              setDragId(null)
-              setOverId(null)
-            }}
-          >
-            <div className="skill-handle">
-              <Icon name="drag" size={14} />
-            </div>
+          <div key={s.id} className="skill-row">
             <div className="skill-body">
               <div className="skill-title">
                 {s.name}
-                {s.author === 'you' && <span className="badge badge-ac">Yours</span>}
-                {s.author === 'anthropic' && <span className="badge badge-magenta">Anthropic</span>}
-                {s.author === 'community' && <span className="badge">Community</span>}
+                {s.scope === 'project' ? (
+                  <span className="badge badge-ac">Project</span>
+                ) : (
+                  <span className="badge">User</span>
+                )}
               </div>
-              <div className="skill-desc">{s.desc}</div>
+              <div className="skill-desc">{s.description || <em>No description</em>}</div>
               <div
                 style={{
                   marginTop: 6,
                   fontSize: 12,
                   color: 'var(--fg-faint)',
-                  fontFamily: 'var(--ff-mono)',
+                  fontFamily: 'var(--ff-mono)'
                 }}
               >
-                <Icon name="zap" size={11} /> triggers on: {s.trigger}
+                <Icon name="zap" size={11} /> {s.path}
               </div>
             </div>
-            <div
-              className={'switch' + (s.enabled ? ' on' : '')}
-              onClick={() => toggle(s.id)}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault()
-                  toggle(s.id)
-                }
-              }}
-            />
-            <button className="btn btn-icon btn-sm btn-plain">
-              <Icon name="more" size={14} />
-            </button>
           </div>
         ))}
       </div>

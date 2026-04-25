@@ -100,6 +100,13 @@ export class Database {
         .prepare(`ALTER TABLE sessions ADD COLUMN claude_started INTEGER NOT NULL DEFAULT 0`)
         .run()
     }
+    if (!sessCols.some((c) => c.name === 'permission_mode')) {
+      this.db
+        .prepare(
+          `ALTER TABLE sessions ADD COLUMN permission_mode TEXT NOT NULL DEFAULT 'default'`
+        )
+        .run()
+    }
   }
 
   close(): void {
@@ -145,13 +152,14 @@ export class Database {
       flags: config.flags ?? null,
       status: 'idle',
       claudeStarted: false,
+      permissionMode: config.permissionMode ?? 'default',
       createdAt: now,
       updatedAt: now
     }
     this.db
       .prepare(
-        `INSERT INTO sessions (id, title, model_id, working_dir, goal, flags, status, claude_started, created_at, updated_at)
-         VALUES (@id, @title, @modelId, @workingDir, @goal, @flags, @status, @claudeStarted, @createdAt, @updatedAt)`
+        `INSERT INTO sessions (id, title, model_id, working_dir, goal, flags, status, claude_started, permission_mode, created_at, updated_at)
+         VALUES (@id, @title, @modelId, @workingDir, @goal, @flags, @status, @claudeStarted, @permissionMode, @createdAt, @updatedAt)`
       )
       .run({ ...row, claudeStarted: row.claudeStarted ? 1 : 0 })
     return row
@@ -185,7 +193,7 @@ export class Database {
       .prepare(
         `UPDATE sessions SET title = @title, model_id = @modelId, working_dir = @workingDir,
          goal = @goal, flags = @flags, status = @status, claude_started = @claudeStarted,
-         updated_at = @updatedAt WHERE id = @id`
+         permission_mode = @permissionMode, updated_at = @updatedAt WHERE id = @id`
       )
       .run({ ...merged, claudeStarted: merged.claudeStarted ? 1 : 0 })
   }
@@ -333,6 +341,7 @@ export class Database {
     flags: (row.flags as string) ?? null,
     status: (row.status as Session['status']) ?? 'idle',
     claudeStarted: Number(row.claude_started ?? 0) === 1,
+    permissionMode: ((row.permission_mode as string) ?? 'default') as Session['permissionMode'],
     createdAt: Number(row.created_at ?? 0),
     updatedAt: Number(row.updated_at ?? 0)
   })

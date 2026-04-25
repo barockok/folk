@@ -14,7 +14,9 @@ const folk: FolkAPI = {
     get: (id) => ipcRenderer.invoke('sessions:get', id),
     create: (config) => ipcRenderer.invoke('sessions:create', config),
     delete: (id) => ipcRenderer.invoke('sessions:delete', id),
-    loadMessages: (id) => ipcRenderer.invoke('sessions:loadMessages', id)
+    loadMessages: (id) => ipcRenderer.invoke('sessions:loadMessages', id),
+    setPermissionMode: (id, mode) => ipcRenderer.invoke('sessions:setPermissionMode', id, mode),
+    backfillTitle: (id) => ipcRenderer.invoke('sessions:backfillTitle', id)
   },
   agent: {
     sendMessage: (sessionId, text, attachments) =>
@@ -25,7 +27,9 @@ const folk: FolkAPI = {
     onToolCall: (fn) => listen('agent:toolCall', fn),
     onToolResult: (fn) => listen('agent:toolResult', fn),
     onDone: (fn) => listen('agent:done', fn),
-    onError: (fn) => listen('agent:error', fn)
+    onError: (fn) => listen('agent:error', fn),
+    onNotice: (fn) => listen('agent:notice', fn),
+    onUsage: (fn) => listen('agent:usage', fn)
   },
   providers: {
     list: () => ipcRenderer.invoke('providers:list'),
@@ -49,6 +53,12 @@ const folk: FolkAPI = {
   },
   dialog: {
     openFolder: (defaultPath) => ipcRenderer.invoke('dialog:openFolder', defaultPath)
+  },
+  discover: {
+    skills: (workingDir) => ipcRenderer.invoke('discover:skills', workingDir),
+    commands: (workingDir) => ipcRenderer.invoke('discover:commands', workingDir),
+    plugins: () => ipcRenderer.invoke('discover:plugins'),
+    readCommand: (path) => ipcRenderer.invoke('discover:readCommand', path)
   }
 }
 

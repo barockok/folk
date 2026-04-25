@@ -1,18 +1,26 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Icon } from '../components/icons'
 import { useUIStore } from '../stores/useUIStore'
-import { INITIAL_PLUGINS, UIPlugin } from '../data'
+import type { DiscoveredPlugin } from '@shared/types'
 
 export function PluginsPage() {
   const toast = useUIStore((s) => s.toast)
-  const [plugins, setPlugins] = useState<UIPlugin[]>(INITIAL_PLUGINS)
+  const [plugins, setPlugins] = useState<DiscoveredPlugin[]>([])
+  const [loading, setLoading] = useState(true)
 
-  const toggle = (id: string) =>
-    setPlugins((prev) =>
-      prev.map((p) =>
-        p.id === id ? { ...p, status: p.status === 'enabled' ? 'disabled' : 'enabled' } : p
-      )
-    )
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    void window.folk.discover.plugins().then((list) => {
+      if (!cancelled) {
+        setPlugins(list)
+        setLoading(false)
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   return (
     <div className="page">
@@ -21,8 +29,7 @@ export function PluginsPage() {
           <div className="eyebrow" style={{ marginBottom: 8 }}>Extensions</div>
           <h1 className="h1">Plugins</h1>
           <div className="sub">
-            Longer-running integrations that run alongside Claude. Manage versions, toggle on/off,
-            and grant permissions.
+            Loaded from <code>~/.claude/plugins/installed_plugins.json</code>.
           </div>
         </div>
         <button
@@ -36,6 +43,11 @@ export function PluginsPage() {
         </button>
       </div>
 
+      {loading && <div className="sub">Scanning…</div>}
+      {!loading && plugins.length === 0 && (
+        <div className="sub">No plugins installed.</div>
+      )}
+
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {plugins.map((p) => (
           <div key={p.id} className="plugin-row">
@@ -43,32 +55,21 @@ export function PluginsPage() {
             <div>
               <div className="plugin-name">
                 {p.name}
-                {p.status === 'update' && (
-                  <span className="badge badge-warn">Update available</span>
+                {p.scope === 'project' ? (
+                  <span className="badge badge-ac">Project</span>
+                ) : (
+                  <span className="badge">User</span>
                 )}
               </div>
-              <div className="plugin-desc">{p.desc}</div>
+              <div className="plugin-desc">{p.description || <em>No description in manifest</em>}</div>
               <div style={{ marginTop: 4 }}>
                 <span className="plugin-meta">
-                  v{p.ver} · by {p.author}
+                  v{p.version}
+                  {p.marketplace ? ` · ${p.marketplace}` : ''}
+                  {p.lastUpdated ? ` · updated ${new Date(p.lastUpdated).toLocaleDateString()}` : ''}
                 </span>
               </div>
             </div>
-            <div
-              className={'switch' + (p.status === 'enabled' ? ' on' : '')}
-              onClick={() => toggle(p.id)}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault()
-                  toggle(p.id)
-                }
-              }}
-            />
-            <button className="btn btn-icon btn-sm btn-plain">
-              <Icon name="more" size={14} />
-            </button>
           </div>
         ))}
       </div>

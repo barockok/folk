@@ -4,6 +4,15 @@
 
 export type SessionStatus = 'idle' | 'running' | 'error' | 'cancelled'
 
+// Mirrors the SDK `PermissionMode` so folk can persist + show the same modes.
+// 'default' = prompt on first use, 'acceptEdits' = silently allow file edits,
+// 'plan' = read-only plan mode, 'bypassPermissions' = nothing prompts.
+export type PermissionMode =
+  | 'default'
+  | 'acceptEdits'
+  | 'plan'
+  | 'bypassPermissions'
+
 export interface Session {
   id: string
   title: string
@@ -15,6 +24,7 @@ export interface Session {
   // True once the underlying Claude Code SDK session has been started at least
   // once. First turn passes `sessionId`, subsequent turns pass `resume`.
   claudeStarted: boolean
+  permissionMode: PermissionMode
   createdAt: number
   updatedAt: number
 }
@@ -25,6 +35,7 @@ export interface SessionConfig {
   workingDir: string
   goal?: string
   flags?: string
+  permissionMode?: PermissionMode
 }
 
 export type ProviderAuthMode = 'api-key' | 'claude-code'
@@ -104,6 +115,9 @@ export interface AgentToolCall {
   callId: string
   tool: string
   input: unknown
+  // When non-null, this tool_use was emitted by a subagent dispatched via the
+  // parent's `Task` (or similar) call — render it nested inside that parent.
+  parentCallId?: string | null
 }
 
 export interface AgentToolResult {
@@ -112,6 +126,7 @@ export interface AgentToolResult {
   tool: string
   output: unknown
   isError?: boolean
+  parentCallId?: string | null
 }
 
 export interface PersistedToolCall {
@@ -120,6 +135,9 @@ export interface PersistedToolCall {
   input: unknown
   output?: unknown
   isError?: boolean
+  // Nested tool calls from a subagent (Task tool dispatch). Mirrors the
+  // SDK's parent_tool_use_id envelope linkage.
+  children?: PersistedToolCall[]
 }
 
 // Ordered units that make up a single message turn — preserves the actual
@@ -137,11 +155,56 @@ export interface PersistedMessage {
   createdAt: number
 }
 
+export interface AgentUsage {
+  sessionId: string
+  totalCostUsd: number
+  durationMs: number
+  numTurns: number
+  inputTokens: number
+  outputTokens: number
+  cacheReadTokens: number
+  cacheCreateTokens: number
+}
+
+// Out-of-band events from the SDK that aren't user/assistant messages but
+// should leave a visible mark in the transcript (e.g., context compaction).
+export interface AgentNotice {
+  sessionId: string
+  kind: 'compact_boundary'
+  text?: string
+}
+
 export interface AgentError {
   sessionId: string
   code: 'auth' | 'quota' | 'offline' | 'cancelled' | 'invalid-model' | 'crash' | 'unknown'
   message: string
   retryable: boolean
+}
+
+export interface DiscoveredSkill {
+  id: string
+  name: string
+  description: string
+  scope: 'user' | 'project'
+  path: string
+}
+
+export interface DiscoveredCommand {
+  name: string
+  description: string
+  scope: 'user' | 'project'
+  path: string
+}
+
+export interface DiscoveredPlugin {
+  id: string
+  name: string
+  marketplace: string
+  version: string
+  scope: 'user' | 'project'
+  installPath: string
+  description: string
+  lastUpdated: string | null
 }
 
 export interface MCPTemplate {

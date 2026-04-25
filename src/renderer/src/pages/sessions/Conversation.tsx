@@ -1,10 +1,10 @@
-import { useEffect, useLayoutEffect, useRef } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import type { Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useSessionStore } from '../../stores/useSessionStore'
-import type { Session } from '@shared/types'
-import { ToolCard } from './ToolCard'
+import type { PersistedToolCall, Session } from '@shared/types'
+import { ToolCard, humanizeToolName } from './ToolCard'
 
 // Local-image rewrite: absolute paths and file:// URLs aren't loadable by the
 // renderer directly (security + protocol). We register a custom folk-file://
@@ -29,6 +29,50 @@ const MD_COMPONENTS: Components = {
 }
 
 const EMPTY_MESSAGES: never[] = []
+
+// Collapsible group of consecutive same-tool calls. Header shows count +
+// running/error badges; expand to see each ToolCard individually.
+function ToolGroup({ calls }: { calls: PersistedToolCall[] }) {
+  const [open, setOpen] = useState(false)
+  // Distinct humanized labels for the header — first 3 then "+N more" so a
+  // mixed run reads "chrome · use browser, Read, Bash +2 more".
+  const labels: string[] = []
+  for (const c of calls) {
+    const l = humanizeToolName(c.tool).label
+    if (!labels.includes(l)) labels.push(l)
+  }
+  const previewLabels = labels.slice(0, 3).join(', ')
+  const moreCount = labels.length - 3
+  const running = calls.filter((c) => c.output === undefined).length
+  const errors = calls.filter((c) => c.isError).length
+  const status = running > 0 ? 'running' : errors > 0 ? 'failed' : 'done'
+  return (
+    <div className={`tool-card tool-group ${status}`} data-open={open ? 'true' : 'false'}>
+      <button type="button" className="tool-hd" onClick={() => setOpen((v) => !v)}>
+        <span className="tool-ic">▦</span>
+        <span className="tool-name">
+          {calls.length} tool calls
+        </span>
+        <span className="tool-srv" title={labels.join(', ')}>
+          {previewLabels}
+          {moreCount > 0 ? ` +${moreCount} more` : ''}
+        </span>
+        <span className="tool-status">
+          {running > 0 && <span className="spinner" />}
+          {errors > 0 ? `${errors} err` : running > 0 ? `${running} running` : 'done'}
+        </span>
+        <span className="tool-caret">{open ? '▾' : '▸'}</span>
+      </button>
+      {open && (
+        <div className="tool-body" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {calls.map((c) => (
+            <ToolCard key={c.callId} call={c} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 // Total streamed-content size — used to retrigger autoscroll as text grows.
 function contentLength(messages: ReadonlyArray<{ blocks: ReadonlyArray<{ kind: string; text?: string }> }>): number {
@@ -80,6 +124,9 @@ export function Conversation({ session }: { session: Session | null }) {
   const lastIdx = messages.length - 1
   const prepared = messages.map((m, i) => {
     const isLast = i === lastIdx
+    if (m.role === 'system') {
+      return { m, isLast, visibleBlocks: m.blocks, showProgress: false, renderable: true }
+    }
     const hasText = m.blocks.some((b) => b.kind === 'text')
     const isStreamingThought = isLast && m.role === 'assistant' && !hasText
     const visibleBlocks = isStreamingThought
@@ -108,10 +155,20 @@ export function Conversation({ session }: { session: Session | null }) {
       <div className="conv-inner">
         {visible.map((p, i) => {
           const { m, visibleBlocks, showProgress } = p
+          if (m.role === 'system') {
+            const label = m.blocks.find((b) => b.kind === 'text')?.text ?? 'Context compacted'
+            return (
+              <div key={m.id} className="msg-divider" role="separator" aria-label={label}>
+                <span className="msg-divider-line" />
+                <span className="msg-divider-label">{label}</span>
+                <span className="msg-divider-line" />
+              </div>
+            )
+          }
           const prev = i > 0 ? visible[i - 1].m : null
           const next = i < visible.length - 1 ? visible[i + 1].m : null
-          const continuation = prev != null && prev.role === m.role
-          const continuesBelow = next != null && next.role === m.role
+          const continuation = prev != null && prev.role === m.role && prev.role !== 'system'
+          const continuesBelow = next != null && next.role === m.role && next.role !== 'system'
           return (
             <article
               key={m.id}
@@ -134,41 +191,105 @@ export function Conversation({ session }: { session: Session | null }) {
                     <span className="when">{new Date(m.createdAt).toLocaleTimeString()}</span>
                   </div>
                 )}
-                {visibleBlocks.map((b, j) => {
-                  const key = `${m.id}-${j}`
-                  if (b.kind === 'thinking') {
-                    // Live = the streaming message hasn't produced text yet,
-                    // so dots still pulse; once text arrives, this thinking
-                    // would have been filtered out anyway, so live is implicit.
-                    return (
-                      <details key={key} className="msg-thinking live" open>
-                        <summary>
-                          <span className="dots">
-                            <span /><span /><span />
-                          </span>
-                          <span className="msg-thinking-label">Thinking</span>
-                          <span className="chev">▸</span>
-                        </summary>
-                        <div className="msg-thinking-body">{b.text}</div>
-                      </details>
-                    )
+                {(() => {
+                  // Coalesce consecutive same-tool tool blocks into a group
+                  // entry so a chain of identical calls renders as one chip.
+                  type Entry =
+                    | { type: 'block'; b: typeof visibleBlocks[number]; idx: number }
+                    | { type: 'group'; calls: PersistedToolCall[]; idx: number }
+                  const entries: Entry[] = []
+                  for (let j = 0; j < visibleBlocks.length; j++) {
+                    const b = visibleBlocks[j]
+                    if (b.kind === 'tool') {
+                      // Greedily absorb every subsequent tool block — different
+                      // tools allowed. Run breaks only when a text or thinking
+                      // block intervenes.
+                      const calls: PersistedToolCall[] = [b.call]
+                      const startIdx = j
+                      while (
+                        j + 1 < visibleBlocks.length &&
+                        visibleBlocks[j + 1].kind === 'tool'
+                      ) {
+                        j++
+                        calls.push(
+                          (visibleBlocks[j] as { kind: 'tool'; call: PersistedToolCall }).call
+                        )
+                      }
+                      if (calls.length >= 2) {
+                        entries.push({ type: 'group', calls, idx: startIdx })
+                      } else {
+                        entries.push({
+                          type: 'block',
+                          b: { kind: 'tool', call: calls[0] } as typeof visibleBlocks[number],
+                          idx: startIdx
+                        })
+                      }
+                    } else {
+                      entries.push({ type: 'block', b, idx: j })
+                    }
                   }
-                  if (b.kind === 'tool') {
+                  let lastThinkingIdx = -1
+                  for (let k = visibleBlocks.length - 1; k >= 0; k--) {
+                    if (visibleBlocks[k].kind === 'thinking') {
+                      lastThinkingIdx = k
+                      break
+                    }
+                  }
+                  return entries.map((e) => {
+                    if (e.type === 'group') {
+                      return (
+                        <div key={`${m.id}-grp-${e.idx}`} className="msg-tools">
+                          <ToolGroup calls={e.calls} />
+                        </div>
+                      )
+                    }
+                    const b = e.b
+                    const key = `${m.id}-${e.idx}`
+                    if (b.kind === 'thinking') {
+                      const isLive =
+                        p.isLast &&
+                        isStreaming &&
+                        e.idx === lastThinkingIdx &&
+                        lastThinkingIdx === visibleBlocks.length - 1
+                      return (
+                        <details
+                          key={key}
+                          className={`msg-thinking${isLive ? ' live' : ''}`}
+                          open={isLive}
+                        >
+                          <summary>
+                            {isLive ? (
+                              <span className="dots">
+                                <span /><span /><span />
+                              </span>
+                            ) : (
+                              <span className="msg-thinking-bullet" aria-hidden="true">·</span>
+                            )}
+                            <span className="msg-thinking-label">
+                              {isLive ? 'Thinking' : 'Thought'}
+                            </span>
+                            <span className="chev">▸</span>
+                          </summary>
+                          <div className="msg-thinking-body">{b.text}</div>
+                        </details>
+                      )
+                    }
+                    if (b.kind === 'tool') {
+                      return (
+                        <div key={key} className="msg-tools">
+                          <ToolCard call={b.call} />
+                        </div>
+                      )
+                    }
                     return (
-                      <div key={key} className="msg-tools">
-                        <ToolCard call={b.call} />
+                      <div key={key} className="msg-body md">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD_COMPONENTS}>
+                          {b.text}
+                        </ReactMarkdown>
                       </div>
                     )
-                  }
-                  // text
-                  return (
-                    <div key={key} className="msg-body md">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD_COMPONENTS}>
-                        {b.text}
-                      </ReactMarkdown>
-                    </div>
-                  )
-                })}
+                  })
+                })()}
                 {showProgress && (
                   <div className="msg-thinking live no-body">
                     <span className="dots"><span /><span /><span /></span>

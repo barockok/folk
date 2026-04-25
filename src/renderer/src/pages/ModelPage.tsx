@@ -42,6 +42,57 @@ function useClaudeCodeAuth(enabled: boolean): ClaudeCodeAuthStatus | null {
   return status
 }
 
+function AddModelForm({ onAdd }: { onAdd: (id: string, label: string) => void }) {
+  const [id, setId] = useState('')
+  const [label, setLabel] = useState('')
+  const handleAdd = () => {
+    if (!id.trim()) return
+    onAdd(id, label)
+    setId('')
+    setLabel('')
+  }
+  return (
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr auto',
+        gap: 8,
+        marginTop: 8,
+        padding: '8px 0',
+        borderTop: '1px dashed var(--border)'
+      }}
+    >
+      <input
+        className="input mono"
+        placeholder="model-id (e.g. gpt-4o-mini)"
+        value={id}
+        onChange={(e) => setId(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            handleAdd()
+          }
+        }}
+      />
+      <input
+        className="input"
+        placeholder="display label (optional)"
+        value={label}
+        onChange={(e) => setLabel(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            handleAdd()
+          }
+        }}
+      />
+      <button className="btn" type="button" onClick={handleAdd} disabled={!id.trim()}>
+        <Icon name="plus" size={13} /> Add
+      </button>
+    </div>
+  )
+}
+
 // ---------------------------------------------------------------------------
 // Preset data (verbatim from spec)
 // ---------------------------------------------------------------------------
@@ -475,6 +526,26 @@ export function ModelPage() {
     setDraft({ ...draft, models })
   }
 
+  const addModel = (id: string, label: string) => {
+    if (!draft) return
+    const trimmedId = id.trim()
+    if (!trimmedId) return
+    if (draft.models.some((m) => m.id === trimmedId)) {
+      toast({ kind: 'warn', text: `Model ${trimmedId} already exists.` })
+      return
+    }
+    setDraft({
+      ...draft,
+      models: [...draft.models, { id: trimmedId, label: label.trim() || trimmedId, enabled: true }]
+    })
+  }
+
+  const removeModel = (idx: number) => {
+    if (!draft) return
+    const models = draft.models.filter((_, i) => i !== idx)
+    setDraft({ ...draft, models })
+  }
+
   const updateDraft = (patch: Partial<ProviderConfig>) => {
     if (!draft) return
     setDraft({ ...draft, ...patch })
@@ -676,50 +747,77 @@ export function ModelPage() {
           <div className="section" style={{ marginTop: 16 }}>
             <div className="section-head">
               <h2 className="h2">Models</h2>
-              <span className="sub" style={{ fontSize: 13 }}>
-                {draft.models.filter((m) => m.enabled).length} of {draft.models.length} enabled
-              </span>
+              {draft.authMode !== 'claude-code' && (
+                <span className="sub" style={{ fontSize: 13 }}>
+                  {draft.models.filter((m) => m.enabled).length} of {draft.models.length} enabled
+                </span>
+              )}
             </div>
 
-            {draft.models.length === 0 && (
-              <div style={{ color: 'var(--fg-faint)', fontSize: 13, padding: '8px 0' }}>
-                No models added yet.
+            {draft.authMode === 'claude-code' ? (
+              <div
+                style={{
+                  color: 'var(--fg-faint)',
+                  fontSize: 13,
+                  padding: '8px 0',
+                  lineHeight: 1.5
+                }}
+              >
+                Model is managed by your Claude Code subscription. Pinning or disabling
+                individual models doesn't apply here — the SDK picks based on your plan.
               </div>
-            )}
-
-            {draft.models.map((m, i) => (
-              <div key={m.id} className="model-row">
-                <div className="m-main">
-                  <div className="m-name">{m.label || m.id}</div>
-                  <div className="m-meta">
-                    <span style={{ color: 'var(--fg-faint)' }}>{m.id}</span>
-                    {m.contextWindow != null && (
-                      <span>
-                        <Icon name="clock" size={11} /> {Math.round(m.contextWindow / 1000)}K ctx
-                      </span>
-                    )}
-                    {m.maxOutput != null && (
-                      <span>
-                        <Icon name="arrow-right" size={11} /> {Math.round(m.maxOutput / 1000)}K out
-                      </span>
-                    )}
+            ) : (
+              <>
+                {draft.models.length === 0 && (
+                  <div style={{ color: 'var(--fg-faint)', fontSize: 13, padding: '8px 0' }}>
+                    No models added yet. Use the form below to add one.
                   </div>
-                </div>
-                <div
-                  className={'switch' + (m.enabled ? ' on' : '')}
-                  onClick={() => toggleModel(i)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault()
-                      toggleModel(i)
-                    }
-                  }}
-                  role="switch"
-                  tabIndex={0}
-                  aria-checked={m.enabled}
-                />
-              </div>
-            ))}
+                )}
+
+                {draft.models.map((m, i) => (
+                  <div key={m.id} className="model-row">
+                    <div className="m-main">
+                      <div className="m-name">{m.label || m.id}</div>
+                      <div className="m-meta">
+                        <span style={{ color: 'var(--fg-faint)' }}>{m.id}</span>
+                        {m.contextWindow != null && (
+                          <span>
+                            <Icon name="clock" size={11} /> {Math.round(m.contextWindow / 1000)}K ctx
+                          </span>
+                        )}
+                        {m.maxOutput != null && (
+                          <span>
+                            <Icon name="arrow-right" size={11} /> {Math.round(m.maxOutput / 1000)}K out
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div
+                      className={'switch' + (m.enabled ? ' on' : '')}
+                      onClick={() => toggleModel(i)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          toggleModel(i)
+                        }
+                      }}
+                      role="switch"
+                      tabIndex={0}
+                      aria-checked={m.enabled}
+                    />
+                    <button
+                      className="btn btn-icon btn-sm btn-plain"
+                      title="Remove model"
+                      onClick={() => removeModel(i)}
+                      type="button"
+                    >
+                      <Icon name="trash" size={13} />
+                    </button>
+                  </div>
+                ))}
+                <AddModelForm onAdd={addModel} />
+              </>
+            )}
           </div>
         </>
       )}
