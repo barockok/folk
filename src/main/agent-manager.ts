@@ -367,81 +367,53 @@ export class AgentManager extends EventEmitter {
   ): Promise<void> {
     const session = this.db.getSession(sessionId)
     if (!session) throw new Error(`session ${sessionId} not found`)
-    const provider = this.#resolveProvider(session.modelId)
 
-    this.db.updateSession(sessionId, { status: 'running' })
+    // Resolve provider here so config errors surface before we touch the
+    // child process. #ensureLive resolves it again internally for env build.
+    this.#resolveProvider(session.modelId)
 
-    const abort = new AbortController()
-    this.#streams.set(sessionId, { abort })
-
-    // Start from the main process env so PATH, HOME, and Keychain access work.
-    // The SDK spawns `node cli.js` — without PATH the spawn fails with ENOENT
-    // and the SDK reports it as "Claude Code executable not found at cli.js".
-    const envOverlay: Record<string, string | undefined> = { ...process.env }
-    // When authMode is 'claude-code', let the SDK resolve auth from
-    // ~/.claude/.credentials.json (Linux) or macOS Keychain (service
-    // "Claude Code-credentials"). Setting ANTHROPIC_API_KEY would override it.
-    if (provider.authMode !== 'claude-code') {
-      envOverlay.ANTHROPIC_API_KEY = provider.apiKey
-    } else {
-      delete envOverlay.ANTHROPIC_API_KEY
-    }
-    if (provider.baseUrl) envOverlay.ANTHROPIC_BASE_URL = provider.baseUrl
-
-    const mcpMap: Record<string, McpServerConfig> = {}
-    for (const m of this.db.listMCPs().filter((x) => x.isEnabled)) {
-      if (m.transport === 'stdio' && m.command) {
-        mcpMap[m.name] = {
-          type: 'stdio',
-          command: m.command,
-          args: m.args ?? [],
-          env: m.env ?? undefined
+    // LRU eviction: if we're at the cap and this session isn't already live,
+    // evict the oldest live session. Fire-and-forget — the dying session
+    // tears down in the background while we lazy-start the new one.
+    if (!this.#live.has(sessionId) && this.#live.size >= MAX_LIVE) {
+      let lruId: string | null = null
+      let lruAt = Infinity
+      for (const [id, ls] of this.#live) {
+        if (ls.lastUsedAt < lruAt) {
+          lruAt = ls.lastUsedAt
+          lruId = id
         }
       }
+      if (lruId) void this.#teardown(lruId, 'lru')
     }
 
-    // First turn → use our Session.id as the SDK sessionId so it persists at
-    // ~/.claude/projects/<cwd>/<id>.jsonl. Subsequent turns → resume that
-    // session so the model keeps full conversation memory across turns.
-    const continuity = session.claudeStarted
-      ? { resume: session.id }
-      : { sessionId: session.id }
+    const live = this.#ensureLive(session)
+    live.lastUsedAt = Date.now()
 
-    const q = query({
-      prompt: text,
-      options: {
-        cwd: session.workingDir,
-        model: session.modelId,
-        env: envOverlay,
-        mcpServers: mcpMap,
-        abortController: abort,
-        includePartialMessages: true,
-        // Keep the Claude Code default behavior, append folk's presentation rules
-        // so the model formats output for folk's rich markdown renderer.
-        systemPrompt: {
-          type: 'preset',
-          preset: 'claude_code',
-          append: FOLK_PRESENTATION_PROMPT
-        },
-        extraArgs: this.#parseExtraArgs(session.flags),
-        ...continuity
-      }
-    })
+    if (live.idleTimer) {
+      clearTimeout(live.idleTimer)
+      live.idleTimer = null
+    }
+    this.db.updateSession(sessionId, { status: 'running' })
 
-    try {
-      for await (const msg of q) {
-        this.#dispatchMessage(sessionId, msg as unknown)
+    return new Promise<void>((resolve, reject) => {
+      live.turnDone = () => {
+        live.turnDone = null
+        live.turnError = null
+        resolve()
       }
-      this.db.updateSession(sessionId, { status: 'idle', claudeStarted: true })
-    } catch (err) {
-      const agentErr = mapError(sessionId, err as Error & { code?: string })
-      this.emit('error', agentErr)
-      this.db.updateSession(sessionId, {
-        status: agentErr.code === 'cancelled' ? 'cancelled' : 'error'
+      live.turnError = (e) => {
+        live.turnDone = null
+        live.turnError = null
+        reject(e)
+      }
+      live.push({
+        type: 'user',
+        session_id: session.id,
+        parent_tool_use_id: null,
+        message: { role: 'user', content: text }
       })
-    } finally {
-      this.#streams.delete(sessionId)
-    }
+    })
   }
 
   #resolveProvider(modelId: string) {
