@@ -150,6 +150,126 @@ export class AgentManager extends EventEmitter {
     super()
   }
 
+  #createPromptIterable(): {
+    iterable: AsyncIterable<SDKUserMessage>
+    push: (msg: SDKUserMessage) => void
+    close: () => void
+  } {
+    const queue: SDKUserMessage[] = []
+    let resolveNext: (() => void) | null = null
+    let closed = false
+    async function* iterable(): AsyncIterable<SDKUserMessage> {
+      while (!closed) {
+        if (queue.length === 0) {
+          await new Promise<void>((r) => (resolveNext = r))
+        }
+        while (queue.length) yield queue.shift()!
+      }
+    }
+    const push = (m: SDKUserMessage) => {
+      queue.push(m)
+      const r = resolveNext
+      resolveNext = null
+      r?.()
+    }
+    const close = () => {
+      closed = true
+      const r = resolveNext
+      resolveNext = null
+      r?.()
+    }
+    return { iterable: iterable(), push, close }
+  }
+
+  #ensureLive(session: Session): LiveSession {
+    const existing = this.#live.get(session.id)
+    if (existing) {
+      existing.lastUsedAt = Date.now()
+      return existing
+    }
+
+    const provider = this.#resolveProvider(session.modelId)
+
+    const envOverlay: Record<string, string | undefined> = { ...process.env }
+    if (provider.authMode !== 'claude-code') {
+      envOverlay.ANTHROPIC_API_KEY = provider.apiKey
+    } else {
+      delete envOverlay.ANTHROPIC_API_KEY
+    }
+    if (provider.baseUrl) envOverlay.ANTHROPIC_BASE_URL = provider.baseUrl
+
+    const mcpMap: Record<string, McpServerConfig> = {}
+    for (const m of this.db.listMCPs().filter((x) => x.isEnabled)) {
+      if (m.transport === 'stdio' && m.command) {
+        mcpMap[m.name] = {
+          type: 'stdio',
+          command: m.command,
+          args: m.args ?? [],
+          env: m.env ?? undefined
+        }
+      }
+    }
+
+    const continuity = session.claudeStarted
+      ? { resume: session.id }
+      : { sessionId: session.id }
+
+    const abort = new AbortController()
+    const { iterable, push, close } = this.#createPromptIterable()
+
+    const q = query({
+      prompt: iterable,
+      options: {
+        cwd: session.workingDir,
+        model: session.modelId,
+        env: envOverlay,
+        mcpServers: mcpMap,
+        abortController: abort,
+        includePartialMessages: true,
+        systemPrompt: {
+          type: 'preset',
+          preset: 'claude_code',
+          append: FOLK_PRESENTATION_PROMPT
+        },
+        extraArgs: this.#parseExtraArgs(session.flags),
+        ...continuity
+      }
+    })
+
+    const live: LiveSession = {
+      push,
+      close,
+      abort,
+      pump: Promise.resolve(),
+      idleTimer: null,
+      turnDone: null,
+      turnError: null,
+      streamedMessages: new Set(),
+      lastUsedAt: Date.now()
+    }
+
+    live.pump = (async () => {
+      try {
+        for await (const msg of q) {
+          this.#dispatchMessage(session.id, msg as unknown)
+        }
+      } catch (err) {
+        const agentErr = mapError(session.id, err as Error & { code?: string })
+        live.turnError?.(err as Error)
+        this.emit('error', agentErr)
+        this.db.updateSession(session.id, {
+          status: agentErr.code === 'cancelled' ? 'cancelled' : 'error'
+        })
+      } finally {
+        if (live.idleTimer) clearTimeout(live.idleTimer)
+        this.#live.delete(session.id)
+      }
+    })()
+
+    this.#live.set(session.id, live)
+    return live
+  }
+
   async createSession(config: SessionConfig): Promise<Session> {
     return this.db.createSession(config)
   }
