@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events'
 import { query, AbortError, getSessionMessages } from '@anthropic-ai/claude-agent-sdk'
-import type { McpServerConfig } from '@anthropic-ai/claude-agent-sdk'
+import type { McpServerConfig, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import { randomUUID } from 'node:crypto'
 import { Database } from './database'
 import { FOLK_PRESENTATION_PROMPT } from './system-prompt'
@@ -128,8 +128,24 @@ export interface AgentManagerEvents {
   error: (e: AgentError) => void
 }
 
+const IDLE_MS = 5 * 60_000
+const MAX_LIVE = 4
+const TEARDOWN_GRACE_MS = 2_000
+
+interface LiveSession {
+  push: (msg: SDKUserMessage) => void
+  close: () => void
+  abort: AbortController
+  pump: Promise<void>
+  idleTimer: NodeJS.Timeout | null
+  turnDone: (() => void) | null
+  turnError: ((e: Error) => void) | null
+  streamedMessages: Set<string>
+  lastUsedAt: number
+}
+
 export class AgentManager extends EventEmitter {
-  #streams = new Map<string, { abort: AbortController }>()
+  #live = new Map<string, LiveSession>()
   constructor(private db: Database) {
     super()
   }
@@ -287,9 +303,6 @@ export class AgentManager extends EventEmitter {
     return out
   }
 
-  // Tracks which assistant messages were fully streamed (so we don't replay
-  // the final 'assistant' snapshot and duplicate text in the UI).
-  #streamedMessages = new Set<string>()
 
   #dispatchMessage(sessionId: string, msg: unknown): void {
     const m = msg as {
