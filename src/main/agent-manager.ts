@@ -1,6 +1,11 @@
 import { EventEmitter } from 'node:events'
 import { query, AbortError, getSessionMessages } from '@anthropic-ai/claude-agent-sdk'
-import type { McpServerConfig, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
+import type {
+  McpServerConfig,
+  PermissionResult,
+  PermissionUpdate,
+  SDKUserMessage
+} from '@anthropic-ai/claude-agent-sdk'
 import { randomUUID } from 'node:crypto'
 import { Database } from './database'
 import { FOLK_PRESENTATION_PROMPT } from './system-prompt'
@@ -14,6 +19,10 @@ import type {
   AgentError,
   AgentNotice,
   AgentUsage,
+  AgentToolProgress,
+  AgentPromptSuggestion,
+  PermissionRequest,
+  PermissionResponse,
   PersistedMessage,
   PersistedToolCall,
   MessageBlock
@@ -157,6 +166,9 @@ export interface AgentManagerEvents {
   error: (e: AgentError) => void
   notice: (e: AgentNotice) => void
   usage: (e: AgentUsage) => void
+  toolProgress: (e: AgentToolProgress) => void
+  promptSuggestion: (e: AgentPromptSuggestion) => void
+  permissionRequest: (e: PermissionRequest) => void
 }
 
 const IDLE_MS = 5 * 60_000
@@ -175,8 +187,14 @@ interface LiveSession {
   lastUsedAt: number
 }
 
+interface PendingPermission {
+  resolve: (r: PermissionResult) => void
+  suggestions: PermissionUpdate[] | undefined
+}
+
 export class AgentManager extends EventEmitter {
   #live = new Map<string, LiveSession>()
+  #pendingPermissions = new Map<string, PendingPermission>()
   constructor(private db: Database) {
     super()
   }
@@ -264,6 +282,42 @@ export class AgentManager extends EventEmitter {
         },
         extraArgs: this.#parseExtraArgs(session.flags),
         permissionMode: session.permissionMode ?? 'default',
+        // SDK refuses bypassPermissions without this acknowledgement flag.
+        allowDangerouslySkipPermissions:
+          session.permissionMode === 'bypassPermissions' ? true : undefined,
+        canUseTool: async (toolName, input, opts) => {
+          const requestId = randomUUID()
+          this.#pendingPermissions.set(requestId, {
+            resolve: () => {},
+            suggestions: opts.suggestions
+          })
+          // Replace the placeholder resolve with the real Promise resolver.
+          const result = await new Promise<PermissionResult>((resolve) => {
+            this.#pendingPermissions.set(requestId, {
+              resolve,
+              suggestions: opts.suggestions
+            })
+            const onAbort = () => {
+              if (this.#pendingPermissions.delete(requestId)) {
+                resolve({ behavior: 'deny', message: 'aborted' })
+              }
+            }
+            opts.signal.addEventListener('abort', onAbort, { once: true })
+            this.emit('permissionRequest', {
+              sessionId: session.id,
+              requestId,
+              toolName,
+              toolUseID: opts.toolUseID,
+              input,
+              title: opts.title,
+              description: opts.description,
+              displayName: opts.displayName,
+              blockedPath: opts.blockedPath,
+              decisionReason: opts.decisionReason
+            })
+          })
+          return result
+        },
         ...continuity
       }
     })
@@ -426,6 +480,24 @@ export class AgentManager extends EventEmitter {
   dispose(): void {
     const ids = [...this.#live.keys()]
     void Promise.all(ids.map((id) => this.#teardown(id, 'dispose')))
+  }
+
+  respondPermission(response: PermissionResponse): void {
+    const pending = this.#pendingPermissions.get(response.requestId)
+    if (!pending) return
+    this.#pendingPermissions.delete(response.requestId)
+    if (response.behavior === 'allow') {
+      pending.resolve({
+        behavior: 'allow',
+        updatedPermissions:
+          response.allowAlways && pending.suggestions ? pending.suggestions : undefined
+      })
+    } else {
+      pending.resolve({
+        behavior: 'deny',
+        message: response.message ?? 'Denied by user.'
+      })
+    }
   }
 
   async cancel(sessionId: string): Promise<void> {
@@ -638,15 +710,265 @@ export class AgentManager extends EventEmitter {
         done?.()
       }
       this.emit('done', { sessionId })
-    } else if (m.type === 'compact_boundary') {
-      const trigger = (msg as { compact_metadata?: { trigger?: string } })
-        .compact_metadata?.trigger
-      this.emit('notice', {
-        sessionId,
-        kind: 'compact_boundary',
-        text: trigger === 'manual' ? 'Context compacted (manual)' : 'Context compacted'
-      })
+    } else if (m.type === 'tool_progress') {
+      const r = msg as { tool_use_id?: string; elapsed_time_seconds?: number }
+      if (r.tool_use_id) {
+        this.emit('toolProgress', {
+          sessionId,
+          callId: r.tool_use_id,
+          elapsedSeconds: r.elapsed_time_seconds ?? 0
+        })
+      }
+    } else if (m.type === 'prompt_suggestion') {
+      const r = msg as { suggestion?: string }
+      if (r.suggestion) {
+        this.emit('promptSuggestion', { sessionId, suggestion: r.suggestion })
+      }
+    } else if (m.type === 'rate_limit_event') {
+      const r = msg as {
+        rate_limit_info?: { status?: string; resetsAt?: number; rateLimitType?: string }
+      }
+      const info = r.rate_limit_info
+      const status = info?.status ?? 'allowed'
+      if (status !== 'allowed') {
+        const reset = info?.resetsAt
+          ? ` until ${new Date(info.resetsAt).toLocaleTimeString()}`
+          : ''
+        const tier = info?.rateLimitType ? ` (${info.rateLimitType})` : ''
+        this.emit('notice', {
+          sessionId,
+          kind: 'rate_limit',
+          text: `Rate limit ${status}${tier}${reset}`
+        })
+      }
+    } else if (m.type === 'system') {
+      this.#dispatchSystem(sessionId, msg)
+    } else if (m.type === 'tool_use_summary') {
+      const r = msg as { summary?: string }
+      if (r.summary) {
+        this.emit('notice', {
+          sessionId,
+          kind: 'info',
+          text: `Summary: ${r.summary}`
+        })
+      }
     }
-    // Ignore other system / stream_event / unknown SDK message types for v0.
+    // Other unhandled wire types (e.g. user message replays) intentionally
+    // drop — they don't change folk's view of the transcript.
+  }
+
+  // Fan-out for `type: 'system'` envelopes, which the SDK uses for everything
+  // from `init` to per-hook lifecycle events. Each subtype is mapped to either
+  // an `info` notice (rendered as a transcript divider) or, for events that
+  // affect session state, a status update.
+  #dispatchSystem(sessionId: string, msg: unknown): void {
+    const r = msg as Record<string, unknown> & { subtype?: string }
+    const sub = r.subtype
+    if (!sub) return
+    switch (sub) {
+      case 'compact_boundary': {
+        const trigger = (
+          r as { compact_metadata?: { trigger?: string } }
+        ).compact_metadata?.trigger
+        this.emit('notice', {
+          sessionId,
+          kind: 'compact_boundary',
+          text: trigger === 'manual' ? 'Context compacted (manual)' : 'Context compacted'
+        })
+        return
+      }
+      case 'api_retry': {
+        const x = r as {
+          attempt?: number
+          max_retries?: number
+          retry_delay_ms?: number
+          error?: string
+        }
+        const delay =
+          x.retry_delay_ms != null ? `${Math.round(x.retry_delay_ms / 100) / 10}s` : '?'
+        this.emit('notice', {
+          sessionId,
+          kind: 'api_retry',
+          text: `API retry ${x.attempt ?? '?'}/${x.max_retries ?? '?'} in ${delay}${
+            x.error ? ` — ${x.error}` : ''
+          }`
+        })
+        return
+      }
+      case 'init': {
+        const x = r as { tools?: string[]; mcp_servers?: { name: string }[]; model?: string }
+        const tools = (x.tools ?? []).length
+        const mcps = (x.mcp_servers ?? []).length
+        this.emit('notice', {
+          sessionId,
+          kind: 'info',
+          text: `Session ready · model ${x.model ?? '?'} · ${tools} tools · ${mcps} MCP server(s)`
+        })
+        return
+      }
+      case 'status': {
+        const x = r as {
+          status?: string | null
+          compact_result?: string
+          compact_error?: string
+        }
+        if (!x.status) return
+        const extra = x.compact_result
+          ? ` · ${x.compact_result}${x.compact_error ? ` (${x.compact_error})` : ''}`
+          : ''
+        this.emit('notice', {
+          sessionId,
+          kind: 'info',
+          text: `Status: ${x.status}${extra}`
+        })
+        return
+      }
+      case 'auth_status': {
+        const x = r as { isAuthenticating?: boolean; error?: string }
+        this.emit('notice', {
+          sessionId,
+          kind: 'info',
+          text: `Auth ${x.isAuthenticating ? 'in progress' : 'updated'}${
+            x.error ? ` · ${x.error}` : ''
+          }`
+        })
+        return
+      }
+      case 'elicitation_complete': {
+        const x = r as { mcp_server_name?: string }
+        this.emit('notice', {
+          sessionId,
+          kind: 'info',
+          text: `Elicitation complete${x.mcp_server_name ? ` (${x.mcp_server_name})` : ''}`
+        })
+        return
+      }
+      case 'files_persisted': {
+        const x = r as {
+          files?: { filename: string }[]
+          failed?: { filename: string; error: string }[]
+        }
+        const ok = (x.files ?? []).length
+        const failed = (x.failed ?? []).length
+        if (ok === 0 && failed === 0) return
+        this.emit('notice', {
+          sessionId,
+          kind: 'info',
+          text: `Persisted ${ok} file(s)${failed ? `, ${failed} failed` : ''}`
+        })
+        return
+      }
+      case 'hook_started': {
+        const x = r as { hook_name?: string; hook_event?: string }
+        this.emit('notice', {
+          sessionId,
+          kind: 'info',
+          text: `Hook ${x.hook_name ?? '?'} started (${x.hook_event ?? '?'})`
+        })
+        return
+      }
+      case 'hook_progress': {
+        const x = r as { hook_name?: string }
+        this.emit('notice', {
+          sessionId,
+          kind: 'info',
+          text: `Hook ${x.hook_name ?? '?'} progress`
+        })
+        return
+      }
+      case 'hook_response': {
+        const x = r as {
+          hook_name?: string
+          outcome?: string
+          exit_code?: number
+        }
+        this.emit('notice', {
+          sessionId,
+          kind: 'info',
+          text: `Hook ${x.hook_name ?? '?'} ${x.outcome ?? 'done'}${
+            x.exit_code != null ? ` (exit ${x.exit_code})` : ''
+          }`
+        })
+        return
+      }
+      case 'local_command_output': {
+        // Shaped by the SDK to be displayed inline as assistant text — pipe
+        // straight through the chunk channel.
+        const x = r as { content?: string }
+        if (x.content) this.emit('chunk', { sessionId, text: x.content + '\n' })
+        return
+      }
+      case 'memory_recall': {
+        const x = r as {
+          memories?: { path: string }[]
+          mode?: 'select' | 'synthesize'
+        }
+        const n = (x.memories ?? []).length
+        if (n === 0) return
+        this.emit('notice', {
+          sessionId,
+          kind: 'info',
+          text: `Recalled ${n} ${x.mode === 'synthesize' ? 'memory synthesis' : 'memories'}`
+        })
+        return
+      }
+      case 'mirror_error': {
+        const x = r as { error?: string }
+        this.emit('notice', {
+          sessionId,
+          kind: 'info',
+          text: `Mirror error: ${x.error ?? 'unknown'}`
+        })
+        return
+      }
+      case 'notification': {
+        const x = r as { text?: string; priority?: string }
+        if (!x.text) return
+        this.emit('notice', {
+          sessionId,
+          kind: 'info',
+          text: x.priority && x.priority !== 'low' ? `[${x.priority}] ${x.text}` : x.text
+        })
+        return
+      }
+      case 'plugin_install': {
+        const x = r as { status?: string; name?: string; error?: string }
+        this.emit('notice', {
+          sessionId,
+          kind: 'info',
+          text: `Plugin install: ${x.status ?? '?'}${x.name ? ` ${x.name}` : ''}${
+            x.error ? ` — ${x.error}` : ''
+          }`
+        })
+        return
+      }
+      case 'session_state_changed': {
+        const x = r as { state?: 'idle' | 'running' | 'requires_action' }
+        if (!x.state) return
+        const next = x.state === 'running' ? 'running' : 'idle'
+        try {
+          this.db.updateSession(sessionId, { status: next })
+        } catch {
+          // session might be gone (e.g., teardown raced) — ignore.
+        }
+        return
+      }
+      // Subagent activity is already conveyed via parent_tool_use_id-nested
+      // tool calls (§ 3) — these duplicate that signal at a coarser level.
+      case 'task_started':
+      case 'task_updated':
+      case 'task_progress':
+      case 'task_notification':
+        return
+      default:
+        // Unknown subtype — surface a low-noise debug notice so we see new
+        // SDK additions without crashing.
+        this.emit('notice', {
+          sessionId,
+          kind: 'info',
+          text: `Event: system/${sub}`
+        })
+        return
+    }
   }
 }

@@ -29,7 +29,11 @@ const folk: FolkAPI = {
     onDone: (fn) => listen('agent:done', fn),
     onError: (fn) => listen('agent:error', fn),
     onNotice: (fn) => listen('agent:notice', fn),
-    onUsage: (fn) => listen('agent:usage', fn)
+    onUsage: (fn) => listen('agent:usage', fn),
+    onPermissionRequest: (fn) => listen('agent:permissionRequest', fn),
+    onToolProgress: (fn) => listen('agent:toolProgress', fn),
+    onPromptSuggestion: (fn) => listen('agent:promptSuggestion', fn),
+    respondPermission: (response) => ipcRenderer.invoke('agent:respondPermission', response)
   },
   providers: {
     list: () => ipcRenderer.invoke('providers:list'),

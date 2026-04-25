@@ -40,7 +40,7 @@ These are agent-loop directives or canned prompts the SDK already understands.
 | `/security-review` | security review of pending changes | ✅ pushed as prompt |
 | `/pr-comments` | fetch PR comments | ✅ pushed as prompt |
 | user commands (`.claude/commands/*.md`) | template expansion + push | ✅ scanned from `~/.claude/commands` and `<cwd>/.claude/commands`; appear in slash autocomplete and run by reading the file body and pushing it as a prompt |
-| plugin-contributed commands | depends on plugin | ⚠️ plugin install paths discovered (§ 7); commands inside plugin packages not yet scanned |
+| plugin-contributed commands | depends on plugin | ✅ each installed plugin's `<installPath>/commands/*.md` is scanned and namespaced as `<plugin>:<name>` in the slash menu |
 
 ### 1c. Don't apply to a desktop GUI
 
@@ -71,25 +71,27 @@ These are agent-loop directives or canned prompts the SDK already understands.
 | `assistant` (text/thinking/tool_use blocks) | model output | ✅ with dedup against streamed messages |
 | `user` (tool_result blocks) | tool output | ✅ → `toolResult` event (matched by callId) |
 | `result` | turn complete | ✅ → `done` event + status update |
-| `system` | env/init info | ❌ ignored |
-| `compact_boundary` | "context compacted here" marker | ✅ emits `notice` event → renders horizontal separator in transcript |
-| `SDKHookStartedMessage` / `Progress` / `Response` | hook lifecycle | ❌ ignored |
-| `SDKToolProgressMessage` | tool progress updates (e.g., "reading 3/10 files") | ❌ ignored |
-| `SDKTaskStartedMessage` / `Updated` / `Progress` | subagent activity | ❌ ignored — see § 3 |
-| `SDKTaskNotificationMessage` | subagent notifications | ❌ ignored |
-| `SDKElicitationCompleteMessage` | form/question response | ❌ ignored — see § 4 |
-| `SDKPromptSuggestionMessage` | model-suggested next prompts | ❌ ignored — UI affordance opportunity |
-| `SDKAPIRetryMessage` | retry happening | ❌ ignored — would help "why is it slow?" UX |
-| `SDKRateLimitEvent` | hit rate limit | ❌ ignored — should toast |
-| `SDKAuthStatusMessage` | auth changed mid-session | ❌ ignored |
-| `SDKSessionStateChangedMessage` | session state delta | ❌ ignored |
-| `SDKMemoryRecallMessage` | memory hit | ❌ ignored |
-| `SDKFilesPersistedEvent` | files written via tool | ❌ ignored |
-| `SDKLocalCommandOutputMessage` | local command stdout | ❌ ignored |
-| `SDKToolUseSummaryMessage` | tool-use summary | ❌ ignored |
-| `SDKPluginInstallMessage` | plugin install event | ❌ ignored |
-| `SDKMirrorErrorMessage` | mirror error | ❌ ignored |
-| `SDKNotificationMessage` | generic notification | ❌ ignored |
+| `system/init` | env/tools/mcp on session ready | ✅ info notice "Session ready · model … · N tools · M MCP server(s)" |
+| `system/status` | compacting/requesting | ✅ info notice "Status: compacting · success" |
+| `system/api_retry` (`SDKAPIRetryMessage`) | retry happening | ✅ `api_retry` notice (`API retry 1/3 in 1.5s — rate_limit`) |
+| `system/compact_boundary` | context compaction marker | ✅ `compact_boundary` notice → transcript divider |
+| `system/auth_status` (`SDKAuthStatusMessage`) | auth changed mid-session | ✅ info notice ("Auth in progress / updated · error?") |
+| `system/elicitation_complete` (`SDKElicitationCompleteMessage`) | MCP elicitation finished | ✅ info notice with server name; live elicitation form still TODO (see § 4) |
+| `system/files_persisted` (`SDKFilesPersistedEvent`) | files written via tool | ✅ info notice "Persisted N file(s), M failed" |
+| `system/hook_started` / `hook_progress` / `hook_response` (`SDKHookStartedMessage` etc.) | hook lifecycle | ✅ info notice with hook name + outcome / exit code |
+| `system/local_command_output` (`SDKLocalCommandOutputMessage`) | local slash-command stdout | ✅ piped to `chunk` channel (renders as assistant text) |
+| `system/memory_recall` (`SDKMemoryRecallMessage`) | memory hit | ✅ info notice "Recalled N memories / memory synthesis" |
+| `system/mirror_error` (`SDKMirrorErrorMessage`) | transcript-mirror failure | ✅ info notice "Mirror error: …" |
+| `system/notification` (`SDKNotificationMessage`) | generic loop notification | ✅ info notice (`[priority] text` for non-low) |
+| `system/plugin_install` (`SDKPluginInstallMessage`) | install lifecycle | ✅ info notice "Plugin install: started/installed/failed/completed" |
+| `system/session_state_changed` (`SDKSessionStateChangedMessage`) | session state delta | ✅ updates DB session status (running ↔ idle) |
+| `system/task_*` (`SDKTaskStartedMessage`, `Updated`, `Progress`, `Notification`) | subagent activity | 🚫 silent — already conveyed via `parent_tool_use_id` nesting (§ 3) |
+| `system/<unknown>` | future SDK additions | ✅ debug-style info notice "Event: system/<sub>" so new types surface without crashing |
+| `tool_progress` (`SDKToolProgressMessage`) | tool progress updates | ✅ `toolProgress` event → live `Ns` elapsed on ToolCard |
+| `tool_use_summary` (`SDKToolUseSummaryMessage`) | summary spanning multiple calls | ✅ info notice "Summary: …" |
+| `prompt_suggestion` (`SDKPromptSuggestionMessage`) | model-suggested next prompts | ✅ chips above composer (click sends, × dismisses) |
+| `rate_limit_event` (`SDKRateLimitEvent`) | hit rate limit | ✅ non-`allowed` statuses → `rate_limit` notice with reset time and tier |
+| `user` replays / synthetic | replays from cross-session origins | 🚫 ignored — folk's transcript reflects the live SDK store, replays would duplicate |
 
 ---
 
@@ -118,7 +120,7 @@ CC CLI presents inline UIs for three things folk can't do today:
 
 | Surface | CC behavior | Folk today | Gap |
 |---|---|---|---|
-| Tool-use permission prompt ("Allow Bash to run `rm -rf`?") | inline allow/deny/always | ⚠️ folk now exposes the SDK `permissionMode` (Ask / Auto-edit / Plan / Bypass) per session via a composer chip and persists it in SQLite. Tool-by-tool inline allow/deny prompt still TODO — needs `canUseTool` callback wiring through IPC |
+| Tool-use permission prompt ("Allow Bash to run `rm -rf`?") | inline allow/deny/always | ✅ `canUseTool` callback wired through IPC (`agent:permissionRequest` / `agent:respondPermission`). Inline `PermissionPrompt` card renders under the matching tool block (or, if it fires before the tool block exists, at the foot of the trailing assistant message). Buttons: Deny / Allow always / Allow once. "Allow always" forwards the SDK's `suggestions` as `updatedPermissions` so the rule persists for the session. permissionMode chip (Ask / Auto-edit / Plan / Bypass) still gates whether `canUseTool` is invoked at all. |
 | `AskUserQuestion` tool | inline form, blocks turn until answered | tool call shows but no input UI; the agent is stuck waiting | render form from elicitation payload; push response back into iterable |
 | MCP `elicitation/create` | inline form | ❌ ignored | same as AskUserQuestion |
 
@@ -270,7 +272,7 @@ The 2026-04-25 shortlist of 10 is now mostly landed. Outstanding work:
 7. ✅ **Edit / Write diff rendering** — DiffCard with red/green unified diff (covers `Edit`, `Write`, `NotebookEdit`).
 8. ⚠️ **Elicitation form** — punted; needs SDK control-message wiring (push tool_result back into the iterable for `AskUserQuestion` / MCP `elicitation/create`). UI design also TBD.
 9. ✅ **`/cost` and `/status`** — `result.total_cost_usd` + usage aggregated into per-session `stats`; both commands render an inline divider with the totals.
-10. ⚠️ **Permissions** — SDK `permissionMode` (Ask / Auto-edit / Plan / Bypass) persisted per session and surfaced via a composer chip; tool-by-tool inline allow/deny still TODO (needs `canUseTool` over IPC).
+10. ✅ **Permissions** — SDK `permissionMode` (Ask / Auto-edit / Plan / Bypass) persisted per session and surfaced via a composer chip; SessionSetup's "skip permissions" toggle now sets `permissionMode: 'bypassPermissions'`. `canUseTool` is wired end-to-end: SDK calls main's callback → main emits `permissionRequest` over IPC → renderer pushes a `PermissionPrompt` card next to the matching tool block → user clicks Allow/Allow always/Deny → renderer round-trips back via `respondPermission`. "Allow always" replays the SDK's `suggestions` so subsequent same-tool calls in the session don't reprompt. Sensitive-path edits (`~/.claude/skills/*`, MCP configs) now show an actionable card instead of silently failing.
 
 Next up beyond the shortlist:
 - Inline `canUseTool` permission prompts (rounds out § 4 + § 13).

@@ -72,6 +72,11 @@ export function registerIpc(
       agent.sendMessage(sessionId, text, attachments)
   )
   ipcMain.handle('agent:cancel', (_e, sessionId: string) => agent.cancel(sessionId))
+  ipcMain.handle(
+    'agent:respondPermission',
+    (_e, response: import('@shared/types').PermissionResponse) =>
+      agent.respondPermission(response)
+  )
 
   ipcMain.handle('providers:list', () => db.listProviders())
   ipcMain.handle('providers:save', (_e, p: ProviderConfig) => db.saveProvider(p))

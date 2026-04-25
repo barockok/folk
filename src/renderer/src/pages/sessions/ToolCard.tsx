@@ -231,7 +231,9 @@ export function ToolCard({ call }: ToolCardProps) {
           {status === 'running' && <span className="spinner" />}
           {status === 'success' && <span className="dot" style={{ background: 'var(--ok)', borderRadius: '50%', display: 'inline-block' }} />}
           {status === 'error' && <span className="dot" style={{ background: 'var(--err, #ea2261)', borderRadius: '50%', display: 'inline-block' }} />}
-          {status}
+          {status === 'running' && call.elapsedSeconds != null
+            ? `${call.elapsedSeconds.toFixed(1)}s`
+            : status}
         </span>
         <span className="tool-caret">
           <Icon name="chevronRight" size={12} />

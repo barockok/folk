@@ -13,6 +13,10 @@ import type {
   AgentError,
   AgentNotice,
   AgentUsage,
+  AgentToolProgress,
+  AgentPromptSuggestion,
+  PermissionRequest,
+  PermissionResponse,
   ClaudeCodeAuthStatus,
   PersistedMessage,
   PermissionMode,
@@ -42,6 +46,10 @@ export interface FolkAPI {
     onError: (fn: (e: AgentError) => void) => () => void
     onNotice: (fn: (e: AgentNotice) => void) => () => void
     onUsage: (fn: (e: AgentUsage) => void) => () => void
+    onPermissionRequest: (fn: (e: PermissionRequest) => void) => () => void
+    onToolProgress: (fn: (e: AgentToolProgress) => void) => () => void
+    onPromptSuggestion: (fn: (e: AgentPromptSuggestion) => void) => () => void
+    respondPermission: (response: PermissionResponse) => Promise<void>
   }
   providers: {
     list: () => Promise<ProviderConfig[]>

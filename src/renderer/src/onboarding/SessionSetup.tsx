@@ -162,8 +162,11 @@ export function SessionSetup({ onLaunch, onCancel }: SessionSetupProps) {
     if (!canLaunch) return
     setLaunching(true)
     try {
+      // skip-permissions in folk maps to the SDK's permissionMode option
+      // (with the matching ack flag set in agent-manager). The CLI flag is
+      // not how the SDK itself reads this — passing it via extraArgs alone
+      // doesn't disable prompts.
       const flags: string[] = []
-      if (permMode === 'skip') flags.push('--dangerously-skip-permissions')
       if (extraFlags.trim()) flags.push(extraFlags.trim())
 
       await onLaunch({
@@ -171,6 +174,7 @@ export function SessionSetup({ onLaunch, onCancel }: SessionSetupProps) {
         workingDir: folder.trim(),
         goal: goal ?? undefined,
         flags: flags.length ? flags.join(' ') : undefined,
+        permissionMode: permMode === 'skip' ? 'bypassPermissions' : 'default'
       })
     } finally {
       setLaunching(false)

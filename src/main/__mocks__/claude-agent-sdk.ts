@@ -22,6 +22,7 @@ export type TestSDKMessage =
       }
       uuid?: string
       session_id?: string
+      parent_tool_use_id?: string | null
     }
   | {
       type: 'user'
@@ -35,12 +36,75 @@ export type TestSDKMessage =
       }
       uuid?: string
       session_id?: string
+      parent_tool_use_id?: string | null
     }
   | {
       type: 'result'
       subtype: 'success' | 'error'
       is_error?: boolean
       result?: string
+      total_cost_usd?: number
+      duration_ms?: number
+      num_turns?: number
+      usage?: {
+        input_tokens?: number
+        output_tokens?: number
+        cache_read_input_tokens?: number
+        cache_creation_input_tokens?: number
+      }
+      uuid?: string
+      session_id?: string
+    }
+  | {
+      type: 'compact_boundary'
+      compact_metadata?: { trigger?: string }
+      uuid?: string
+      session_id?: string
+    }
+  | {
+      type: 'tool_progress'
+      tool_use_id: string
+      tool_name: string
+      elapsed_time_seconds: number
+      parent_tool_use_id?: string | null
+      uuid?: string
+      session_id?: string
+    }
+  | {
+      type: 'prompt_suggestion'
+      suggestion: string
+      uuid?: string
+      session_id?: string
+    }
+  | {
+      type: 'rate_limit_event'
+      rate_limit_info: {
+        status?: string
+        resetsAt?: number
+        rateLimitType?: string
+      }
+      uuid?: string
+      session_id?: string
+    }
+  | {
+      type: 'system'
+      subtype: 'api_retry'
+      attempt?: number
+      max_retries?: number
+      retry_delay_ms?: number
+      error?: string
+      uuid?: string
+      session_id?: string
+    }
+  | {
+      type: 'system'
+      subtype: string
+      [k: string]: unknown
+    }
+  | {
+      type: 'tool_use_summary'
+      summary: string
+      preceding_tool_use_ids?: string[]
       uuid?: string
       session_id?: string
     }
@@ -94,6 +158,7 @@ export function makeQuery(
 }
 
 let impl: QueryImpl = () => defaultImpl()
+let lastOptions: Record<string, unknown> | undefined
 
 export function __setQueryImpl(fn: QueryImpl): void {
   impl = fn
@@ -101,8 +166,21 @@ export function __setQueryImpl(fn: QueryImpl): void {
 
 export function __resetQueryImpl(): void {
   impl = () => defaultImpl()
+  lastOptions = undefined
+}
+
+// Test helper — returns the most recent options passed to query(). Used to
+// invoke canUseTool from outside the iterable.
+export function __getLastOptions(): Record<string, unknown> | undefined {
+  return lastOptions
 }
 
 export function query(params: { prompt: string; options?: Record<string, unknown> }): MockQuery {
+  lastOptions = params.options
   return impl(params)
+}
+
+// Re-export the AbortError name for tests; production import lands here too.
+export async function getSessionMessages(): Promise<unknown[]> {
+  return []
 }

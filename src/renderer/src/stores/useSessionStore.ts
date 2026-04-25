@@ -7,7 +7,10 @@ import type {
   AgentError,
   AgentNotice,
   AgentUsage,
-  MessageBlock
+  AgentToolProgress,
+  AgentPromptSuggestion,
+  MessageBlock,
+  PermissionRequest
 } from '@shared/types'
 
 export type MessageRole = 'user' | 'assistant' | 'system'
@@ -43,6 +46,12 @@ interface SessionState {
   activeId: string | null
   messages: Record<string, ChatMessage[]>
   stats: Record<string, SessionStats>
+  // Pending permission requests keyed by sessionId. Each entry includes the
+  // toolUseID so the UI can attach an approval card to the matching tool block.
+  pendingPermissions: Record<string, PermissionRequest[]>
+  // Suggested next prompts emitted by the SDK, per session. Cleared when the
+  // user sends a turn or accepts a suggestion.
+  promptSuggestions: Record<string, string[]>
   // Sessions with an in-flight SDK turn — used to render a "still working"
   // indicator on the trailing assistant message even after the first deltas
   // have arrived (so the user knows more is coming).
@@ -62,6 +71,11 @@ interface SessionState {
   appendToolResult: (e: AgentToolResult) => void
   appendNotice: (e: AgentNotice) => void
   appendUsage: (e: AgentUsage) => void
+  applyToolProgress: (e: AgentToolProgress) => void
+  addPromptSuggestion: (e: AgentPromptSuggestion) => void
+  clearPromptSuggestions: (sessionId: string) => void
+  addPermissionRequest: (e: PermissionRequest) => void
+  removePermissionRequest: (sessionId: string, requestId: string) => void
   setError: (e: AgentError) => void
 }
 
@@ -129,6 +143,24 @@ function patchResult(
   return touched ? { ...call, children: nextChildren } : call
 }
 
+function patchProgress(
+  call: PersistedToolCall,
+  callId: string,
+  elapsedSeconds: number
+): PersistedToolCall {
+  if (call.callId === callId && call.output === undefined) {
+    return { ...call, elapsedSeconds }
+  }
+  if (!call.children) return call
+  let touched = false
+  const nextChildren = call.children.map((c) => {
+    const upd = patchProgress(c, callId, elapsedSeconds)
+    if (upd !== c) touched = true
+    return upd
+  })
+  return touched ? { ...call, children: nextChildren } : call
+}
+
 // Append text to the trailing assistant message — extending the last block if
 // it's the same kind (so streaming deltas merge), otherwise opening a new one.
 function pushTextDelta(
@@ -151,6 +183,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   activeId: null,
   messages: {},
   stats: {},
+  pendingPermissions: {},
+  promptSuggestions: {},
   streamingSessions: new Set<string>(),
   markStreaming: (sessionId) =>
     set((st) => {
@@ -340,6 +374,62 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         lastOutputTokens: u.outputTokens
       }
       return { stats: { ...st.stats, [u.sessionId]: next } }
+    }),
+  applyToolProgress: ({ sessionId, callId, elapsedSeconds }) =>
+    set((st) => {
+      const cur = st.messages[sessionId]
+      if (!cur) return st
+      const next = cur.map((m) => {
+        if (m.role !== 'assistant') return m
+        let touched = false
+        const blocks = m.blocks.map((b) => {
+          if (b.kind !== 'tool') return b
+          const updated = patchProgress(b.call, callId, elapsedSeconds)
+          if (updated !== b.call) {
+            touched = true
+            return { ...b, call: updated }
+          }
+          return b
+        })
+        return touched ? { ...m, blocks } : m
+      })
+      return { messages: { ...st.messages, [sessionId]: next } }
+    }),
+  addPromptSuggestion: ({ sessionId, suggestion }) =>
+    set((st) => {
+      const cur = st.promptSuggestions[sessionId] ?? []
+      if (cur.includes(suggestion)) return st
+      return {
+        promptSuggestions: {
+          ...st.promptSuggestions,
+          [sessionId]: [...cur, suggestion]
+        }
+      }
+    }),
+  clearPromptSuggestions: (sessionId) =>
+    set((st) => ({
+      promptSuggestions: { ...st.promptSuggestions, [sessionId]: [] }
+    })),
+  addPermissionRequest: (req) =>
+    set((st) => {
+      const cur = st.pendingPermissions[req.sessionId] ?? []
+      return {
+        pendingPermissions: {
+          ...st.pendingPermissions,
+          [req.sessionId]: [...cur, req]
+        }
+      }
+    }),
+  removePermissionRequest: (sessionId, requestId) =>
+    set((st) => {
+      const cur = st.pendingPermissions[sessionId] ?? []
+      const next = cur.filter((r) => r.requestId !== requestId)
+      return {
+        pendingPermissions: {
+          ...st.pendingPermissions,
+          [sessionId]: next
+        }
+      }
     }),
   setError: (e) =>
     set((st) => {

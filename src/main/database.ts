@@ -1,5 +1,5 @@
 import BetterSqlite3, { Database as SQLiteDB } from 'better-sqlite3'
-import { safeStorage } from 'electron'
+import { app, safeStorage } from 'electron'
 import type {
   Session,
   SessionConfig,
@@ -9,7 +9,40 @@ import type {
   MCPServer,
   Profile
 } from '@shared/types'
-import { randomUUID } from 'node:crypto'
+import {
+  createCipheriv,
+  createDecipheriv,
+  randomBytes,
+  randomUUID
+} from 'node:crypto'
+import { existsSync, readFileSync, writeFileSync, chmodSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+
+// Dev builds aren't code-signed, so macOS Keychain ACLs don't persist between
+// launches and electron's safeStorage prompts every time it decrypts. Fall
+// back to a file-backed AES-GCM key. Packaged signed builds keep using
+// safeStorage so secrets stay tied to the user's login keychain.
+const SECRET_MAGIC = Buffer.from('FOLKDEV1')
+
+function devKeyPath(dbPath: string): string {
+  return join(dirname(dbPath), 'folk-dev.key')
+}
+
+function loadOrCreateDevKey(dbPath: string): Buffer {
+  const p = devKeyPath(dbPath)
+  if (existsSync(p)) {
+    const k = readFileSync(p)
+    if (k.length === 32) return k
+  }
+  const k = randomBytes(32)
+  writeFileSync(p, k, { mode: 0o600 })
+  try {
+    chmodSync(p, 0o600)
+  } catch {
+    // best effort
+  }
+  return k
+}
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS sessions (
@@ -75,12 +108,32 @@ const DEFAULT_PROFILE: Profile = {
 export class Database {
   readonly db: SQLiteDB
 
+  #dbPath: string
+  #devKey: Buffer | null = null
+
   constructor(filePath: string) {
+    this.#dbPath = filePath
     this.db = new BetterSqlite3(filePath)
     this.db.pragma('journal_mode = WAL')
     this.db.pragma('foreign_keys = ON')
     this.db.exec(SCHEMA)
     this.#migrate()
+  }
+
+  // Dev builds skip Electron safeStorage to avoid macOS keychain prompts.
+  #useDevKey(): boolean {
+    let packaged = false
+    try {
+      packaged = app.isPackaged
+    } catch {
+      packaged = false
+    }
+    return !packaged
+  }
+
+  #getDevKey(): Buffer {
+    if (!this.#devKey) this.#devKey = loadOrCreateDevKey(this.#dbPath)
+    return this.#devKey
   }
 
   #migrate(): void {
@@ -128,6 +181,15 @@ export class Database {
 
   // --- API-key encryption helpers (used by provider CRUD) ---
   encryptSecret(plain: string): Buffer {
+    if (this.#useDevKey()) {
+      const key = this.#getDevKey()
+      const iv = randomBytes(12)
+      const cipher = createCipheriv('aes-256-gcm', key, iv)
+      const enc = Buffer.concat([cipher.update(plain, 'utf8'), cipher.final()])
+      const tag = cipher.getAuthTag()
+      // Magic prefix lets decrypt distinguish dev-key vs safeStorage payloads.
+      return Buffer.concat([SECRET_MAGIC, iv, tag, enc])
+    }
     if (!safeStorage.isEncryptionAvailable()) {
       throw new Error('safeStorage encryption not available on this platform')
     }
@@ -135,6 +197,17 @@ export class Database {
   }
 
   decryptSecret(buf: Buffer): string {
+    // Empty buffer = no secret stored (e.g., claude-code auth providers).
+    if (buf.length === 0) return ''
+    if (buf.length >= SECRET_MAGIC.length && buf.subarray(0, SECRET_MAGIC.length).equals(SECRET_MAGIC)) {
+      const key = this.#getDevKey()
+      const iv = buf.subarray(SECRET_MAGIC.length, SECRET_MAGIC.length + 12)
+      const tag = buf.subarray(SECRET_MAGIC.length + 12, SECRET_MAGIC.length + 12 + 16)
+      const enc = buf.subarray(SECRET_MAGIC.length + 12 + 16)
+      const decipher = createDecipheriv('aes-256-gcm', key, iv)
+      decipher.setAuthTag(tag)
+      return Buffer.concat([decipher.update(enc), decipher.final()]).toString('utf8')
+    }
     if (!safeStorage.isEncryptionAvailable()) {
       throw new Error('safeStorage encryption not available on this platform')
     }

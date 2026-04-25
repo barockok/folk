@@ -23,6 +23,8 @@ interface ComposerProps {
   onCancel: () => void
 }
 
+const EMPTY_SUGGESTIONS: string[] = []
+
 async function fileToAttachment(f: File): Promise<Attachment> {
   const buf = await f.arrayBuffer()
   let binary = ''
@@ -124,6 +126,10 @@ export function Composer({ session, onSend, onCancel }: ComposerProps) {
 
   const setPage = useUIStore((s) => s.setPage)
   const toast = useUIStore((s) => s.toast)
+  const promptSuggestions = useSessionStore((s) =>
+    session ? s.promptSuggestions[session.id] ?? EMPTY_SUGGESTIONS : EMPTY_SUGGESTIONS
+  )
+  const clearPromptSuggestions = useSessionStore((s) => s.clearPromptSuggestions)
 
   const newSession = useCallback(async () => {
     if (!session) {
@@ -257,12 +263,13 @@ export function Composer({ session, onSend, onCancel }: ComposerProps) {
       }
     }
     onSend(trimmed, attachments.length > 0 ? attachments : undefined)
+    if (session) clearPromptSuggestions(session.id)
     setText('')
     setAttachments([])
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto'
     }
-  }, [text, disabled, onSend, attachments, runSlash, diskAsSlash])
+  }, [text, disabled, onSend, attachments, runSlash, diskAsSlash, session, clearPromptSuggestions])
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -612,6 +619,32 @@ export function Composer({ session, onSend, onCancel }: ComposerProps) {
           </div>
         )}
 
+        {promptSuggestions.length > 0 && session && (
+          <div className="composer-suggestions">
+            {promptSuggestions.map((s) => (
+              <button
+                key={s}
+                type="button"
+                className="composer-suggestion"
+                onClick={() => {
+                  onSend(s)
+                  clearPromptSuggestions(session.id)
+                }}
+                title="Send as your next message"
+              >
+                {s}
+              </button>
+            ))}
+            <button
+              type="button"
+              className="composer-suggestion-dismiss"
+              aria-label="Dismiss suggestions"
+              onClick={() => clearPromptSuggestions(session.id)}
+            >
+              ×
+            </button>
+          </div>
+        )}
         {slashOpen && slashMatches.length > 0 && (
           <div className="slash-menu" role="listbox" aria-label="Slash commands">
             {slashMatches.map((c, i) => (

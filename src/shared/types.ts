@@ -138,6 +138,9 @@ export interface PersistedToolCall {
   // Nested tool calls from a subagent (Task tool dispatch). Mirrors the
   // SDK's parent_tool_use_id envelope linkage.
   children?: PersistedToolCall[]
+  // Live elapsed seconds reported by the SDK while a tool is running. Cleared
+  // / ignored once the result lands.
+  elapsedSeconds?: number
 }
 
 // Ordered units that make up a single message turn — preserves the actual
@@ -155,6 +158,23 @@ export interface PersistedMessage {
   createdAt: number
 }
 
+export interface PermissionRequest {
+  sessionId: string
+  requestId: string
+  toolName: string
+  toolUseID: string
+  input: Record<string, unknown>
+  title?: string
+  description?: string
+  displayName?: string
+  blockedPath?: string
+  decisionReason?: string
+}
+
+export type PermissionResponse =
+  | { requestId: string; behavior: 'allow'; allowAlways?: boolean }
+  | { requestId: string; behavior: 'deny'; message?: string }
+
 export interface AgentUsage {
   sessionId: string
   totalCostUsd: number
@@ -167,11 +187,23 @@ export interface AgentUsage {
 }
 
 // Out-of-band events from the SDK that aren't user/assistant messages but
-// should leave a visible mark in the transcript (e.g., context compaction).
+// should leave a visible mark in the transcript (compaction, retries, rate
+// limits, ad-hoc info dumps from /cost / /status).
 export interface AgentNotice {
   sessionId: string
-  kind: 'compact_boundary'
+  kind: 'compact_boundary' | 'api_retry' | 'rate_limit' | 'info'
   text?: string
+}
+
+export interface AgentToolProgress {
+  sessionId: string
+  callId: string
+  elapsedSeconds: number
+}
+
+export interface AgentPromptSuggestion {
+  sessionId: string
+  suggestion: string
 }
 
 export interface AgentError {
@@ -192,8 +224,10 @@ export interface DiscoveredSkill {
 export interface DiscoveredCommand {
   name: string
   description: string
-  scope: 'user' | 'project'
+  scope: 'user' | 'project' | 'plugin'
   path: string
+  // For plugin-scoped commands, the plugin name (used in slash menu badges).
+  plugin?: string
 }
 
 export interface DiscoveredPlugin {

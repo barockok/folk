@@ -14,4 +14,7 @@ export function wireStreaming(agent: AgentManager, win: BrowserWindow): void {
   agent.on('error', (e) => send('agent:error', e))
   agent.on('notice', (e) => send('agent:notice', e))
   agent.on('usage', (e) => send('agent:usage', e))
+  agent.on('permissionRequest', (e) => send('agent:permissionRequest', e))
+  agent.on('toolProgress', (e) => send('agent:toolProgress', e))
+  agent.on('promptSuggestion', (e) => send('agent:promptSuggestion', e))
 }

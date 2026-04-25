@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import type { Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useSessionStore } from '../../stores/useSessionStore'
-import type { PersistedToolCall, Session } from '@shared/types'
+import type { PermissionRequest, PersistedToolCall, Session } from '@shared/types'
 import { ToolCard, humanizeToolName } from './ToolCard'
 
 // Local-image rewrite: absolute paths and file:// URLs aren't loadable by the
@@ -29,6 +29,86 @@ const MD_COMPONENTS: Components = {
 }
 
 const EMPTY_MESSAGES: never[] = []
+const EMPTY_PERMS: PermissionRequest[] = []
+
+function collectCallIds(call: PersistedToolCall, into: Set<string>): void {
+  into.add(call.callId)
+  if (call.children) {
+    for (const c of call.children) collectCallIds(c, into)
+  }
+}
+
+function PermissionPrompt({ req }: { req: PermissionRequest }) {
+  const remove = useSessionStore((s) => s.removePermissionRequest)
+  const [busy, setBusy] = useState(false)
+  const respond = async (
+    behavior: 'allow' | 'deny',
+    allowAlways = false
+  ) => {
+    if (busy) return
+    setBusy(true)
+    try {
+      await window.folk.agent.respondPermission(
+        behavior === 'allow'
+          ? { requestId: req.requestId, behavior: 'allow', allowAlways }
+          : { requestId: req.requestId, behavior: 'deny' }
+      )
+      remove(req.sessionId, req.requestId)
+    } catch {
+      setBusy(false)
+    }
+  }
+  const tool = humanizeToolName(req.toolName).label
+  const summary = req.title || `Allow ${tool}?`
+  return (
+    <div className="perm-card" role="alertdialog" aria-label={summary}>
+      <div className="perm-card-hd">
+        <span className="perm-card-ic">⚠</span>
+        <span className="perm-card-title">{summary}</span>
+      </div>
+      {req.description && <div className="perm-card-desc">{req.description}</div>}
+      {req.blockedPath && (
+        <div className="perm-card-meta">
+          <span className="perm-card-meta-k">path</span>
+          <code className="perm-card-meta-v">{req.blockedPath}</code>
+        </div>
+      )}
+      {req.decisionReason && (
+        <div className="perm-card-meta">
+          <span className="perm-card-meta-k">reason</span>
+          <span className="perm-card-meta-v">{req.decisionReason}</span>
+        </div>
+      )}
+      <div className="perm-card-actions">
+        <button
+          type="button"
+          className="btn btn-plain"
+          onClick={() => respond('deny')}
+          disabled={busy}
+        >
+          Deny
+        </button>
+        <button
+          type="button"
+          className="btn"
+          onClick={() => respond('allow', true)}
+          disabled={busy}
+          title="Allow this tool for the rest of the session"
+        >
+          Allow always
+        </button>
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={() => respond('allow', false)}
+          disabled={busy}
+        >
+          Allow once
+        </button>
+      </div>
+    </div>
+  )
+}
 
 // Collapsible group of consecutive same-tool calls. Header shows count +
 // running/error badges; expand to see each ToolCard individually.
@@ -89,6 +169,9 @@ function contentLength(messages: ReadonlyArray<{ blocks: ReadonlyArray<{ kind: s
 export function Conversation({ session }: { session: Session | null }) {
   const messages = useSessionStore((s) => (session ? s.messages[session.id] ?? EMPTY_MESSAGES : EMPTY_MESSAGES))
   const isStreaming = useSessionStore((s) => (session ? s.streamingSessions.has(session.id) : false))
+  const pendingPerms = useSessionStore((s) =>
+    session ? s.pendingPermissions[session.id] ?? EMPTY_PERMS : EMPTY_PERMS
+  )
   const scrollRef = useRef<HTMLDivElement>(null)
   const stickyRef = useRef(true)
 
@@ -275,9 +358,15 @@ export function Conversation({ session }: { session: Session | null }) {
                       )
                     }
                     if (b.kind === 'tool') {
+                      const matchingPerms = pendingPerms.filter(
+                        (pr) => pr.toolUseID === b.call.callId
+                      )
                       return (
                         <div key={key} className="msg-tools">
                           <ToolCard call={b.call} />
+                          {matchingPerms.map((pr) => (
+                            <PermissionPrompt key={pr.requestId} req={pr} />
+                          ))}
                         </div>
                       )
                     }
@@ -290,6 +379,23 @@ export function Conversation({ session }: { session: Session | null }) {
                     )
                   })
                 })()}
+                {p.isLast &&
+                  m.role === 'assistant' &&
+                  (() => {
+                    // Permission requests whose toolUseID didn't match any
+                    // rendered tool block — surface them at the message foot
+                    // so the user can still respond.
+                    const renderedIds = new Set<string>()
+                    for (const b of m.blocks) {
+                      if (b.kind === 'tool') collectCallIds(b.call, renderedIds)
+                    }
+                    const orphans = pendingPerms.filter(
+                      (pr) => !renderedIds.has(pr.toolUseID)
+                    )
+                    return orphans.map((pr) => (
+                      <PermissionPrompt key={pr.requestId} req={pr} />
+                    ))
+                  })()}
                 {showProgress && (
                   <div className="msg-thinking live no-body">
                     <span className="dots"><span /><span /><span /></span>

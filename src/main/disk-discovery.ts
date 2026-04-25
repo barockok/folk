@@ -141,6 +141,20 @@ export async function discoverCommands(
       if (cmd) out.push(cmd)
     }
   }
+  // Plugin-bundled commands: each installed plugin may ship `commands/*.md`.
+  const plugins = await discoverPlugins()
+  for (const p of plugins) {
+    const cmdDir = join(p.installPath, 'commands')
+    for (const entry of await listDir(cmdDir)) {
+      const cmd = await readCommandFile(cmdDir, entry, 'plugin')
+      if (cmd) {
+        cmd.plugin = p.name
+        // Namespace plugin commands so two plugins can ship same-named commands.
+        cmd.name = `${p.name}:${cmd.name}`
+        out.push(cmd)
+      }
+    }
+  }
   return out
 }
 
