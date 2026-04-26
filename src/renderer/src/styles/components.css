@@ -1063,8 +1063,7 @@
 [data-density="compact"] .sess-wrap:has(.sess-todo-panel) { grid-template-columns: 240px 1fr 280px; }
 
 .sess-todo-panel {
-  border-left: var(--hair) solid var(--border);
-  background: var(--bg-sub);
+  background: var(--bg);
   display: flex;
   flex-direction: column;
   min-height: 0;
