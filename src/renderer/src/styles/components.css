@@ -1059,6 +1059,57 @@
   min-height: 0;
 }
 [data-density="compact"] .sess-wrap { grid-template-columns: 240px 1fr; }
+.sess-wrap:has(.sess-todo-panel) { grid-template-columns: 280px 1fr 320px; }
+[data-density="compact"] .sess-wrap:has(.sess-todo-panel) { grid-template-columns: 240px 1fr 280px; }
+
+.sess-todo-panel {
+  border-left: var(--hair) solid var(--border);
+  background: var(--bg-sub);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 16px;
+  gap: 10px;
+}
+.sess-todo-hd {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--fg-faint);
+  font-weight: 500;
+  padding-bottom: 8px;
+  border-bottom: var(--hair) solid var(--border);
+}
+.sess-todo-title { flex: 1; color: var(--heading); }
+.sess-todo-count { font-family: var(--ff-mono); color: var(--body); }
+.sess-todo-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sess-todo-item {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 13px;
+  color: var(--body);
+  line-height: 1.4;
+}
+.sess-todo-item.todo-completed .todo-label {
+  text-decoration: line-through;
+  color: var(--fg-faint);
+}
+.sess-todo-item.todo-in_progress .todo-label {
+  color: var(--heading);
+  font-weight: 500;
+}
 .sess-rail {
   border-right: var(--hair) solid var(--border);
   background: var(--bg-sub);

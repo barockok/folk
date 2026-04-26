@@ -3,6 +3,7 @@ import { useSessions } from '../hooks/useSessions'
 import { HistoryRail } from './sessions/HistoryRail'
 import { Conversation } from './sessions/Conversation'
 import { Composer } from './sessions/Composer'
+import { TodoPanel } from './sessions/TodoPanel'
 import { SessionSetup } from '../onboarding/SessionSetup'
 import type { SessionConfig } from '@shared/types'
 
@@ -45,6 +46,7 @@ export function SessionsPage() {
           </>
         )}
       </div>
+      {!needsSetup && <TodoPanel session={active} />}
     </div>
   )
 }

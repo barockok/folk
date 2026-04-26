@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import type { Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useSessionStore } from '../../stores/useSessionStore'
-import type { PermissionRequest, PersistedToolCall, Session } from '@shared/types'
+import type { MessageBlock, PermissionRequest, PersistedToolCall, Session } from '@shared/types'
 import { ToolCard, humanizeToolName } from './ToolCard'
 
 // Local-image rewrite: absolute paths and file:// URLs aren't loadable by the
@@ -291,9 +291,13 @@ export function Conversation({ session }: { session: Session | null }) {
     }
     const hasText = m.blocks.some((b) => b.kind === 'text')
     const isStreamingThought = isLast && m.role === 'assistant' && !hasText
+    // TodoWrite tool blocks are hoisted to the right-side TodoPanel — keep
+    // them out of the inline transcript so the convo stays narrative.
+    const stripTodos = (b: MessageBlock): boolean =>
+      !(b.kind === 'tool' && b.call.tool === 'TodoWrite')
     const visibleBlocks = isStreamingThought
-      ? m.blocks
-      : m.blocks.filter((b) => b.kind !== 'thinking')
+      ? m.blocks.filter(stripTodos)
+      : m.blocks.filter((b) => b.kind !== 'thinking' && stripTodos(b))
     // The trailing assistant message of an in-flight turn shows a "still
     // working" indicator BETWEEN deltas. Suppress it ONLY when something is
     // *currently* animating progress: the live thinking block (last block,

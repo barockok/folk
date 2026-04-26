@@ -493,13 +493,13 @@ function DiffCard({
   )
 }
 
-interface TodoItem {
+export interface TodoItem {
   content: string
   status: 'pending' | 'in_progress' | 'completed'
   activeForm?: string
 }
 
-function extractTodos(input: unknown): TodoItem[] | null {
+export function extractTodos(input: unknown): TodoItem[] | null {
   if (!input || typeof input !== 'object') return null
   const todos = (input as { todos?: unknown }).todos
   if (!Array.isArray(todos)) return null
