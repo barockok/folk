@@ -1160,6 +1160,9 @@
   flex-direction: column;
 }
 .sess-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   text-align: left;
   padding: 6px 10px;
   background: transparent;
@@ -1170,6 +1173,7 @@
   color: var(--body);
   cursor: pointer;
 }
+.sess-menu-ic { flex: 0 0 auto; opacity: 0.8; }
 .sess-menu-item:hover { background: var(--bg-sub); color: var(--heading); }
 .sess-menu-item-danger { color: var(--ruby); }
 .sess-menu-item-danger:hover { background: rgba(225, 0, 80, 0.08); color: var(--ruby); }

@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
+import { Icon } from '../../components/icons'
 import type { Session, SessionStatus } from '@shared/types'
 
 interface HistoryRailProps {
@@ -91,7 +92,16 @@ function RenameModal({ session, onClose, onSubmit }: RenameModalProps) {
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-card" role="dialog" aria-label="Rename session" onClick={(e) => e.stopPropagation()}>
+      <form
+        className="modal-card"
+        role="dialog"
+        aria-label="Rename session"
+        onClick={(e) => e.stopPropagation()}
+        onSubmit={(e) => {
+          e.preventDefault()
+          void submit()
+        }}
+      >
         <div className="modal-hd">Rename session</div>
         <input
           ref={inputRef}
@@ -100,10 +110,7 @@ function RenameModal({ session, onClose, onSubmit }: RenameModalProps) {
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault()
-              void submit()
-            } else if (e.key === 'Escape') {
+            if (e.key === 'Escape') {
               e.preventDefault()
               onClose()
             }
@@ -114,11 +121,11 @@ function RenameModal({ session, onClose, onSubmit }: RenameModalProps) {
           <button className="btn btn-plain" type="button" onClick={onClose} disabled={busy}>
             Cancel
           </button>
-          <button className="btn btn-primary" type="button" onClick={submit} disabled={busy}>
+          <button className="btn btn-primary" type="submit" disabled={busy}>
             {busy ? 'Saving…' : 'Save'}
           </button>
         </div>
-      </div>
+      </form>
     </div>
   )
 }
@@ -277,7 +284,8 @@ export function HistoryRail({
                             setRenameTarget(s)
                           }}
                         >
-                          Rename
+                          <Icon name="edit" size={13} className="sess-menu-ic" />
+                          <span>Rename</span>
                         </button>
                         <button
                           type="button"
@@ -285,7 +293,8 @@ export function HistoryRail({
                           className="sess-menu-item sess-menu-item-danger"
                           onClick={() => void handleDelete(s)}
                         >
-                          Delete
+                          <Icon name="trash" size={13} className="sess-menu-ic" />
+                          <span>Delete</span>
                         </button>
                       </div>
                     )}
