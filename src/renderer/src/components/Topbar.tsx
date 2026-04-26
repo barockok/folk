@@ -1,5 +1,6 @@
 import { Icon } from './icons'
 import { useUIStore } from '../stores/useUIStore'
+import { useSessionStore } from '../stores/useSessionStore'
 import type { PageKey } from '../stores/useUIStore'
 
 const PAGE_LABELS: Record<PageKey, string> = {
@@ -20,8 +21,16 @@ export function Topbar() {
   const setTheme = useUIStore((s) => s.setTheme)
   const density = useUIStore((s) => s.density)
   const setDensity = useUIStore((s) => s.setDensity)
+  const activeSessionTitle = useSessionStore((s) => {
+    if (!s.activeId) return null
+    const found = s.sessions.find((x) => x.id === s.activeId)
+    return found?.title ?? null
+  })
 
-  const crumbs = ['folk', PAGE_LABELS[page]]
+  const crumbs: string[] = ['folk', PAGE_LABELS[page]]
+  if (page === 'sessions' && activeSessionTitle) {
+    crumbs.push(activeSessionTitle)
+  }
 
   return (
     <header className="topbar">
