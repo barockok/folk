@@ -190,6 +190,7 @@ interface LiveSession {
 interface PendingPermission {
   resolve: (r: PermissionResult) => void
   suggestions: PermissionUpdate[] | undefined
+  input: Record<string, unknown>
 }
 
 export class AgentManager extends EventEmitter {
@@ -287,15 +288,18 @@ export class AgentManager extends EventEmitter {
           session.permissionMode === 'bypassPermissions' ? true : undefined,
         canUseTool: async (toolName, input, opts) => {
           const requestId = randomUUID()
+          const safeInput = (input ?? {}) as Record<string, unknown>
           this.#pendingPermissions.set(requestId, {
             resolve: () => {},
-            suggestions: opts.suggestions
+            suggestions: opts.suggestions,
+            input: safeInput
           })
           // Replace the placeholder resolve with the real Promise resolver.
           const result = await new Promise<PermissionResult>((resolve) => {
             this.#pendingPermissions.set(requestId, {
               resolve,
-              suggestions: opts.suggestions
+              suggestions: opts.suggestions,
+              input: safeInput
             })
             const onAbort = () => {
               if (this.#pendingPermissions.delete(requestId)) {
@@ -487,8 +491,11 @@ export class AgentManager extends EventEmitter {
     if (!pending) return
     this.#pendingPermissions.delete(response.requestId)
     if (response.behavior === 'allow') {
+      // SDK Zod schema requires `updatedInput` (record). We're not modifying
+      // the tool input — pass the original through unchanged.
       pending.resolve({
         behavior: 'allow',
+        updatedInput: pending.input,
         updatedPermissions:
           response.allowAlways && pending.suggestions ? pending.suggestions : undefined
       })

@@ -606,8 +606,14 @@ describe('AgentManager.canUseTool', () => {
     expect(req.input.file_path).toBe('/tmp/x.txt')
 
     mgr.respondPermission({ requestId: req.requestId, behavior: 'allow' })
-    const decision = await decisionP
+    const decision = (await decisionP) as {
+      behavior: 'allow'
+      updatedInput: Record<string, unknown>
+    }
     expect(decision.behavior).toBe('allow')
+    // SDK Zod schema requires updatedInput on allow; verify we forward
+    // the original tool input back unchanged.
+    expect(decision.updatedInput).toEqual({ file_path: '/tmp/x.txt' })
   })
 
   it('respondPermission(deny) resolves with the user-supplied message', async () => {
