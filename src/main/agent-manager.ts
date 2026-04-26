@@ -90,6 +90,16 @@ function mapSessionMessages(
       // Skip empty assistant entries created by subagent dispatch (all blocks
       // were nested into the parent's children list).
       if (parentToolUseId && blocks.length === 0) continue
+      // Coalesce consecutive assistant entries (the SDK splits one logical
+      // turn into many raw assistant messages — text, thinking, tool_use can
+      // arrive in separate envelopes). Live streaming already merges into one
+      // pending-assistant; mirror that here so the timeline rail isn't broken
+      // into N disconnected segments per turn.
+      const prev = out[out.length - 1]
+      if (prev && prev.role === 'assistant') {
+        prev.blocks.push(...blocks)
+        continue
+      }
       out.push({
         id: (m?.id as string) ?? entry.uuid ?? randomUUID(),
         role: 'assistant',
