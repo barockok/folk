@@ -331,14 +331,24 @@ export function Conversation({ session }: { session: Session | null }) {
   const lifecycleFiltered = visible.filter(
     (p) => !(p.m.role === 'system' && p.m.notice === 'lifecycle')
   )
-  // Find the LAST compact_boundary divider — everything before it gets folded
-  // into a single stub the user can expand on demand.
+  // Find the LAST compact boundary — either an explicit `compact_boundary`
+  // notice (live /compact during the session) OR the synthetic
+  // "This session is being continued from a previous conversation" user
+  // message the SDK replays after a restart. Everything before that gets
+  // folded into the compact stub.
   let compactIdx = -1
   for (let k = lifecycleFiltered.length - 1; k >= 0; k--) {
     const m = lifecycleFiltered[k].m
     if (m.role === 'system' && m.notice === 'compact_boundary') {
       compactIdx = k
       break
+    }
+    if (m.role === 'user') {
+      const firstText = m.blocks.find((b) => b.kind === 'text')?.text
+      if (isCompactSummary(firstText)) {
+        compactIdx = k
+        break
+      }
     }
   }
   const hiddenBefore = compactIdx > 0 && !compactExpanded ? compactIdx : 0
