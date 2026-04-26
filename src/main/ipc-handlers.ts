@@ -8,6 +8,14 @@ import { Database } from './database'
 import { AgentManager } from './agent-manager'
 import { MCPManager, MCP_TEMPLATES } from './mcp-manager'
 import { discoverCommands, discoverPlugins, discoverSkills } from './disk-discovery'
+import {
+  addMarketplaceFromDirectory,
+  addMarketplaceFromGithub,
+  listMarketplaceCatalog,
+  listMarketplaces,
+  removeMarketplace,
+  uninstallPlugin
+} from './marketplace-manager'
 import type {
   SessionConfig,
   ProviderConfig,
@@ -173,4 +181,21 @@ export function registerIpc(
       return { error: (err as Error).message }
     }
   })
+
+  ipcMain.handle('marketplaces:list', () => listMarketplaces())
+  ipcMain.handle('marketplaces:catalog', () => listMarketplaceCatalog())
+  ipcMain.handle('marketplaces:addGithub', (_e, input: string) =>
+    addMarketplaceFromGithub(input)
+  )
+  ipcMain.handle('marketplaces:addDirectory', (_e, path: string) =>
+    addMarketplaceFromDirectory(path)
+  )
+  ipcMain.handle('marketplaces:remove', (_e, name: string) => removeMarketplace(name))
+  ipcMain.handle(
+    'plugins:uninstall',
+    (
+      _e,
+      target: { name: string; marketplace: string; scope: 'user' | 'project'; projectPath?: string }
+    ) => uninstallPlugin(target)
+  )
 }

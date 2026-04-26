@@ -236,9 +236,30 @@ export interface DiscoveredPlugin {
   marketplace: string
   version: string
   scope: 'user' | 'project'
+  projectPath: string | null
   installPath: string
   description: string
   lastUpdated: string | null
+}
+
+export interface MarketplaceSummary {
+  name: string
+  description: string
+  source: { source: 'github' | 'directory' | 'url'; repo?: string; path?: string; url?: string }
+  installLocation: string
+  lastUpdated: string | null
+  pluginCount: number
+}
+
+export interface MarketplacePlugin {
+  id: string
+  marketplace: string
+  name: string
+  description: string
+  category: string
+  author: string
+  homepage: string | null
+  installed: boolean
 }
 
 export interface MCPTemplate {

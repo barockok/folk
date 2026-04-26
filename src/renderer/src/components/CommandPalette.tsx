@@ -54,7 +54,6 @@ export function CommandPalette() {
       { g: 'Go to', id: 'mcp',          label: 'MCP Servers',                icon: 'server',    action: () => nav('mcp') },
       { g: 'Go to', id: 'skills',       label: 'Skills',                     icon: 'sparkles',  action: () => nav('skills') },
       { g: 'Go to', id: 'plugins',      label: 'Plugins',                    icon: 'puzzle',    action: () => nav('plugins') },
-      { g: 'Go to', id: 'marketplace',  label: 'Marketplace',                icon: 'store',     action: () => nav('marketplace') },
       { g: 'Go to', id: 'model',        label: 'Models & Providers',         icon: 'cpu',       action: () => nav('model') },
       { g: 'Go to', id: 'keybindings',  label: 'Keybindings',               icon: 'keyboard',  action: () => nav('keybindings') },
       { g: 'Action', id: 'add-mcp',     label: 'Add a new MCP server',      icon: 'plus',

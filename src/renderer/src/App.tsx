@@ -11,7 +11,6 @@ import { MCPPage } from './pages/MCPPage'
 import { ModelPage } from './pages/ModelPage'
 import { SkillsPage } from './pages/SkillsPage'
 import { PluginsPage } from './pages/PluginsPage'
-import { MarketplacePage } from './pages/MarketplacePage'
 import { KeybindingsPage } from './pages/KeybindingsPage'
 import { ProfilePage } from './pages/ProfilePage'
 
@@ -40,7 +39,6 @@ export default function App() {
         {page === 'model' && <ModelPage />}
         {page === 'skills' && <SkillsPage />}
         {page === 'plugins' && <PluginsPage />}
-        {page === 'marketplace' && <MarketplacePage />}
         {page === 'keybindings' && <KeybindingsPage />}
         {page === 'profile' && <ProfilePage />}
       </Shell>

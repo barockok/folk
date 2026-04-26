@@ -211,6 +211,7 @@ export async function discoverPlugins(): Promise<DiscoveredPlugin[]> {
         marketplace,
         version: entry.version ?? 'unknown',
         scope: entry.scope,
+        projectPath: entry.projectPath ?? null,
         installPath: entry.installPath,
         description,
         lastUpdated: entry.lastUpdated ?? entry.installedAt ?? null

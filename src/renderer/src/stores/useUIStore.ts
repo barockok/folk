@@ -5,7 +5,6 @@ export type PageKey =
   | 'mcp'
   | 'skills'
   | 'plugins'
-  | 'marketplace'
   | 'model'
   | 'keybindings'
   | 'profile'

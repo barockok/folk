@@ -67,6 +67,16 @@ const folk: FolkAPI = {
     commands: (workingDir) => ipcRenderer.invoke('discover:commands', workingDir),
     plugins: () => ipcRenderer.invoke('discover:plugins'),
     readCommand: (path) => ipcRenderer.invoke('discover:readCommand', path)
+  },
+  marketplaces: {
+    list: () => ipcRenderer.invoke('marketplaces:list'),
+    catalog: () => ipcRenderer.invoke('marketplaces:catalog'),
+    addGithub: (input) => ipcRenderer.invoke('marketplaces:addGithub', input),
+    addDirectory: (path) => ipcRenderer.invoke('marketplaces:addDirectory', path),
+    remove: (name) => ipcRenderer.invoke('marketplaces:remove', name)
+  },
+  plugins: {
+    uninstall: (target) => ipcRenderer.invoke('plugins:uninstall', target)
   }
 }
 

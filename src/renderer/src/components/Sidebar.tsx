@@ -25,10 +25,6 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    group: 'Discover',
-    items: [{ id: 'marketplace', label: 'Marketplace', icon: 'store' }],
-  },
-  {
     group: 'Configure',
     items: [
       { id: 'model', label: 'Models', icon: 'cpu' },

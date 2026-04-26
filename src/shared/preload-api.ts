@@ -22,7 +22,9 @@ import type {
   PermissionMode,
   DiscoveredSkill,
   DiscoveredCommand,
-  DiscoveredPlugin
+  DiscoveredPlugin,
+  MarketplaceSummary,
+  MarketplacePlugin
 } from './types'
 
 export interface FolkAPI {
@@ -82,5 +84,20 @@ export interface FolkAPI {
     commands: (workingDir?: string) => Promise<DiscoveredCommand[]>
     plugins: () => Promise<DiscoveredPlugin[]>
     readCommand: (path: string) => Promise<string | { error: string }>
+  }
+  marketplaces: {
+    list: () => Promise<MarketplaceSummary[]>
+    catalog: () => Promise<MarketplacePlugin[]>
+    addGithub: (input: string) => Promise<{ ok: boolean; name?: string; error?: string }>
+    addDirectory: (path: string) => Promise<{ ok: boolean; name?: string; error?: string }>
+    remove: (name: string) => Promise<{ ok: boolean; error?: string }>
+  }
+  plugins: {
+    uninstall: (target: {
+      name: string
+      marketplace: string
+      scope: 'user' | 'project'
+      projectPath?: string
+    }) => Promise<{ ok: boolean; error?: string }>
   }
 }
