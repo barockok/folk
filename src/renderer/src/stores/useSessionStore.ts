@@ -56,6 +56,12 @@ interface SessionState {
   // indicator on the trailing assistant message even after the first deltas
   // have arrived (so the user knows more is coming).
   streamingSessions: Set<string>
+  // Latest lifecycle ticker per session (hook started, status: requesting,
+  // session ready, …). Updated as lifecycle notices arrive during a turn,
+  // cleared when the turn ends. Surfaced as a faint inline string under the
+  // live thinking dots — gives users a peek at *what* the agent is doing
+  // without taking a full divider row each time.
+  lifecycleTicker: Record<string, string>
   setSessions: (s: Session[]) => void
   upsertSession: (s: Session) => void
   removeSession: (id: string) => void
@@ -186,6 +192,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   pendingPermissions: {},
   promptSuggestions: {},
   streamingSessions: new Set<string>(),
+  lifecycleTicker: {},
   markStreaming: (sessionId) =>
     set((st) => {
       if (st.streamingSessions.has(sessionId)) return st
@@ -195,10 +202,14 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     }),
   markIdle: (sessionId) =>
     set((st) => {
-      if (!st.streamingSessions.has(sessionId)) return st
+      const ticker = { ...st.lifecycleTicker }
+      delete ticker[sessionId]
+      if (!st.streamingSessions.has(sessionId)) {
+        return { lifecycleTicker: ticker }
+      }
       const next = new Set(st.streamingSessions)
       next.delete(sessionId)
-      return { streamingSessions: next }
+      return { streamingSessions: next, lifecycleTicker: ticker }
     }),
   setSessions: (sessions) => set({ sessions }),
   upsertSession: (s) =>
@@ -343,7 +354,16 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         notice: kind,
         createdAt: Date.now()
       }
-      return { messages: { ...st.messages, [sessionId]: [...cur, notice] } }
+      const patch: Partial<SessionState> = {
+        messages: { ...st.messages, [sessionId]: [...cur, notice] }
+      }
+      // While a turn is streaming, mirror the latest lifecycle text into the
+      // ticker so the live thinking row can show "what's happening" without
+      // requiring the user to expand the lifecycle group.
+      if (kind === 'lifecycle' && text && st.streamingSessions.has(sessionId)) {
+        patch.lifecycleTicker = { ...st.lifecycleTicker, [sessionId]: text }
+      }
+      return patch as SessionState
     }),
   appendUsage: (u) =>
     set((st) => {
@@ -439,6 +459,12 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       // An errored turn is no longer streaming.
       const streaming = new Set(st.streamingSessions)
       streaming.delete(e.sessionId)
-      return { messages: { ...st.messages, [e.sessionId]: next }, streamingSessions: streaming }
+      const ticker = { ...st.lifecycleTicker }
+      delete ticker[e.sessionId]
+      return {
+        messages: { ...st.messages, [e.sessionId]: next },
+        streamingSessions: streaming,
+        lifecycleTicker: ticker
+      }
     })
 }))

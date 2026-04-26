@@ -203,6 +203,9 @@ function contentLength(messages: ReadonlyArray<{ blocks: ReadonlyArray<{ kind: s
 export function Conversation({ session }: { session: Session | null }) {
   const messages = useSessionStore((s) => (session ? s.messages[session.id] ?? EMPTY_MESSAGES : EMPTY_MESSAGES))
   const isStreaming = useSessionStore((s) => (session ? s.streamingSessions.has(session.id) : false))
+  const lifecycleTicker = useSessionStore((s) =>
+    session ? s.lifecycleTicker[session.id] ?? null : null
+  )
   const pendingPerms = useSessionStore((s) =>
     session ? s.pendingPermissions[session.id] ?? EMPTY_PERMS : EMPTY_PERMS
   )
@@ -421,6 +424,11 @@ export function Conversation({ session }: { session: Session | null }) {
                             <span className="msg-thinking-label">
                               {isLive ? 'Thinking' : 'Thought'}
                             </span>
+                            {isLive && lifecycleTicker && (
+                              <span className="msg-thinking-ticker" title={lifecycleTicker}>
+                                {lifecycleTicker}
+                              </span>
+                            )}
                             <span className="chev">▸</span>
                           </summary>
                           <div className="msg-thinking-body">{b.text}</div>
@@ -472,6 +480,11 @@ export function Conversation({ session }: { session: Session | null }) {
                     <span className="msg-thinking-label">
                       {visibleBlocks.length === 0 ? 'Thinking…' : 'Working…'}
                     </span>
+                    {lifecycleTicker && (
+                      <span className="msg-thinking-ticker" title={lifecycleTicker}>
+                        {lifecycleTicker}
+                      </span>
+                    )}
                   </div>
                 )}
                 {m.error && <div className="msg-error">{m.error.message}</div>}
