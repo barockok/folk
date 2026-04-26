@@ -306,16 +306,38 @@ export class Database {
     const rows = this.db
       .prepare(`SELECT * FROM providers ORDER BY created_at ASC`)
       .all() as Array<Record<string, unknown>>
-    return rows.map((r) => ({
-      id: r.id as string,
-      name: r.name as string,
-      apiKey: this.decryptSecret(r.api_key as Buffer),
-      authMode: ((r.auth_mode as string) ?? 'api-key') as ProviderAuthMode,
-      baseUrl: (r.base_url as string) ?? null,
-      models: JSON.parse((r.models as string) ?? '[]') as ModelConfig[],
-      isEnabled: Number(r.is_enabled ?? 0) === 1,
-      createdAt: Number(r.created_at ?? 0)
-    }))
+    const updateStmt = this.db.prepare(`UPDATE providers SET api_key = ? WHERE id = ?`)
+    return rows.map((r) => {
+      const buf = r.api_key as Buffer
+      const apiKey = this.decryptSecret(buf)
+      // One-shot migration: in dev mode, re-encrypt any row that's still
+      // wrapped in safeStorage so the next restart skips the macOS keychain
+      // prompt entirely. Detect by checking for the dev-key magic prefix.
+      if (
+        this.#useDevKey() &&
+        apiKey &&
+        buf.length > 0 &&
+        !(buf.length >= SECRET_MAGIC.length && buf.subarray(0, SECRET_MAGIC.length).equals(SECRET_MAGIC))
+      ) {
+        try {
+          const reEnc = this.encryptSecret(apiKey)
+          updateStmt.run(reEnc, r.id as string)
+        } catch {
+          // Migration failure shouldn't break listProviders — next restart
+          // will retry. Worst case: prompt continues until a re-save.
+        }
+      }
+      return {
+        id: r.id as string,
+        name: r.name as string,
+        apiKey,
+        authMode: ((r.auth_mode as string) ?? 'api-key') as ProviderAuthMode,
+        baseUrl: (r.base_url as string) ?? null,
+        models: JSON.parse((r.models as string) ?? '[]') as ModelConfig[],
+        isEnabled: Number(r.is_enabled ?? 0) === 1,
+        createdAt: Number(r.created_at ?? 0)
+      }
+    })
   }
 
   deleteProvider(id: string): void {
