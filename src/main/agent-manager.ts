@@ -203,9 +203,20 @@ interface PendingPermission {
   input: Record<string, unknown>
 }
 
+// AskUserQuestion holds canUseTool open until the user picks an option,
+// otherwise the SDK proceeds with an empty tool result and the model never
+// sees the answer. respondToolUse resolves the awaited promise.
+interface PendingAsk {
+  sessionId: string
+  toolUseId: string
+  resolve: (answer: string) => void
+  input: Record<string, unknown>
+}
+
 export class AgentManager extends EventEmitter {
   #live = new Map<string, LiveSession>()
   #pendingPermissions = new Map<string, PendingPermission>()
+  #pendingAsks = new Map<string, PendingAsk>()
   constructor(private db: Database) {
     super()
   }
@@ -297,16 +308,27 @@ export class AgentManager extends EventEmitter {
         allowDangerouslySkipPermissions:
           session.permissionMode === 'bypassPermissions' ? true : undefined,
         canUseTool: async (toolName, input, opts) => {
-          // AskUserQuestion is a client-side elicitation tool — the user's
-          // *answer* is the result. Don't gate it behind an Allow/Deny prompt;
-          // auto-allow so SDK runs the tool, the renderer renders the question
-          // form, and the user's choice gets pushed back as tool_result via
-          // respondToolUse.
+          // AskUserQuestion is a client-side elicitation tool — its result is
+          // the user's selected option. Hold canUseTool open until the user
+          // actually picks one, then resolve with allow so the SDK proceeds
+          // with the tool_result we pushed via respondToolUse.
           if (toolName === 'AskUserQuestion') {
-            return {
-              behavior: 'allow',
-              updatedInput: (input ?? {}) as Record<string, unknown>
-            }
+            const safeInput = (input ?? {}) as Record<string, unknown>
+            await new Promise<string>((resolve) => {
+              this.#pendingAsks.set(opts.toolUseID, {
+                sessionId: session.id,
+                toolUseId: opts.toolUseID,
+                resolve,
+                input: safeInput
+              })
+              const onAbort = () => {
+                if (this.#pendingAsks.delete(opts.toolUseID)) {
+                  resolve('')
+                }
+              }
+              opts.signal.addEventListener('abort', onAbort, { once: true })
+            })
+            return { behavior: 'allow', updatedInput: safeInput }
           }
           const requestId = randomUUID()
           const safeInput = (input ?? {}) as Record<string, unknown>
@@ -403,6 +425,14 @@ export class AgentManager extends EventEmitter {
     if (live.idleTimer) {
       clearTimeout(live.idleTimer)
       live.idleTimer = null
+    }
+    // Resolve any in-flight AskUserQuestion with empty answer so the canUseTool
+    // promise unblocks; the abort below will tear down the SDK side.
+    for (const [toolUseId, ask] of this.#pendingAsks) {
+      if (ask.sessionId === sessionId) {
+        this.#pendingAsks.delete(toolUseId)
+        ask.resolve('')
+      }
     }
 
     if (reason === 'cancel' || reason === 'delete') {
@@ -528,15 +558,23 @@ export class AgentManager extends EventEmitter {
     }
   }
 
-  // Reply to a client-side elicitation tool (currently AskUserQuestion) by
-  // pushing a synthetic user message that contains a tool_result block keyed
-  // to the original tool_use id. The SDK plumbs this back into the model's
-  // context so the next turn sees the answer.
+  // Reply to a client-side elicitation tool (currently AskUserQuestion). The
+  // user picked an option in the renderer; resolve the canUseTool promise
+  // (which has been blocking the SDK from proceeding), then let the SDK
+  // invoke the tool with the user's choice as the result. We also patch the
+  // local tool block so the UI flips to 'done' immediately.
   respondToolUse(sessionId: string, toolUseId: string, answer: string): void {
+    // Resolve the canUseTool promise so the SDK proceeds. SDK gets the answer
+    // back as the tool's output via the queued tool_result push below.
+    const ask = this.#pendingAsks.get(toolUseId)
+    if (ask) {
+      this.#pendingAsks.delete(toolUseId)
+      ask.resolve(answer)
+    }
     const live = this.#live.get(sessionId)
     if (!live) return
-    // Drop any stray permission request for this tool — AskUserQuestion is
-    // auto-allowed, but a pre-fix queued one might still be hanging around.
+    // Drop any stray permission request for the same tool — AskUserQuestion
+    // is never gated by Allow/Deny.
     for (const [reqId, pending] of this.#pendingPermissions) {
       if ((pending as { toolUseId?: string }).toolUseId === toolUseId) {
         this.#pendingPermissions.delete(reqId)
@@ -548,7 +586,6 @@ export class AgentManager extends EventEmitter {
       parent_tool_use_id: null,
       isSynthetic: true,
       priority: 'now',
-      // tool_use_result mirrors the answer for SDKs that consume it directly.
       tool_use_result: { tool_use_id: toolUseId, content: answer },
       message: {
         role: 'user',
@@ -561,8 +598,6 @@ export class AgentManager extends EventEmitter {
         ] as unknown as never
       }
     })
-    // Also patch the local tool block immediately so the UI flips to "done"
-    // without waiting for the SDK's echo-back tool_result envelope.
     this.emit('toolResult', {
       sessionId,
       callId: toolUseId,
