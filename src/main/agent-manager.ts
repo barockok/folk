@@ -535,10 +535,21 @@ export class AgentManager extends EventEmitter {
   respondToolUse(sessionId: string, toolUseId: string, answer: string): void {
     const live = this.#live.get(sessionId)
     if (!live) return
+    // Drop any stray permission request for this tool — AskUserQuestion is
+    // auto-allowed, but a pre-fix queued one might still be hanging around.
+    for (const [reqId, pending] of this.#pendingPermissions) {
+      if ((pending as { toolUseId?: string }).toolUseId === toolUseId) {
+        this.#pendingPermissions.delete(reqId)
+      }
+    }
     live.push({
       type: 'user',
       session_id: sessionId,
       parent_tool_use_id: null,
+      isSynthetic: true,
+      priority: 'now',
+      // tool_use_result mirrors the answer for SDKs that consume it directly.
+      tool_use_result: { tool_use_id: toolUseId, content: answer },
       message: {
         role: 'user',
         content: [
@@ -549,6 +560,14 @@ export class AgentManager extends EventEmitter {
           }
         ] as unknown as never
       }
+    })
+    // Also patch the local tool block immediately so the UI flips to "done"
+    // without waiting for the SDK's echo-back tool_result envelope.
+    this.emit('toolResult', {
+      sessionId,
+      callId: toolUseId,
+      output: answer,
+      isError: false
     })
   }
 

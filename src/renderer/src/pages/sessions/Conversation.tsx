@@ -511,9 +511,14 @@ export function Conversation({ session }: { session: Session | null }) {
                       )
                     }
                     if (b.kind === 'tool') {
-                      const matchingPerms = pendingPerms.filter(
-                        (pr) => pr.toolUseID === b.call.callId
-                      )
+                      // AskUserQuestion is auto-allowed (it's an elicitation
+                      // tool, not a privileged op) — never render an
+                      // Allow/Deny prompt for it, even if a stale request
+                      // landed in the store before this auto-allow shipped.
+                      const matchingPerms =
+                        b.call.tool === 'AskUserQuestion'
+                          ? []
+                          : pendingPerms.filter((pr) => pr.toolUseID === b.call.callId)
                       return (
                         <div key={key} className="msg-tools">
                           <ToolCard call={b.call} sessionId={session.id} />
@@ -543,7 +548,9 @@ export function Conversation({ session }: { session: Session | null }) {
                       if (b.kind === 'tool') collectCallIds(b.call, renderedIds)
                     }
                     const orphans = pendingPerms.filter(
-                      (pr) => !renderedIds.has(pr.toolUseID)
+                      (pr) =>
+                        !renderedIds.has(pr.toolUseID) &&
+                        pr.toolName !== 'AskUserQuestion'
                     )
                     return orphans.map((pr) => (
                       <PermissionPrompt key={pr.requestId} req={pr} />
