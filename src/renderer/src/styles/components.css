@@ -827,11 +827,10 @@
 /* Provider manager */
 .prov-tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 4px;
   border-bottom: var(--hair) solid var(--border);
   margin-bottom: 16px;
-  overflow-x: auto;
-  scrollbar-width: thin;
 }
 .prov-tab {
   display: inline-flex; align-items: center; gap: 8px;
