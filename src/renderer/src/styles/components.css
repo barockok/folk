@@ -2078,6 +2078,14 @@
   border-radius: 50%;
   background: var(--stripe-purple);
 }
+.ask-other {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+.ask-other-input {
+  flex: 1;
+}
 .tool-srv {
   flex: 1;
   min-width: 0;

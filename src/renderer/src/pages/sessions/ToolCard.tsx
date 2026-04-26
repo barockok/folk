@@ -47,6 +47,8 @@ function extractAskUserQuestion(input: unknown): AskUserQuestionInput | null {
   return { questions: out }
 }
 
+const isOtherLabel = (label: string): boolean => label.trim().toLowerCase() === 'other'
+
 function AskUserQuestionCard({
   call,
   sessionId
@@ -60,9 +62,23 @@ function AskUserQuestionCard({
   const [answers, setAnswers] = useState<Array<string | null>>(() =>
     parsed ? parsed.questions.map(() => null) : []
   )
+  // For each question, the free-text fallback when the user picked "Other".
+  const [otherText, setOtherText] = useState<string[]>(() =>
+    parsed ? parsed.questions.map(() => '') : []
+  )
   if (!parsed) return null
   const answered = submitted || call.output !== undefined
-  const allPicked = answers.every((a) => a !== null)
+
+  const effectiveAnswer = (qi: number): string | null => {
+    const a = answers[qi]
+    if (a === null) return null
+    if (isOtherLabel(a)) {
+      const t = otherText[qi]?.trim()
+      return t ? t : null
+    }
+    return a
+  }
+  const allPicked = answers.every((a, i) => effectiveAnswer(i) !== null)
 
   const pick = (qi: number, label: string) => {
     if (answered || busy) return
@@ -72,21 +88,26 @@ function AskUserQuestionCard({
       return next
     })
   }
+  const setOther = (qi: number, value: string) => {
+    if (answered || busy) return
+    setOtherText((prev) => {
+      const next = [...prev]
+      next[qi] = value
+      return next
+    })
+  }
 
   const submit = async () => {
     if (busy || answered || !sessionId || !allPicked) return
     setBusy(true)
     try {
-      // For a single question, send just the label so the model reads it
-      // verbatim. For multi-question, send a numbered list keyed by header
-      // (or the question if no header) so the model can match each answer.
       const payload =
         parsed.questions.length === 1
-          ? answers[0]!
+          ? effectiveAnswer(0)!
           : parsed.questions
               .map((q, i) => {
                 const tag = q.header || q.question
-                return `${i + 1}. ${tag}: ${answers[i]}`
+                return `${i + 1}. ${tag}: ${effectiveAnswer(i)}`
               })
               .join('\n')
       await window.folk.agent.respondToolUse(sessionId, call.callId, payload)
@@ -102,7 +123,9 @@ function AskUserQuestionCard({
 
   const onPick = async (qi: number, label: string) => {
     pick(qi, label)
-    if (autoSubmitOnPick && sessionId && !answered && !busy) {
+    // "Other" requires a free-text fallback — never auto-submit on Other,
+    // wait for the user to type something then explicitly submit.
+    if (autoSubmitOnPick && !isOtherLabel(label) && sessionId && !answered && !busy) {
       setBusy(true)
       try {
         await window.folk.agent.respondToolUse(sessionId, call.callId, label)
@@ -127,6 +150,9 @@ function AskUserQuestionCard({
 
   if (autoSubmitOnPick) {
     const q = parsed.questions[0]
+    const otherSelected = answers[0] !== null && isOtherLabel(answers[0])
+    const canSubmitOther =
+      otherSelected && !answered && !busy && (otherText[0]?.trim()?.length ?? 0) > 0
     return (
       <div className={`tool-card ask-card ${answered ? 'done' : 'running'}`}>
         <div className="ask-head">
@@ -156,6 +182,33 @@ function AskUserQuestionCard({
               )
             })}
           </div>
+          {otherSelected && (
+            <div className="ask-other">
+              <input
+                type="text"
+                className="input ask-other-input"
+                placeholder="Type your custom answer…"
+                value={otherText[0] ?? ''}
+                disabled={answered || busy}
+                onChange={(e) => setOther(0, e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && canSubmitOther) {
+                    e.preventDefault()
+                    void submit()
+                  }
+                }}
+                autoFocus
+              />
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                disabled={!canSubmitOther}
+                onClick={submit}
+              >
+                {busy ? 'Submitting…' : 'Submit'}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     )
@@ -211,6 +264,19 @@ function AskUserQuestionCard({
             )
           })}
         </div>
+        {answers[activeTab] !== null && isOtherLabel(answers[activeTab]!) && (
+          <div className="ask-other">
+            <input
+              type="text"
+              className="input ask-other-input"
+              placeholder="Type your custom answer…"
+              value={otherText[activeTab] ?? ''}
+              disabled={answered || busy}
+              onChange={(e) => setOther(activeTab, e.target.value)}
+              autoFocus
+            />
+          </div>
+        )}
       </div>
       {!answered && (
         <div className="ask-foot">
