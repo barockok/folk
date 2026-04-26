@@ -191,7 +191,7 @@ export interface AgentUsage {
 // limits, ad-hoc info dumps from /cost / /status).
 export interface AgentNotice {
   sessionId: string
-  kind: 'compact_boundary' | 'api_retry' | 'rate_limit' | 'info'
+  kind: 'compact_boundary' | 'api_retry' | 'rate_limit' | 'info' | 'lifecycle'
   text?: string
 }
 

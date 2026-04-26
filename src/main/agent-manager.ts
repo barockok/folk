@@ -808,7 +808,7 @@ export class AgentManager extends EventEmitter {
         const mcps = (x.mcp_servers ?? []).length
         this.emit('notice', {
           sessionId,
-          kind: 'info',
+          kind: 'lifecycle',
           text: `Session ready · model ${x.model ?? '?'} · ${tools} tools · ${mcps} MCP server(s)`
         })
         return
@@ -825,7 +825,7 @@ export class AgentManager extends EventEmitter {
           : ''
         this.emit('notice', {
           sessionId,
-          kind: 'info',
+          kind: 'lifecycle',
           text: `Status: ${x.status}${extra}`
         })
         return
@@ -834,7 +834,7 @@ export class AgentManager extends EventEmitter {
         const x = r as { isAuthenticating?: boolean; error?: string }
         this.emit('notice', {
           sessionId,
-          kind: 'info',
+          kind: 'lifecycle',
           text: `Auth ${x.isAuthenticating ? 'in progress' : 'updated'}${
             x.error ? ` · ${x.error}` : ''
           }`
@@ -845,7 +845,7 @@ export class AgentManager extends EventEmitter {
         const x = r as { mcp_server_name?: string }
         this.emit('notice', {
           sessionId,
-          kind: 'info',
+          kind: 'lifecycle',
           text: `Elicitation complete${x.mcp_server_name ? ` (${x.mcp_server_name})` : ''}`
         })
         return
@@ -860,7 +860,7 @@ export class AgentManager extends EventEmitter {
         if (ok === 0 && failed === 0) return
         this.emit('notice', {
           sessionId,
-          kind: 'info',
+          kind: 'lifecycle',
           text: `Persisted ${ok} file(s)${failed ? `, ${failed} failed` : ''}`
         })
         return
@@ -869,7 +869,7 @@ export class AgentManager extends EventEmitter {
         const x = r as { hook_name?: string; hook_event?: string }
         this.emit('notice', {
           sessionId,
-          kind: 'info',
+          kind: 'lifecycle',
           text: `Hook ${x.hook_name ?? '?'} started (${x.hook_event ?? '?'})`
         })
         return
@@ -878,7 +878,7 @@ export class AgentManager extends EventEmitter {
         const x = r as { hook_name?: string }
         this.emit('notice', {
           sessionId,
-          kind: 'info',
+          kind: 'lifecycle',
           text: `Hook ${x.hook_name ?? '?'} progress`
         })
         return
@@ -891,7 +891,7 @@ export class AgentManager extends EventEmitter {
         }
         this.emit('notice', {
           sessionId,
-          kind: 'info',
+          kind: 'lifecycle',
           text: `Hook ${x.hook_name ?? '?'} ${x.outcome ?? 'done'}${
             x.exit_code != null ? ` (exit ${x.exit_code})` : ''
           }`
@@ -914,7 +914,7 @@ export class AgentManager extends EventEmitter {
         if (n === 0) return
         this.emit('notice', {
           sessionId,
-          kind: 'info',
+          kind: 'lifecycle',
           text: `Recalled ${n} ${x.mode === 'synthesize' ? 'memory synthesis' : 'memories'}`
         })
         return
@@ -923,7 +923,7 @@ export class AgentManager extends EventEmitter {
         const x = r as { error?: string }
         this.emit('notice', {
           sessionId,
-          kind: 'info',
+          kind: 'lifecycle',
           text: `Mirror error: ${x.error ?? 'unknown'}`
         })
         return
@@ -933,7 +933,7 @@ export class AgentManager extends EventEmitter {
         if (!x.text) return
         this.emit('notice', {
           sessionId,
-          kind: 'info',
+          kind: 'lifecycle',
           text: x.priority && x.priority !== 'low' ? `[${x.priority}] ${x.text}` : x.text
         })
         return
@@ -942,7 +942,7 @@ export class AgentManager extends EventEmitter {
         const x = r as { status?: string; name?: string; error?: string }
         this.emit('notice', {
           sessionId,
-          kind: 'info',
+          kind: 'lifecycle',
           text: `Plugin install: ${x.status ?? '?'}${x.name ? ` ${x.name}` : ''}${
             x.error ? ` — ${x.error}` : ''
           }`
@@ -972,7 +972,7 @@ export class AgentManager extends EventEmitter {
         // SDK additions without crashing.
         this.emit('notice', {
           sessionId,
-          kind: 'info',
+          kind: 'lifecycle',
           text: `Event: system/${sub}`
         })
         return

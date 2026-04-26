@@ -387,7 +387,7 @@ describe('AgentManager.#dispatchSystem — every system subtype', () => {
       mcp_servers: [{ name: 'x' }],
       model: 'claude-sonnet-4-5'
     })
-    const n = ns.find((x) => x.kind === 'info' && x.text?.includes('Session ready'))
+    const n = ns.find((x) => x.kind === 'lifecycle' && x.text?.includes('Session ready'))
     expect(n).toBeTruthy()
     expect(n!.text).toMatch(/2 tools/)
     expect(n!.text).toMatch(/claude-sonnet-4-5/)
