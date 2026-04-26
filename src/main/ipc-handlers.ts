@@ -68,6 +68,9 @@ export function registerIpc(
     'sessions:setPermissionMode',
     (_e, id: string, mode: PermissionMode) => agent.setPermissionMode(id, mode)
   )
+  ipcMain.handle('sessions:setModel', (_e, id: string, modelId: string) =>
+    agent.setModel(id, modelId)
+  )
 
   ipcMain.handle(
     'agent:sendMessage',

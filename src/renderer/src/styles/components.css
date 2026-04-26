@@ -2380,6 +2380,12 @@
   display: flex; align-items: center; gap: 10px;
   padding: 7px 10px;
   border-radius: 4px;
+  border: 0;
+  background: transparent;
+  width: 100%;
+  box-sizing: border-box;
+  text-align: left;
+  font-family: var(--ff-sans);
   cursor: pointer;
   font-size: 13px;
   color: var(--heading);
@@ -2601,25 +2607,43 @@
    ============================================================ */
 .composer { position: relative; }
 .composer.is-dragging .composer-inner {
-  border-color: var(--stripe-purple);
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--stripe-purple) 20%, transparent);
+  border-color: color-mix(in oklab, var(--stripe-purple) 60%, var(--border));
 }
 
-.composer-drop {
-  position: absolute; inset: 0;
-  z-index: 4;
+.composer-drop-zone {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px 8px 0 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-sub);
+  transition: background 160ms, border-color 160ms;
   pointer-events: none;
-  display: grid; place-items: center;
-  border-radius: var(--r);
-  background: color-mix(in oklab, var(--stripe-purple) 10%, color-mix(in oklab, var(--bg-card) 85%, transparent));
-  backdrop-filter: blur(4px);
-  border: 2px dashed color-mix(in oklab, var(--stripe-purple) 60%, transparent);
-  animation: ob-pop 140ms cubic-bezier(.2,.8,.2,1);
+  padding: 8px 10px;
+}
+.composer-drop-zone.has-atts {
+  justify-content: flex-start;
+}
+.composer-drop-zone.active {
+  min-height: 96px;
+  justify-content: center;
+  align-items: center;
+  border-bottom: 2px dashed color-mix(in oklab, var(--stripe-purple) 60%, transparent);
+  background: color-mix(in oklab, var(--stripe-purple) 10%, transparent);
+  padding: 12px;
+}
+.composer-drop-zone.active .composer-drop-inner {
+  width: 100%;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
 }
 .composer-drop-inner {
   text-align: center;
   color: var(--stripe-purple);
-  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  pointer-events: none;
+  animation: ob-pop 140ms cubic-bezier(.2,.8,.2,1);
 }
 .composer-drop-title {
   font-size: 14px; font-weight: 500;
@@ -2632,7 +2656,8 @@
 
 .composer-atts {
   display: flex; flex-wrap: wrap; gap: 6px;
-  padding: 8px 10px 0;
+  width: 100%;
+  pointer-events: auto;
 }
 .msg-atts {
   display: flex; flex-wrap: wrap; gap: 6px;

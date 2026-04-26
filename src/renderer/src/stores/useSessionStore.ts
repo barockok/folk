@@ -354,8 +354,19 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         notice: kind,
         createdAt: Date.now()
       }
+      // Coalesce successive api_retry / rate_limit notices: replace the most
+      // recent same-kind system notice instead of stacking, so the timeline
+      // shows a single "API RETRY 6/10..." row that updates in place.
+      let nextMessages: ChatMessage[]
+      const coalesce = kind === 'api_retry' || kind === 'rate_limit'
+      const last = cur[cur.length - 1]
+      if (coalesce && last && last.role === 'system' && last.notice === kind) {
+        nextMessages = [...cur.slice(0, -1), { ...notice, id: last.id }]
+      } else {
+        nextMessages = [...cur, notice]
+      }
       const patch: Partial<SessionState> = {
-        messages: { ...st.messages, [sessionId]: [...cur, notice] }
+        messages: { ...st.messages, [sessionId]: nextMessages }
       }
       // While a turn is streaming, mirror the latest lifecycle text into the
       // ticker so the live thinking row can show "what's happening" without

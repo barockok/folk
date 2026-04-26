@@ -15,27 +15,6 @@ export interface SessionSetupProps {
 
 type PermMode = 'ask' | 'skip'
 
-type GoalId = 'general' | 'code' | 'research' | 'data' | 'writing' | 'ops'
-
-interface GoalOption {
-  id: GoalId
-  label: string
-  hint: string
-}
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-const GOALS: GoalOption[] = [
-  { id: 'general', label: 'General', hint: 'Open-ended assistance' },
-  { id: 'code', label: 'Code', hint: 'Write, review, or debug code' },
-  { id: 'research', label: 'Research', hint: 'Explore a topic or codebase' },
-  { id: 'data', label: 'Data', hint: 'Analyse, transform, or visualise data' },
-  { id: 'writing', label: 'Writing', hint: 'Docs, copy, or structured text' },
-  { id: 'ops', label: 'Ops', hint: 'Infra, scripts, or automation' },
-]
-
 // ---------------------------------------------------------------------------
 // Command preview builder
 // ---------------------------------------------------------------------------
@@ -125,7 +104,6 @@ export function SessionSetup({ onLaunch, onCancel }: SessionSetupProps) {
   const [selectedModelId, setSelectedModelId] = useState<string>(
     enabledModels[0]?.id ?? ''
   )
-  const [goal, setGoal] = useState<GoalId | null>(null)
   const [advOpen, setAdvOpen] = useState(false)
   const [permMode, setPermMode] = useState<PermMode>('ask')
   const [yoloAck, setYoloAck] = useState(false)
@@ -172,7 +150,6 @@ export function SessionSetup({ onLaunch, onCancel }: SessionSetupProps) {
       await onLaunch({
         modelId: selectedModelId,
         workingDir: folder.trim(),
-        goal: goal ?? undefined,
         flags: flags.length ? flags.join(' ') : undefined,
         permissionMode: permMode === 'skip' ? 'bypassPermissions' : 'default'
       })
@@ -290,29 +267,6 @@ export function SessionSetup({ onLaunch, onCancel }: SessionSetupProps) {
                 )
               })()
             )}
-          </div>
-
-          {/* ----------------------------------------------------------------
-              Section 3: Goal picker
-          ---------------------------------------------------------------- */}
-          <div>
-            <SectionLabel>What are you doing? <span style={{ fontFamily: 'var(--ff-sans)', textTransform: 'none', letterSpacing: 0, color: 'var(--fg-faint)', fontSize: '10px' }}>(optional)</span></SectionLabel>
-            <div className="ss-goal-grid">
-              {GOALS.map((g) => (
-                <button
-                  key={g.id}
-                  type="button"
-                  className={`ss-goal${goal === g.id ? ' on' : ''}`}
-                  onClick={() => setGoal(goal === g.id ? null : g.id)}
-                >
-                  <div className="ss-goal-dot" />
-                  <div>
-                    <span className="ss-goal-label">{g.label}</span>
-                    <span className="ss-goal-hint">{g.hint}</span>
-                  </div>
-                </button>
-              ))}
-            </div>
           </div>
 
           {/* ----------------------------------------------------------------

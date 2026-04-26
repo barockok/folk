@@ -1,4 +1,7 @@
 import { EventEmitter } from 'node:events'
+import { promises as fs } from 'node:fs'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import { query, AbortError, getSessionMessages } from '@anthropic-ai/claude-agent-sdk'
 import type {
   McpServerConfig,
@@ -297,6 +300,13 @@ export class AgentManager extends EventEmitter {
         mcpServers: mcpMap,
         abortController: abort,
         includePartialMessages: true,
+        stderr: (data: string) => {
+          // Surface SDK CLI stderr to the electron main log so failures like
+          // "process exited with code 1" stop being opaque. Trim trailing
+          // newlines so each chunk is one log line.
+          const t = data.replace(/\s+$/, '')
+          if (t) console.error(`[claude-cli ${session.id}] ${t}`)
+        },
         systemPrompt: {
           type: 'preset',
           preset: 'claude_code',
@@ -551,6 +561,18 @@ export class AgentManager extends EventEmitter {
     return this.db.getSession(id)!
   }
 
+  async setModel(id: string, modelId: string): Promise<Session> {
+    const existing = this.db.getSession(id)
+    if (!existing) throw new Error(`session ${id} not found`)
+    // Validate provider exists for the new model — bail before tearing down.
+    this.#resolveProvider(modelId)
+    if (this.#live.has(id)) {
+      await this.#teardown(id, 'cancel')
+    }
+    this.db.updateSession(id, { modelId })
+    return this.db.getSession(id)!
+  }
+
   dispose(): void {
     const ids = [...this.#live.keys()]
     void Promise.all(ids.map((id) => this.#teardown(id, 'dispose')))
@@ -612,8 +634,90 @@ export class AgentManager extends EventEmitter {
   }
 
   async cancel(sessionId: string): Promise<void> {
+    const session = this.db.getSession(sessionId)
     await this.#teardown(sessionId, 'cancel')
     this.db.updateSession(sessionId, { status: 'cancelled' })
+    // Aborting mid-tool can leave assistant tool_use blocks without matching
+    // user tool_result blocks in the on-disk transcript — Anthropic's API then
+    // 400s on the next resume turn, surfacing as "Process exited with code 1".
+    // Scrub by appending synthetic cancelled-tool_results so the transcript is
+    // balanced before the next resume.
+    if (session) await this.#balanceCancelledToolUses(session).catch(() => {})
+  }
+
+  async #balanceCancelledToolUses(session: Session): Promise<void> {
+    const projDir = session.workingDir.replace(/\//g, '-')
+    const file = join(homedir(), '.claude', 'projects', projDir, `${session.id}.jsonl`)
+    let raw: string
+    try {
+      raw = await fs.readFile(file, 'utf-8')
+    } catch {
+      return
+    }
+    const lines = raw.split('\n').filter((l) => l.trim().length > 0)
+    const pending = new Map<string, string | null>() // tool_use_id → parent uuid
+    let lastUuid: string | null = null
+    for (const line of lines) {
+      let obj: Record<string, unknown>
+      try {
+        obj = JSON.parse(line)
+      } catch {
+        continue
+      }
+      const uuid = typeof obj.uuid === 'string' ? obj.uuid : null
+      if (uuid) lastUuid = uuid
+      const message = obj.message as { content?: unknown } | undefined
+      const content = message?.content
+      if (!Array.isArray(content)) continue
+      if (obj.type === 'assistant') {
+        for (const blk of content) {
+          const b = blk as { type?: string; id?: string }
+          if (b?.type === 'tool_use' && typeof b.id === 'string') {
+            pending.set(b.id, uuid)
+          }
+        }
+      } else if (obj.type === 'user') {
+        for (const blk of content) {
+          const b = blk as { type?: string; tool_use_id?: string }
+          if (b?.type === 'tool_result' && typeof b.tool_use_id === 'string') {
+            pending.delete(b.tool_use_id)
+          }
+        }
+      }
+    }
+    if (pending.size === 0) return
+    const ts = new Date().toISOString()
+    const appends: string[] = []
+    let parentUuid = lastUuid
+    for (const [toolUseId, originUuid] of pending) {
+      const uuid = randomUUID()
+      const entry = {
+        parentUuid,
+        isSidechain: false,
+        type: 'user',
+        message: {
+          role: 'user',
+          content: [
+            {
+              type: 'tool_result',
+              tool_use_id: toolUseId,
+              content: 'Cancelled by user.',
+              is_error: true
+            }
+          ]
+        },
+        uuid,
+        timestamp: ts,
+        sourceToolAssistantUUID: originUuid ?? undefined,
+        userType: 'external',
+        entrypoint: 'cli',
+        cwd: session.workingDir,
+        sessionId: session.id
+      }
+      appends.push(JSON.stringify(entry))
+      parentUuid = uuid
+    }
+    await fs.appendFile(file, appends.join('\n') + '\n', 'utf-8')
   }
 
   async sendMessage(
@@ -639,10 +743,31 @@ export class AgentManager extends EventEmitter {
     // child process. #ensureLive resolves it again internally for env build.
     this.#resolveProvider(session.modelId)
 
+    try {
+      await this.#sendOnce(session, text)
+    } catch (err) {
+      const msg = (err as Error)?.message ?? ''
+      // The bundled Claude Code CLI keeps a per-session lock; if the prior
+      // process hadn't fully released it (common right after a cancel), the
+      // new spawn dies with this exact line on stderr and exits code 1.
+      // Recover transparently: tear down any live state, wait for the lock
+      // to clear, retry once.
+      const lockTaken = /is already in use/i.test(msg)
+      const exit1 = /exited with code 1/i.test(msg)
+      if (!(lockTaken || exit1)) throw err
+      if (this.#live.has(sessionId)) await this.#teardown(sessionId, 'cancel')
+      await new Promise((r) => setTimeout(r, 600))
+      const refreshed = this.db.getSession(sessionId)
+      if (!refreshed) throw err
+      await this.#sendOnce(refreshed, text)
+    }
+  }
+
+  async #sendOnce(session: Session, text: string): Promise<void> {
     // LRU eviction: if we're at the cap and this session isn't already live,
     // evict the oldest live session. Fire-and-forget — the dying session
     // tears down in the background while we lazy-start the new one.
-    if (!this.#live.has(sessionId) && this.#live.size >= MAX_LIVE) {
+    if (!this.#live.has(session.id) && this.#live.size >= MAX_LIVE) {
       let lruId: string | null = null
       let lruAt = Infinity
       for (const [id, ls] of this.#live) {
@@ -661,7 +786,7 @@ export class AgentManager extends EventEmitter {
       clearTimeout(live.idleTimer)
       live.idleTimer = null
     }
-    this.db.updateSession(sessionId, { status: 'running' })
+    this.db.updateSession(session.id, { status: 'running' })
 
     return new Promise<void>((resolve, reject) => {
       live.turnDone = () => {

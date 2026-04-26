@@ -33,6 +33,7 @@ export interface FolkAPI {
     delete: (id: string) => Promise<void>
     loadMessages: (id: string) => Promise<PersistedMessage[]>
     setPermissionMode: (id: string, mode: PermissionMode) => Promise<Session>
+    setModel: (id: string, modelId: string) => Promise<Session>
     backfillTitle: (id: string) => Promise<Session | null>
     rename: (id: string, title: string) => Promise<Session>
   }

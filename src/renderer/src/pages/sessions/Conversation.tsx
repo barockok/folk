@@ -295,9 +295,23 @@ export function Conversation({ session }: { session: Session | null }) {
     // them out of the inline transcript so the convo stays narrative.
     const stripTodos = (b: MessageBlock): boolean =>
       !(b.kind === 'tool' && b.call.tool === 'TodoWrite')
-    const visibleBlocks = isStreamingThought
-      ? m.blocks.filter(stripTodos)
-      : m.blocks.filter((b) => b.kind !== 'thinking' && stripTodos(b))
+    // Empty text blocks (zero-length / whitespace) are SDK plumbing artefacts
+    // that would otherwise break consecutive-tool coalescing. Drop them so a
+    // tool→empty-text→tool sequence merges into one group.
+    const isMeaningful = (b: MessageBlock): boolean =>
+      !(b.kind === 'text' && b.text.trim().length === 0)
+    // Thinking is ephemeral once superseded — keep it ONLY when it's the
+    // trailing block of this message AND this is the last rendered message
+    // (i.e. live "what model is thinking now"). Mid-message thinking gets
+    // filtered so consecutive tool batches can coalesce across it.
+    const lastBlockIdx = m.blocks.length - 1
+    const visibleBlocks = m.blocks.filter((b, idx) => {
+      if (!stripTodos(b) || !isMeaningful(b)) return false
+      if (b.kind === 'thinking') {
+        return isLast && idx === lastBlockIdx
+      }
+      return true
+    })
     // The trailing assistant message of an in-flight turn shows a "still
     // working" indicator BETWEEN deltas. Suppress it ONLY when something is
     // *currently* animating progress: the live thinking block (last block,
@@ -402,11 +416,11 @@ export function Conversation({ session }: { session: Session | null }) {
           }
           const prev = i > 0 ? items[i - 1].m : null
           const next = i < items.length - 1 ? items[i + 1].m : null
+          // Timeline breaks at every role transition — each new turn (user
+          // start or assistant start) gets a fresh avatar with no rail above.
+          // Within a same-role run, rail stays connected.
           const continuation = prev != null && prev.role !== 'system' && prev.role === m.role
-          // Render the rail stub whenever there's *any* next non-system
-          // message, not just same-role — keeps the timeline connected
-          // across user/assistant alternation.
-          const continuesBelow = next != null && next.role !== 'system'
+          const continuesBelow = next != null && next.role !== 'system' && next.role === m.role
           return (
             <article
               key={m.id}
