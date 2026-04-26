@@ -7,7 +7,7 @@ import { SessionSetup } from '../onboarding/SessionSetup'
 import type { SessionConfig } from '@shared/types'
 
 export function SessionsPage() {
-  const { sessions, activeId, setActive, create, delete: del, send, cancel } = useSessions()
+  const { sessions, activeId, setActive, create, delete: del, rename, send, cancel } = useSessions()
   const active = sessions.find((s) => s.id === activeId) ?? null
   const [needsSetup, setNeedsSetup] = useState(false)
 
@@ -23,6 +23,7 @@ export function SessionsPage() {
         activeId={activeId}
         onPick={(id) => { setActive(id); setNeedsSetup(false) }}
         onDelete={del}
+        onRename={async (id, title) => { await rename(id, title) }}
         onNew={() => { setActive(null); setNeedsSetup(true) }}
       />
       <div className="sess-main">

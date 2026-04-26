@@ -1106,6 +1106,7 @@
   padding: 12px 10px 4px; font-family: var(--ff-mono);
 }
 .sess-item {
+  position: relative;
   padding: 9px 10px;
   border-radius: var(--r);
   cursor: default;
@@ -1113,6 +1114,46 @@
   flex-direction: column;
   gap: 3px;
   border: var(--hair) solid transparent;
+}
+.sess-actions {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 120ms;
+}
+.sess-item:hover .sess-actions,
+.sess-item:focus-within .sess-actions { opacity: 1; }
+.sess-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--fg-faint);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.sess-action:hover {
+  background: var(--bg-sub);
+  border-color: var(--border);
+  color: var(--heading);
+}
+.sess-action:disabled { opacity: 0.5; cursor: default; }
+.sess-action-danger:hover { color: var(--ruby); border-color: var(--ruby); }
+.sess-rename-input {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 2px 6px;
 }
 .sess-item:hover { background: var(--bg-card); }
 .sess-item.on {

@@ -49,6 +49,11 @@ export function useSessions() {
       await window.folk.sessions.delete(id)
       removeSession(id)
     },
+    async rename(id: string, title: string) {
+      const updated = await window.folk.sessions.rename(id, title)
+      upsertSession(updated)
+      return updated
+    },
     async send(sessionId: string, text: string, attachments?: Attachment[]) {
       const st = useSessionStore.getState()
       st.pushUserMessage(sessionId, text)

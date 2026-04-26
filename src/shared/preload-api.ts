@@ -34,6 +34,7 @@ export interface FolkAPI {
     loadMessages: (id: string) => Promise<PersistedMessage[]>
     setPermissionMode: (id: string, mode: PermissionMode) => Promise<Session>
     backfillTitle: (id: string) => Promise<Session | null>
+    rename: (id: string, title: string) => Promise<Session>
   }
   agent: {
     sendMessage: (sessionId: string, text: string, attachments?: Attachment[]) => Promise<void>

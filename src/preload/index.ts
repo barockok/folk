@@ -16,7 +16,8 @@ const folk: FolkAPI = {
     delete: (id) => ipcRenderer.invoke('sessions:delete', id),
     loadMessages: (id) => ipcRenderer.invoke('sessions:loadMessages', id),
     setPermissionMode: (id, mode) => ipcRenderer.invoke('sessions:setPermissionMode', id, mode),
-    backfillTitle: (id) => ipcRenderer.invoke('sessions:backfillTitle', id)
+    backfillTitle: (id) => ipcRenderer.invoke('sessions:backfillTitle', id),
+    rename: (id, title) => ipcRenderer.invoke('sessions:rename', id, title)
   },
   agent: {
     sendMessage: (sessionId, text, attachments) =>

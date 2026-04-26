@@ -529,6 +529,15 @@ export class AgentManager extends EventEmitter {
 
   // Update the persisted permissionMode and tear down the live SDK session so
   // the next turn picks up the new mode (the SDK reads it at session init).
+  renameSession(id: string, title: string): Session {
+    const existing = this.db.getSession(id)
+    if (!existing) throw new Error(`session ${id} not found`)
+    const trimmed = title.trim()
+    if (!trimmed) throw new Error('title cannot be empty')
+    this.db.updateSession(id, { title: trimmed })
+    return this.db.getSession(id)!
+  }
+
   async setPermissionMode(
     id: string,
     mode: import('@shared/types').PermissionMode

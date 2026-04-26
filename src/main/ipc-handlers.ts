@@ -61,6 +61,9 @@ export function registerIpc(
   ipcMain.handle('sessions:delete', (_e, id: string) => agent.deleteSession(id))
   ipcMain.handle('sessions:loadMessages', (_e, id: string) => agent.loadMessages(id))
   ipcMain.handle('sessions:backfillTitle', (_e, id: string) => agent.backfillTitle(id))
+  ipcMain.handle('sessions:rename', (_e, id: string, title: string) =>
+    agent.renameSession(id, title)
+  )
   ipcMain.handle(
     'sessions:setPermissionMode',
     (_e, id: string, mode: PermissionMode) => agent.setPermissionMode(id, mode)

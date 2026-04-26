@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import type { Session, SessionStatus } from '@shared/types'
 
 interface HistoryRailProps {
@@ -6,6 +6,7 @@ interface HistoryRailProps {
   activeId: string | null
   onPick: (id: string) => void
   onDelete: (id: string) => Promise<void>
+  onRename: (id: string, title: string) => Promise<void>
   onNew: () => void
 }
 
@@ -59,9 +60,26 @@ function StatusDot({ status }: { status: SessionStatus }) {
 
 const GROUP_ORDER: Group[] = ['Today', 'Yesterday', 'This week', 'Earlier']
 
-export function HistoryRail({ sessions, activeId, onPick, onDelete, onNew }: HistoryRailProps) {
+export function HistoryRail({
+  sessions,
+  activeId,
+  onPick,
+  onDelete,
+  onRename,
+  onNew
+}: HistoryRailProps) {
   const [query, setQuery] = useState('')
-  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [pendingId, setPendingId] = useState<string | null>(null)
+  const [renamingId, setRenamingId] = useState<string | null>(null)
+  const [draftTitle, setDraftTitle] = useState('')
+  const inputRef = useRef<HTMLInputElement | null>(null)
+
+  useEffect(() => {
+    if (renamingId && inputRef.current) {
+      inputRef.current.focus()
+      inputRef.current.select()
+    }
+  }, [renamingId])
 
   const filtered = useMemo(() => {
     if (!query.trim()) return sessions
@@ -82,19 +100,44 @@ export function HistoryRail({ sessions, activeId, onPick, onDelete, onNew }: His
     return map
   }, [filtered])
 
-  const handleDelete = async (e: React.MouseEvent, id: string) => {
+  const handleDelete = async (e: React.MouseEvent, id: string, title: string) => {
     e.stopPropagation()
-    setDeletingId(id)
+    if (!confirm(`Delete "${title}"? This cannot be undone.`)) return
+    setPendingId(id)
     try {
       await onDelete(id)
     } finally {
-      setDeletingId(null)
+      setPendingId(null)
     }
+  }
+
+  const startRename = (e: React.MouseEvent, s: Session) => {
+    e.stopPropagation()
+    setRenamingId(s.id)
+    setDraftTitle(s.title)
+  }
+
+  const commitRename = async (id: string) => {
+    const title = draftTitle.trim()
+    setRenamingId(null)
+    if (!title) return
+    const orig = sessions.find((s) => s.id === id)
+    if (!orig || title === orig.title) return
+    setPendingId(id)
+    try {
+      await onRename(id, title)
+    } finally {
+      setPendingId(null)
+    }
+  }
+
+  const cancelRename = () => {
+    setRenamingId(null)
+    setDraftTitle('')
   }
 
   return (
     <div className="sess-rail">
-      {/* Header */}
       <div className="sess-rail-hd">
         <h3>Sessions</h3>
         <button
@@ -108,7 +151,6 @@ export function HistoryRail({ sessions, activeId, onPick, onDelete, onNew }: His
         </button>
       </div>
 
-      {/* Search */}
       <div className="sess-search">
         <input
           className="input"
@@ -120,7 +162,6 @@ export function HistoryRail({ sessions, activeId, onPick, onDelete, onNew }: His
         />
       </div>
 
-      {/* List */}
       <div className="sess-list">
         {GROUP_ORDER.map((group) => {
           const items = grouped[group]
@@ -130,59 +171,78 @@ export function HistoryRail({ sessions, activeId, onPick, onDelete, onNew }: His
               <div className="sess-group">{group}</div>
               {items.map((s) => {
                 const isActive = s.id === activeId
+                const isRenaming = renamingId === s.id
                 return (
                   <div
                     key={s.id}
                     className={`sess-item ${isActive ? 'on' : ''}`}
                     role="button"
                     tabIndex={0}
-                    onClick={() => onPick(s.id)}
+                    onClick={() => !isRenaming && onPick(s.id)}
+                    onDoubleClick={(e) => startRename(e, s)}
                     onKeyDown={(e) => {
+                      if (isRenaming) return
                       if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault()
                         onPick(s.id)
                       }
                     }}
-                    style={{ position: 'relative' }}
                   >
                     <div className="sess-top">
                       <div className="sess-meta">
                         <StatusDot status={s.status} />
                       </div>
-                      <span className="sess-name">{s.title}</span>
+                      {isRenaming ? (
+                        <input
+                          ref={inputRef}
+                          className="input sess-rename-input"
+                          value={draftTitle}
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={(e) => setDraftTitle(e.target.value)}
+                          onBlur={() => void commitRename(s.id)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault()
+                              void commitRename(s.id)
+                            } else if (e.key === 'Escape') {
+                              e.preventDefault()
+                              cancelRename()
+                            }
+                          }}
+                        />
+                      ) : (
+                        <span className="sess-name" title="Double-click to rename">
+                          {s.title}
+                        </span>
+                      )}
                       <span className="sess-time">{formatRelTime(s.createdAt)}</span>
                     </div>
                     <div className="sess-preview">
                       {s.goal ?? sessionPreview(s)}
                     </div>
 
-                    {/* Delete on hover — always rendered, visible via CSS :hover on parent */}
-                    <button
-                      className="btn btn-plain"
-                      style={{
-                        position: 'absolute',
-                        right: 6,
-                        top: 6,
-                        padding: '2px 6px',
-                        fontSize: 11,
-                        opacity: 0,
-                        transition: 'opacity 120ms',
-                        color: 'var(--ruby)'
-                      }}
-                      onMouseEnter={(e) =>
-                        ((e.currentTarget as HTMLButtonElement).style.opacity = '1')
-                      }
-                      onMouseLeave={(e) =>
-                        ((e.currentTarget as HTMLButtonElement).style.opacity = '0')
-                      }
-                      onClick={(e) => handleDelete(e, s.id)}
-                      disabled={deletingId === s.id}
-                      title="Delete session"
-                      type="button"
-                      aria-label={`Delete session ${s.title}`}
-                    >
-                      {deletingId === s.id ? '…' : '✕'}
-                    </button>
+                    <div className="sess-actions" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        className="sess-action"
+                        type="button"
+                        title="Rename"
+                        aria-label={`Rename session ${s.title}`}
+                        disabled={pendingId === s.id || isRenaming}
+                        onClick={(e) => startRename(e, s)}
+                      >
+                        ✎
+                      </button>
+                      <button
+                        className="sess-action sess-action-danger"
+                        type="button"
+                        title="Delete"
+                        aria-label={`Delete session ${s.title}`}
+                        disabled={pendingId === s.id}
+                        onClick={(e) => void handleDelete(e, s.id, s.title)}
+                      >
+                        {pendingId === s.id ? '…' : '✕'}
+                      </button>
+                    </div>
                   </div>
                 )
               })}
