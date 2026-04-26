@@ -5,3 +5,6 @@ out
 dist
 .vite
 *.tsbuildinfo
+test-results
+playwright-report
+tests/e2e/playwright-report

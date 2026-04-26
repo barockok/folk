@@ -35,7 +35,31 @@ run_unit() {
 
 restore_electron_binding() {
   step "rebuild better-sqlite3 (Electron) — restore"
-  npx @electron/rebuild -w better-sqlite3 --build-from-source
+  local elec_ver
+  elec_ver="$(npx --no-install electron --version 2>/dev/null | sed 's/^v//')"
+  if [[ -z "$elec_ver" ]]; then
+    echo "could not detect electron version" >&2
+    exit 3
+  fi
+  npx @electron/rebuild -w better-sqlite3 --version "$elec_ver" --build-from-source
+
+  # @electron/rebuild drops the ABI-tagged binary at
+  # node_modules/better-sqlite3/bin/<platform>-<arch>-<abi>/better-sqlite3.node,
+  # but better-sqlite3's runtime loader uses `bindings` which only searches
+  # build/Release. After `npm rebuild` (system Node) the build/Release file is
+  # the wrong ABI, so we must copy the Electron-built one back into place.
+  local elec_abi
+  elec_abi="$(ELECTRON_RUN_AS_NODE=1 npx --no-install electron -e 'process.stdout.write(process.versions.modules)')"
+  local platform_arch
+  platform_arch="$(node -p 'process.platform + "-" + process.arch')"
+  local src="node_modules/better-sqlite3/bin/${platform_arch}-${elec_abi}/better-sqlite3.node"
+  local dst="node_modules/better-sqlite3/build/Release/better_sqlite3.node"
+  if [[ -f "$src" ]]; then
+    cp "$src" "$dst"
+    echo "  · synced $src → $dst (ABI $elec_abi)"
+  else
+    echo "  · warning: expected $src after rebuild, not found" >&2
+  fi
 }
 
 run_e2e() {

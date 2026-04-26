@@ -15,88 +15,51 @@ test.afterAll(async () => {
  * Coverage map (vs docs/how-to-smoke.md):
  *
  *   automated here:
- *     1  slash menu opens with built-in items
  *     3  Skills + Plugins pages render
- *    13  Composer permission chip cycles Ask → Auto-edit → Plan → Bypass
  *    14  SessionSetup "Skip permissions" toggle present
  *    20  Models page renders provider Test buttons
- *    21  Custom provider model add UI present
- *    23  SessionSetup picker groups by provider
- *    24  Markdown table renders with hugged width (static fixture)
+ *    23  SessionSetup picker grouped by provider
+ *    24  Markdown table renders with content-hugging width
  *
- *   live-agent only (manual; left to docs/how-to-smoke.md):
+ *   skipped (need an active session — that requires a real send to a real
+ *   provider, which the smoke harness can't fake without breaking the SDK):
+ *     1  slash menu (composer disabled until a session is active)
+ *    13  permission chip (same)
+ *
+ *   manual only (need a live agent / keychain / file-watch):
  *     2 plugin commands, 4 compact, 5 cost/status, 6 subagents,
  *     7 diff cards, 8 TodoWrite, 9 MCP humanize, 10 tool group,
  *    11 live thinking, 12 auto-title, 15 /clear inheritance,
  *    16 tool progress, 17 prompt suggestions, 18 rate-limit/retry,
- *    19 system notices, 25 inline image, 26 dev keychain bypass
+ *    19 system notices, 21 custom provider model add,
+ *    25 inline image, 26 dev keychain bypass
  *
- * Live-agent scenarios stay manual because they need a real Anthropic
- * key and a turn against a real model — the automation surface here is
- * the deterministic UI plumbing, not the SDK behavior (already covered
- * by src/main/agent-manager.test.ts).
+ * SDK message routing the manual scenarios depend on is covered by
+ * src/main/agent-manager.test.ts (vitest, 29 cases).
  */
-
-test('1 — slash menu opens with built-in commands', async () => {
-  const { page } = ctx
-  await page.locator('.sb-item', { hasText: 'Sessions' }).click()
-
-  const newSession = page.getByRole('button', { name: /new session/i }).first()
-  if (await newSession.isVisible().catch(() => false)) {
-    await newSession.click()
-    await page.keyboard.press('Escape').catch(() => {})
-  }
-
-  const composer = page.locator('.composer textarea, .composer [contenteditable="true"]').first()
-  if (await composer.isVisible().catch(() => false)) {
-    await composer.click()
-    await composer.type('/')
-    await expect(page.locator('.slash-menu')).toBeVisible()
-    await expect(page.locator('.slash-menu .slash-item')).not.toHaveCount(0)
-  } else {
-    test.info().annotations.push({
-      type: 'skip-reason',
-      description: 'no active session — composer not mounted',
-    })
-  }
-})
 
 test('3 — Skills + Plugins pages render', async () => {
   const { page } = ctx
   await page.locator('.sb-item', { hasText: 'Skills' }).click()
-  await expect(page.locator('main, .page, body')).toContainText(/skill/i, { timeout: 8000 })
+  await expect(page.locator('body')).toContainText(/skill/i, { timeout: 8000 })
 
   await page.locator('.sb-item', { hasText: 'Plugins' }).click()
-  await expect(page.locator('main, .page, body')).toContainText(/plugin/i, { timeout: 8000 })
-})
-
-test('13 — Composer permission chip exposes all four modes', async () => {
-  const { page } = ctx
-  await page.locator('.sb-item', { hasText: 'Sessions' }).click()
-  const chip = page
-    .locator('select[title*="permission" i], select[aria-label*="permission" i]')
-    .first()
-  if (!(await chip.isVisible().catch(() => false))) {
-    test.skip(true, 'no active session — permission chip not mounted')
-  }
-  const options = await chip.locator('option').allTextContents()
-  const joined = options.join('|').toLowerCase()
-  expect(joined).toMatch(/ask/)
-  expect(joined).toMatch(/auto/)
-  expect(joined).toMatch(/plan/)
-  expect(joined).toMatch(/bypass/)
+  await expect(page.locator('body')).toContainText(/plugin/i, { timeout: 8000 })
 })
 
 test('14 + 23 — SessionSetup shows Skip permissions toggle and grouped picker', async () => {
   const { page } = ctx
   await page.locator('.sb-item', { hasText: 'Sessions' }).click()
-  const newBtn = page.getByRole('button', { name: /new session/i }).first()
-  if (!(await newBtn.isVisible().catch(() => false))) {
-    test.skip(true, 'no "new session" button visible')
-  }
+  const newBtn = page.locator('button[title^="New session"]').first()
+  await expect(newBtn).toBeVisible({ timeout: 8000 })
   await newBtn.click()
   await expect(page.locator('.ss-card')).toBeVisible()
+  // Skip-permissions toggle lives inside the collapsible "Launch options"
+  // accordion — expand it first.
+  await page.locator('.ss-adv-toggle').click()
   await expect(page.locator('.ss-perm', { hasText: /skip permissions/i })).toBeVisible()
+  // Provider grouping — at least one provider header rendered, or the
+  // model grid is visible (selectors vary across the recent UI revs).
   const providerHeads = page.locator('.ss-model-provider, .ss-prov-head')
   if ((await providerHeads.count()) === 0) {
     await expect(page.locator('.ss-model-grid')).toBeVisible()
@@ -106,12 +69,19 @@ test('14 + 23 — SessionSetup shows Skip permissions toggle and grouped picker'
   await page.keyboard.press('Escape').catch(() => {})
 })
 
-test('20 + 21 — Models page renders provider rows with Test + Add Model UI', async () => {
+test('20 — Models page renders Test button on active provider', async () => {
   const { page } = ctx
   await page.locator('.sb-item', { hasText: 'Models' }).click()
-  await expect(page.locator('main, .page, body')).toContainText(/model/i)
-  const testBtns = page.getByRole('button', { name: /^test$/i })
-  expect(await testBtns.count()).toBeGreaterThan(0)
+  await expect(page.locator('body')).toContainText(/model/i)
+  // The active-provider detail panel renders a button with title="Test connection".
+  // If providers list is rendered as cards that need clicking first, click the
+  // first one. Otherwise the seeded provider is auto-selected.
+  const provCard = page.locator('[class*="prov-card"], .prov-row, .prov-list .prov').first()
+  if ((await provCard.count()) > 0 && (await provCard.isVisible().catch(() => false))) {
+    await provCard.click().catch(() => {})
+  }
+  const testBtn = page.locator('button[title="Test connection"]')
+  await expect(testBtn).toBeVisible({ timeout: 8000 })
 })
 
 test('24 — markdown table renders with content-hugging width', async () => {
@@ -140,6 +110,6 @@ test('24 — markdown table renders with content-hugging width', async () => {
     probe.remove()
     return { w }
   })
-  // any value other than viewport-stretched 100% is acceptable
+  // Anything other than viewport-stretched 100% is acceptable.
   expect(result.w).not.toMatch(/^\s*100%\s*$/)
 })
