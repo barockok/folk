@@ -1087,7 +1087,19 @@
   padding: 10px 12px;
   border-bottom: var(--hair) solid var(--border);
 }
-.sess-list { flex: 1; overflow: auto; padding: 6px 8px 12px; }
+.sess-list {
+  flex: 1;
+  overflow: auto;
+  padding: 6px 8px 12px;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+.sess-list:hover { scrollbar-color: rgba(120, 120, 130, 0.35) transparent; }
+.sess-list::-webkit-scrollbar { width: 6px; height: 6px; }
+.sess-list::-webkit-scrollbar-track { background: transparent; }
+.sess-list::-webkit-scrollbar-thumb { background: transparent; border-radius: 3px; }
+.sess-list:hover::-webkit-scrollbar-thumb { background: rgba(120, 120, 130, 0.35); }
+.sess-list::-webkit-scrollbar-thumb:hover { background: rgba(120, 120, 130, 0.55); }
 .sess-group {
   font-size: 10px; font-weight: 500; letter-spacing: 0.08em;
   text-transform: uppercase; color: var(--fg-faint);
