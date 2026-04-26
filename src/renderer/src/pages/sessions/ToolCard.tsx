@@ -6,6 +6,107 @@ import type { PersistedToolCall } from '@shared/types'
 
 export interface ToolCardProps {
   call: PersistedToolCall
+  /** Required to push the chosen answer back through respondToolUse for
+   *  client-side elicitation tools (AskUserQuestion). Other tools ignore. */
+  sessionId?: string
+}
+
+interface AskUserQuestionInput {
+  questions: Array<{
+    question: string
+    header?: string
+    options: Array<{ label: string; description?: string }>
+  }>
+}
+
+function extractAskUserQuestion(input: unknown): AskUserQuestionInput | null {
+  if (!input || typeof input !== 'object') return null
+  const qs = (input as { questions?: unknown }).questions
+  if (!Array.isArray(qs) || qs.length === 0) return null
+  const out: AskUserQuestionInput['questions'] = []
+  for (const q of qs) {
+    if (!q || typeof q !== 'object') return null
+    const o = q as Record<string, unknown>
+    const question = typeof o.question === 'string' ? o.question : null
+    const header = typeof o.header === 'string' ? o.header : undefined
+    const options = Array.isArray(o.options) ? o.options : null
+    if (!question || !options) return null
+    const optsOut: AskUserQuestionInput['questions'][number]['options'] = []
+    for (const opt of options) {
+      if (!opt || typeof opt !== 'object') return null
+      const oo = opt as Record<string, unknown>
+      const label = typeof oo.label === 'string' ? oo.label : null
+      if (!label) return null
+      optsOut.push({
+        label,
+        description: typeof oo.description === 'string' ? oo.description : undefined
+      })
+    }
+    out.push({ question, header, options: optsOut })
+  }
+  return { questions: out }
+}
+
+function AskUserQuestionCard({
+  call,
+  sessionId
+}: {
+  call: PersistedToolCall
+  sessionId?: string
+}) {
+  const parsed = extractAskUserQuestion(call.input)
+  const [busy, setBusy] = useState(false)
+  const [chosen, setChosen] = useState<string | null>(
+    typeof call.output === 'string' ? call.output : null
+  )
+  if (!parsed) return null
+  const answered = chosen !== null || call.output !== undefined
+
+  const respond = async (label: string) => {
+    if (busy || answered || !sessionId) return
+    setBusy(true)
+    try {
+      await window.folk.agent.respondToolUse(sessionId, call.callId, label)
+      setChosen(label)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className={`tool-card ask-card ${answered ? 'done' : 'running'}`}>
+      <div className="ask-head">
+        <Icon name="terminal" size={12} />
+        <span className="ask-title">Question</span>
+        {answered && <span className="ask-status">answered</span>}
+      </div>
+      {parsed.questions.map((q, qi) => (
+        <div key={qi} className="ask-q">
+          {q.header && <div className="ask-header">{q.header}</div>}
+          <div className="ask-question">{q.question}</div>
+          <div className="ask-options">
+            {q.options.map((opt, oi) => {
+              const selected = chosen === opt.label
+              return (
+                <button
+                  key={oi}
+                  type="button"
+                  className={`ask-opt${selected ? ' on' : ''}`}
+                  disabled={answered || busy}
+                  onClick={() => respond(opt.label)}
+                >
+                  <span className="ask-opt-label">{opt.label}</span>
+                  {opt.description && (
+                    <span className="ask-opt-desc">{opt.description}</span>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
 }
 
 // Map class is keyed to existing CSS in components.css (.tool-card.running /
@@ -179,11 +280,16 @@ function extractTodos(input: unknown): TodoItem[] | null {
   return out
 }
 
-export function ToolCard({ call }: ToolCardProps) {
+export function ToolCard({ call, sessionId }: ToolCardProps) {
   const [open, setOpen] = useState(false)
   const status: 'running' | 'success' | 'error' =
     call.output === undefined ? 'running' : call.isError ? 'error' : 'success'
   const summary = summarizeInput(call.input)
+
+  if (call.tool === 'AskUserQuestion') {
+    const card = <AskUserQuestionCard call={call} sessionId={sessionId} />
+    if (extractAskUserQuestion(call.input)) return card
+  }
 
   if (call.tool === 'Edit' || call.tool === 'Write' || call.tool === 'NotebookEdit') {
     const diffNode = renderDiffPanel(call)

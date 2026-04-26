@@ -77,6 +77,11 @@ export function registerIpc(
     (_e, response: import('@shared/types').PermissionResponse) =>
       agent.respondPermission(response)
   )
+  ipcMain.handle(
+    'agent:respondToolUse',
+    (_e, sessionId: string, toolUseId: string, answer: string) =>
+      agent.respondToolUse(sessionId, toolUseId, answer)
+  )
 
   ipcMain.handle('providers:list', () => db.listProviders())
   ipcMain.handle('providers:save', (_e, p: ProviderConfig) => db.saveProvider(p))

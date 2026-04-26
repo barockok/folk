@@ -1956,6 +1956,75 @@
   border-left: 2px solid var(--border-soft-purple, var(--border));
 }
 .tool-card { margin: 0; }
+
+/* AskUserQuestion elicitation form. The model emits a question + N labelled
+   options; we render them as buttons. Click sends the label back via
+   respondToolUse; once answered, all buttons disable and the chosen one
+   gets the .on visual. */
+.ask-card {
+  padding: 10px 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ask-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--fg-faint);
+}
+.ask-title { font-family: var(--ff-mono); }
+.ask-status { margin-left: auto; color: var(--ok); }
+.ask-q { display: flex; flex-direction: column; gap: 6px; }
+.ask-header {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--fg-faint);
+  font-family: var(--ff-mono);
+}
+.ask-question {
+  font-size: 13px;
+  color: var(--body);
+  line-height: 1.45;
+}
+.ask-options {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+}
+.ask-opt {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  background: var(--bg-sub);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: var(--body);
+  transition: border-color 80ms, background 80ms;
+}
+.ask-opt:hover:not(:disabled) {
+  border-color: var(--stripe-purple);
+  background: var(--bg-card);
+}
+.ask-opt:disabled { cursor: default; opacity: 0.7; }
+.ask-opt.on {
+  border-color: var(--stripe-purple);
+  background: rgba(83, 58, 253, 0.08);
+}
+.ask-opt-label { font-weight: 500; font-size: 13px; }
+.ask-opt-desc { font-size: 12px; color: var(--fg-faint); }
 .tool-srv {
   flex: 1;
   min-width: 0;

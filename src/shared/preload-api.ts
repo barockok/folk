@@ -50,6 +50,7 @@ export interface FolkAPI {
     onToolProgress: (fn: (e: AgentToolProgress) => void) => () => void
     onPromptSuggestion: (fn: (e: AgentPromptSuggestion) => void) => () => void
     respondPermission: (response: PermissionResponse) => Promise<void>
+    respondToolUse: (sessionId: string, toolUseId: string, answer: string) => Promise<void>
   }
   providers: {
     list: () => Promise<ProviderConfig[]>

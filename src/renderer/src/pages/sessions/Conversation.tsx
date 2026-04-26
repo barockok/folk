@@ -516,7 +516,7 @@ export function Conversation({ session }: { session: Session | null }) {
                       )
                       return (
                         <div key={key} className="msg-tools">
-                          <ToolCard call={b.call} />
+                          <ToolCard call={b.call} sessionId={session.id} />
                           {matchingPerms.map((pr) => (
                             <PermissionPrompt key={pr.requestId} req={pr} />
                           ))}

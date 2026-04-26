@@ -33,7 +33,9 @@ const folk: FolkAPI = {
     onPermissionRequest: (fn) => listen('agent:permissionRequest', fn),
     onToolProgress: (fn) => listen('agent:toolProgress', fn),
     onPromptSuggestion: (fn) => listen('agent:promptSuggestion', fn),
-    respondPermission: (response) => ipcRenderer.invoke('agent:respondPermission', response)
+    respondPermission: (response) => ipcRenderer.invoke('agent:respondPermission', response),
+    respondToolUse: (sessionId, toolUseId, answer) =>
+      ipcRenderer.invoke('agent:respondToolUse', sessionId, toolUseId, answer)
   },
   providers: {
     list: () => ipcRenderer.invoke('providers:list'),

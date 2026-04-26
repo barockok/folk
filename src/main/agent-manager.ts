@@ -297,6 +297,17 @@ export class AgentManager extends EventEmitter {
         allowDangerouslySkipPermissions:
           session.permissionMode === 'bypassPermissions' ? true : undefined,
         canUseTool: async (toolName, input, opts) => {
+          // AskUserQuestion is a client-side elicitation tool — the user's
+          // *answer* is the result. Don't gate it behind an Allow/Deny prompt;
+          // auto-allow so SDK runs the tool, the renderer renders the question
+          // form, and the user's choice gets pushed back as tool_result via
+          // respondToolUse.
+          if (toolName === 'AskUserQuestion') {
+            return {
+              behavior: 'allow',
+              updatedInput: (input ?? {}) as Record<string, unknown>
+            }
+          }
           const requestId = randomUUID()
           const safeInput = (input ?? {}) as Record<string, unknown>
           this.#pendingPermissions.set(requestId, {
@@ -515,6 +526,30 @@ export class AgentManager extends EventEmitter {
         message: response.message ?? 'Denied by user.'
       })
     }
+  }
+
+  // Reply to a client-side elicitation tool (currently AskUserQuestion) by
+  // pushing a synthetic user message that contains a tool_result block keyed
+  // to the original tool_use id. The SDK plumbs this back into the model's
+  // context so the next turn sees the answer.
+  respondToolUse(sessionId: string, toolUseId: string, answer: string): void {
+    const live = this.#live.get(sessionId)
+    if (!live) return
+    live.push({
+      type: 'user',
+      session_id: sessionId,
+      parent_tool_use_id: null,
+      message: {
+        role: 'user',
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: toolUseId,
+            content: [{ type: 'text', text: answer }]
+          }
+        ] as unknown as never
+      }
+    })
   }
 
   async cancel(sessionId: string): Promise<void> {
