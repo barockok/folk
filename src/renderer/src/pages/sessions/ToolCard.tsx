@@ -56,20 +56,59 @@ function AskUserQuestionCard({
 }) {
   const parsed = extractAskUserQuestion(call.input)
   const [busy, setBusy] = useState(false)
-  const [chosen, setChosen] = useState<string | null>(
-    typeof call.output === 'string' ? call.output : null
+  const [submitted, setSubmitted] = useState<boolean>(call.output !== undefined)
+  const [answers, setAnswers] = useState<Array<string | null>>(() =>
+    parsed ? parsed.questions.map(() => null) : []
   )
   if (!parsed) return null
-  const answered = chosen !== null || call.output !== undefined
+  const answered = submitted || call.output !== undefined
+  const allPicked = answers.every((a) => a !== null)
 
-  const respond = async (label: string) => {
-    if (busy || answered || !sessionId) return
+  const pick = (qi: number, label: string) => {
+    if (answered || busy) return
+    setAnswers((prev) => {
+      const next = [...prev]
+      next[qi] = label
+      return next
+    })
+  }
+
+  const submit = async () => {
+    if (busy || answered || !sessionId || !allPicked) return
     setBusy(true)
     try {
-      await window.folk.agent.respondToolUse(sessionId, call.callId, label)
-      setChosen(label)
+      // For a single question, send just the label so the model reads it
+      // verbatim. For multi-question, send a numbered list keyed by header
+      // (or the question if no header) so the model can match each answer.
+      const payload =
+        parsed.questions.length === 1
+          ? answers[0]!
+          : parsed.questions
+              .map((q, i) => {
+                const tag = q.header || q.question
+                return `${i + 1}. ${tag}: ${answers[i]}`
+              })
+              .join('\n')
+      await window.folk.agent.respondToolUse(sessionId, call.callId, payload)
+      setSubmitted(true)
     } finally {
       setBusy(false)
+    }
+  }
+
+  // Single-question card auto-submits on first click for the snappy UX.
+  const autoSubmitOnPick = parsed.questions.length === 1
+
+  const onPick = async (qi: number, label: string) => {
+    pick(qi, label)
+    if (autoSubmitOnPick && sessionId && !answered && !busy) {
+      setBusy(true)
+      try {
+        await window.folk.agent.respondToolUse(sessionId, call.callId, label)
+        setSubmitted(true)
+      } finally {
+        setBusy(false)
+      }
     }
   }
 
@@ -86,14 +125,14 @@ function AskUserQuestionCard({
           <div className="ask-question">{q.question}</div>
           <div className="ask-options">
             {q.options.map((opt, oi) => {
-              const selected = chosen === opt.label
+              const selected = answers[qi] === opt.label
               return (
                 <button
                   key={oi}
                   type="button"
                   className={`ask-opt${selected ? ' on' : ''}`}
                   disabled={answered || busy}
-                  onClick={() => respond(opt.label)}
+                  onClick={() => onPick(qi, opt.label)}
                 >
                   <span className="ask-opt-label">{opt.label}</span>
                   {opt.description && (
@@ -105,6 +144,18 @@ function AskUserQuestionCard({
           </div>
         </div>
       ))}
+      {!autoSubmitOnPick && !answered && (
+        <div className="ask-foot">
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={!allPicked || busy}
+            onClick={submit}
+          >
+            {busy ? 'Submitting…' : 'Submit answers'}
+          </button>
+        </div>
+      )}
     </div>
   )
 }

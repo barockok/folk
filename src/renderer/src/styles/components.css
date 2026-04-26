@@ -2025,6 +2025,11 @@
 }
 .ask-opt-label { font-weight: 500; font-size: 13px; }
 .ask-opt-desc { font-size: 12px; color: var(--fg-faint); }
+.ask-foot {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
 .tool-srv {
   flex: 1;
   min-width: 0;
