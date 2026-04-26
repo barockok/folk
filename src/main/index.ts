@@ -43,6 +43,9 @@ function createWindow(): void {
     minHeight: 640,
     show: false,
     titleBarStyle: 'hiddenInset',
+    // Nudge the macOS traffic-light triplet down so it vertically aligns
+    // with the in-app topbar content (sidebar toggle + breadcrumb).
+    trafficLightPosition: { x: 16, y: 18 },
     webPreferences: {
       preload: join(__dirname, '../preload/index.mjs'),
       sandbox: false,
