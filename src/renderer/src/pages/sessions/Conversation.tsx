@@ -38,6 +38,45 @@ function collectCallIds(call: PersistedToolCall, into: Set<string>): void {
   }
 }
 
+// The SDK replays compaction by writing a single synthetic user message into
+// the on-disk transcript that contains the prior-session summary. After a
+// restart this lands as a giant user bubble — useful info, but not what the
+// user wants to scroll past every time. Detect it heuristically and render
+// as a collapsible stub.
+const COMPACT_SUMMARY_PREFIX = 'This session is being continued from a previous conversation'
+function isCompactSummary(text: string | undefined): boolean {
+  if (!text) return false
+  return text.trimStart().startsWith(COMPACT_SUMMARY_PREFIX)
+}
+
+function CompactSummaryCard({ text }: { text: string }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className={`compact-summary${open ? ' open' : ''}`}>
+      <button
+        type="button"
+        className="compact-summary-head"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+      >
+        <span className="compact-summary-label">
+          Continued from previous session — summary
+        </span>
+        <span className="compact-summary-chev" aria-hidden="true">
+          {open ? '▾' : '▸'}
+        </span>
+      </button>
+      {open && (
+        <div className="compact-summary-body">
+          <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD_COMPONENTS}>
+            {text}
+          </ReactMarkdown>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function PermissionPrompt({ req }: { req: PermissionRequest }) {
   const remove = useSessionStore((s) => s.removePermissionRequest)
   const [busy, setBusy] = useState(false)
@@ -315,6 +354,13 @@ export function Conversation({ session }: { session: Session | null }) {
                 <span className="msg-divider-line" />
               </div>
             )
+          }
+          // Replayed compact-summary user message — collapse by default.
+          if (m.role === 'user') {
+            const firstText = m.blocks.find((b) => b.kind === 'text')?.text
+            if (isCompactSummary(firstText)) {
+              return <CompactSummaryCard key={m.id} text={firstText!} />
+            }
           }
           const prev = i > 0 ? items[i - 1].m : null
           const next = i < items.length - 1 ? items[i + 1].m : null
