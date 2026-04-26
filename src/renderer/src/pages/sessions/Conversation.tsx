@@ -399,7 +399,10 @@ export function Conversation({ session }: { session: Session | null }) {
           const prev = i > 0 ? items[i - 1].m : null
           const next = i < items.length - 1 ? items[i + 1].m : null
           const continuation = prev != null && prev.role !== 'system' && prev.role === m.role
-          const continuesBelow = next != null && next.role !== 'system' && next.role === m.role
+          // Render the rail stub whenever there's *any* next non-system
+          // message, not just same-role — keeps the timeline connected
+          // across user/assistant alternation.
+          const continuesBelow = next != null && next.role !== 'system'
           return (
             <article
               key={m.id}
