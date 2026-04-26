@@ -2086,6 +2086,54 @@
 .ask-other-input {
   flex: 1;
 }
+.ask-answer {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 6px 10px;
+  background: rgba(83, 58, 253, 0.06);
+  border: 1px solid var(--stripe-purple);
+  border-radius: var(--r-sm);
+  font-size: 13px;
+  color: var(--heading);
+  align-self: flex-start;
+  width: fit-content;
+}
+.ask-answer-tick {
+  font-weight: 600;
+  color: var(--stripe-purple);
+}
+.ask-answer-text {
+  font-weight: 500;
+}
+.ask-summary {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ask-summary-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  background: var(--bg-sub);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  font-size: 12.5px;
+}
+.ask-summary-tag {
+  font-family: var(--ff-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--fg-faint);
+}
+.ask-summary-sep { color: var(--fg-faint); opacity: 0.6; }
+.ask-summary-val { font-weight: 500; color: var(--heading); }
 .tool-srv {
   flex: 1;
   min-width: 0;

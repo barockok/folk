@@ -153,6 +153,31 @@ function AskUserQuestionCard({
     const otherSelected = answers[0] !== null && isOtherLabel(answers[0])
     const canSubmitOther =
       otherSelected && !answered && !busy && (otherText[0]?.trim()?.length ?? 0) > 0
+    // Once answered, collapse the options stack into a single "✓ <answer>"
+    // chip so the persisted card shows the result clearly.
+    if (answered) {
+      const finalAnswer =
+        effectiveAnswer(0) ??
+        (typeof call.output === 'string' ? call.output : null) ??
+        '(unknown)'
+      return (
+        <div className="tool-card ask-card done">
+          <div className="ask-head">
+            <Icon name="terminal" size={12} />
+            <span className="ask-title">Question</span>
+            <span className="ask-status">answered</span>
+          </div>
+          <div className="ask-q">
+            {q.header && <div className="ask-header">{q.header}</div>}
+            <div className="ask-question">{q.question}</div>
+            <div className="ask-answer">
+              <span className="ask-answer-tick" aria-hidden="true">✓</span>
+              <span className="ask-answer-text">{finalAnswer}</span>
+            </div>
+          </div>
+        </div>
+      )
+    }
     return (
       <div className={`tool-card ask-card ${answered ? 'done' : 'running'}`}>
         <div className="ask-head">
@@ -216,6 +241,33 @@ function AskUserQuestionCard({
 
   // Multi-question: tabbed UI, one question per tab.
   const active = parsed.questions[activeTab]
+  if (answered) {
+    return (
+      <div className="tool-card ask-card done">
+        <div className="ask-head">
+          <Icon name="terminal" size={12} />
+          <span className="ask-title">{parsed.questions.length} questions</span>
+          <span className="ask-status">answered</span>
+        </div>
+        <ul className="ask-summary">
+          {parsed.questions.map((q, qi) => {
+            const a =
+              effectiveAnswer(qi) ??
+              answers[qi] ??
+              '(no answer)'
+            const tag = q.header || `Q${qi + 1}`
+            return (
+              <li key={qi} className="ask-summary-row">
+                <span className="ask-summary-tag">{tag}</span>
+                <span className="ask-summary-sep">→</span>
+                <span className="ask-summary-val">{a}</span>
+              </li>
+            )
+          })}
+        </ul>
+      </div>
+    )
+  }
   return (
     <div className={`tool-card ask-card ${answered ? 'done' : 'running'}`}>
       <div className="ask-head">
