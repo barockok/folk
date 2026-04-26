@@ -6,11 +6,17 @@
 .shell {
   display: grid;
   grid-template-columns: 232px 1fr;
-  grid-template-rows: 100%;
+  grid-template-rows: auto 1fr;
+  grid-template-areas:
+    "topbar topbar"
+    "sidebar main";
   height: 100vh;
   background: var(--bg-sub);
   transition: grid-template-columns 220ms cubic-bezier(.2,.8,.2,1);
 }
+.shell > .topbar { grid-area: topbar; }
+.shell > .sb { grid-area: sidebar; }
+.shell > .main-body { grid-area: main; }
 [data-density="compact"] .shell { grid-template-columns: 208px 1fr; }
 .shell.sb-closed { grid-template-columns: 56px 1fr; }
 
@@ -22,8 +28,6 @@
   background: var(--bg-sub);
   border-right: var(--hair) solid var(--border);
   min-height: 0;
-  /* Clear macOS traffic-light buttons (top-left, ~12px from edge, ~14px tall). */
-  padding-top: 36px;
 }
 .sb-brand {
   display: flex;
@@ -32,13 +36,9 @@
   padding: 4px 14px 16px;
 }
 
-/* Sidebar toggle pinned at top-left, immediately after the macOS
-   traffic-light triplet, styled small and ghosted to read as a 4th
-   chrome button. */
+/* Topbar-resident sidebar toggle, styled small and ghosted to read as a
+   4th macOS chrome button. */
 .sb-toggle {
-  position: absolute;
-  top: 12px;
-  left: 76px;
   width: 22px;
   height: 22px;
   padding: 0;
@@ -49,18 +49,12 @@
   border-radius: 4px;
   color: var(--fg-faint);
   cursor: pointer;
-  z-index: 5;
   transition: background 120ms, color 120ms;
 }
 .sb-toggle:hover {
   background: var(--bg-card);
   color: var(--heading);
 }
-/* Even when sidebar is collapsed (56px wide), keep the toggle pinned next to
-   the traffic lights — the absolute position is relative to .sb, but with
-   left: 76px the button visually lives in the main-content area. */
-.sb-collapsed { position: relative; padding-top: 36px; }
-.sb-collapsed .sb-nav { padding-top: 8px; }
 .sb-logo {
   width: 30px; height: 30px;
   border-radius: var(--r);
@@ -293,10 +287,9 @@
   flex: none;
   min-height: 50px;
 }
-/* When the sidebar is collapsed, the chrome toggle (anchored at left:76px
-   relative to the sidebar) overflows into the topbar's left edge. Push the
-   topbar content right so it doesn't sit underneath the toggle. */
-.shell.sb-closed .topbar { padding-left: 56px; }
+/* Topbar lives at top of window and spans both columns. Reserve space for
+   macOS traffic lights at the left edge (~76px). */
+.topbar { padding-left: 84px; }
 .crumbs { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--body); font-feature-settings: "ss01"; }
 .crumbs .sep { color: var(--fg-faint); }
 .crumbs .cur { color: var(--heading); font-weight: 500; }

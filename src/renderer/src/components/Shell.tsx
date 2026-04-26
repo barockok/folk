@@ -12,11 +12,9 @@ export function Shell({ children }: { children: ReactNode }) {
   return (
     <>
       <div className={`shell${collapsed ? ' sb-closed' : ''}`}>
+        <Topbar />
         <Sidebar />
-        <div className="main">
-          <Topbar />
-          <main className={`main-body${page === 'sessions' ? ' no-scroll' : ''}`}>{children}</main>
-        </div>
+        <main className={`main-body${page === 'sessions' ? ' no-scroll' : ''}`}>{children}</main>
       </div>
       <CommandPalette />
       <ToastContainer />

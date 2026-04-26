@@ -41,7 +41,6 @@ export function Sidebar() {
   const page = useUIStore((s) => s.page)
   const setPage = useUIStore((s) => s.setPage)
   const collapsed = useUIStore((s) => s.sidebarCollapsed)
-  const toggleSidebar = useUIStore((s) => s.toggleSidebar)
   const nickname = useProfileStore((s) => s.profile?.nickname)
 
   const initial = (nickname || 'Y').slice(0, 1).toUpperCase()
@@ -49,19 +48,6 @@ export function Sidebar() {
 
   return (
     <aside className={`sb${collapsed ? ' sb-collapsed' : ''}`}>
-      {/* Sidebar toggle styled as the 4th macOS chrome button — sits to the
-          right of the close/min/zoom traffic lights. Single button regardless
-          of collapsed state. */}
-      <button
-        className="sb-toggle"
-        onClick={toggleSidebar}
-        title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        type="button"
-      >
-        <Icon name="sidebar" size={14} />
-      </button>
-
       {!collapsed && (
         <div className="sb-brand">
           <div className="sb-logo">

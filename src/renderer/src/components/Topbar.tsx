@@ -21,6 +21,8 @@ export function Topbar() {
   const setTheme = useUIStore((s) => s.setTheme)
   const density = useUIStore((s) => s.density)
   const setDensity = useUIStore((s) => s.setDensity)
+  const collapsed = useUIStore((s) => s.sidebarCollapsed)
+  const toggleSidebar = useUIStore((s) => s.toggleSidebar)
   const activeSessionTitle = useSessionStore((s) => {
     if (!s.activeId) return null
     const found = s.sessions.find((x) => x.id === s.activeId)
@@ -34,6 +36,15 @@ export function Topbar() {
 
   return (
     <header className="topbar">
+      <button
+        className="sb-toggle"
+        onClick={toggleSidebar}
+        title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        type="button"
+      >
+        <Icon name="sidebar" size={14} />
+      </button>
       <div className="crumbs">
         {crumbs.map((c, i) => (
           <span key={i} className={i === crumbs.length - 1 ? 'cur' : ''}>
