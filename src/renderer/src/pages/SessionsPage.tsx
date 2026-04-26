@@ -34,7 +34,7 @@ export function SessionsPage() {
         ) : (
           <>
             <div className="sess-body-wrap">
-              <Conversation session={active} />
+              <Conversation key={active?.id ?? 'none'} session={active} />
             </div>
             <Composer
               session={active}
