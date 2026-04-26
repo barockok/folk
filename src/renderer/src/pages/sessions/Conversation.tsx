@@ -169,6 +169,14 @@ function contentLength(messages: ReadonlyArray<{ blocks: ReadonlyArray<{ kind: s
 export function Conversation({ session }: { session: Session | null }) {
   const messages = useSessionStore((s) => (session ? s.messages[session.id] ?? EMPTY_MESSAGES : EMPTY_MESSAGES))
   const isStreaming = useSessionStore((s) => (session ? s.streamingSessions.has(session.id) : false))
+  // When the agent emits a compact_boundary, hide everything above it behind
+  // a single "context compacted — show" stub so the live transcript matches
+  // the post-restart view (where the SDK only replays post-boundary content).
+  // User can click to peek at the pre-compact history without losing it.
+  const [compactExpanded, setCompactExpanded] = useState(false)
+  useEffect(() => {
+    setCompactExpanded(false)
+  }, [session?.id])
   const lifecycleTicker = useSessionStore((s) =>
     session ? s.lifecycleTicker[session.id] ?? null : null
   )
@@ -257,13 +265,45 @@ export function Conversation({ session }: { session: Session | null }) {
   // render as standalone cards / dividers. Non-lifecycle system messages
   // (compact_boundary, api_retry, rate_limit, info — /cost, /status, summary)
   // still render as standalone dividers below.
-  const items = visible.filter(
+  const lifecycleFiltered = visible.filter(
     (p) => !(p.m.role === 'system' && p.m.notice === 'lifecycle')
   )
+  // Find the LAST compact_boundary divider — everything before it gets folded
+  // into a single stub the user can expand on demand.
+  let compactIdx = -1
+  for (let k = lifecycleFiltered.length - 1; k >= 0; k--) {
+    const m = lifecycleFiltered[k].m
+    if (m.role === 'system' && m.notice === 'compact_boundary') {
+      compactIdx = k
+      break
+    }
+  }
+  const hiddenBefore = compactIdx > 0 && !compactExpanded ? compactIdx : 0
+  const items =
+    hiddenBefore > 0 ? lifecycleFiltered.slice(hiddenBefore) : lifecycleFiltered
 
   return (
     <div className="conv" ref={scrollRef}>
       <div className="conv-inner">
+        {hiddenBefore > 0 && (
+          <button
+            type="button"
+            className="compact-stub"
+            onClick={() => setCompactExpanded(true)}
+          >
+            Context compacted · {hiddenBefore} earlier message
+            {hiddenBefore === 1 ? '' : 's'} hidden — show
+          </button>
+        )}
+        {compactExpanded && compactIdx > 0 && (
+          <button
+            type="button"
+            className="compact-stub compact-stub-collapse"
+            onClick={() => setCompactExpanded(false)}
+          >
+            Hide pre-compact history
+          </button>
+        )}
         {items.map((p, i) => {
           const { m, visibleBlocks, showProgress } = p
           if (m.role === 'system') {

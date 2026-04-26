@@ -1664,6 +1664,32 @@
 }
 .msg-divider-label { white-space: nowrap; }
 
+.compact-stub {
+  display: block;
+  width: 100%;
+  margin: 18px 0;
+  padding: 8px 12px;
+  background: var(--bg-sub);
+  border: 1px dashed var(--border);
+  border-radius: var(--r-sm);
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--fg-faint);
+  cursor: pointer;
+  text-align: center;
+}
+.compact-stub:hover { color: var(--body); border-color: var(--stripe-purple); }
+.compact-stub-collapse {
+  margin-top: -10px;
+  margin-bottom: 8px;
+  text-transform: none;
+  letter-spacing: 0;
+  border-style: solid;
+  background: transparent;
+}
+
 .todo-card {
   padding: 10px 14px;
   background: var(--bg-card);
