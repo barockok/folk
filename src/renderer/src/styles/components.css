@@ -36,6 +36,10 @@
   gap: 10px;
   padding: 4px 14px 16px;
 }
+.sb-collapsed .sb-brand {
+  padding: 4px 0 14px;
+  justify-content: center;
+}
 
 /* Topbar-resident sidebar toggle, styled small and ghosted to read as a
    4th macOS chrome button. */

@@ -48,16 +48,16 @@ export function Sidebar() {
 
   return (
     <aside className={`sb${collapsed ? ' sb-collapsed' : ''}`}>
-      {!collapsed && (
-        <div className="sb-brand">
-          <div className="sb-logo">
-            <span>f</span>
-          </div>
+      <div className="sb-brand">
+        <div className="sb-logo" title={collapsed ? 'folk' : undefined}>
+          <span>f</span>
+        </div>
+        {!collapsed && (
           <div className="sb-brand-name" style={{ flex: 1 }}>
             folk
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       <nav className="sb-nav scroll" aria-label="Main navigation">
         {NAV_GROUPS.map((g) => (
