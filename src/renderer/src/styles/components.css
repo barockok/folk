@@ -293,6 +293,10 @@
   flex: none;
   min-height: 50px;
 }
+/* When the sidebar is collapsed, the chrome toggle (anchored at left:76px
+   relative to the sidebar) overflows into the topbar's left edge. Push the
+   topbar content right so it doesn't sit underneath the toggle. */
+.shell.sb-closed .topbar { padding-left: 56px; }
 .crumbs { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--body); font-feature-settings: "ss01"; }
 .crumbs .sep { color: var(--fg-faint); }
 .crumbs .cur { color: var(--heading); font-weight: 500; }
