@@ -26,6 +26,7 @@ export function Icon({ name, size = 16, ...rest }: { name: string; size?: number
     cpu: <><rect x="5" y="5" width="14" height="14" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M3 9h2M3 15h2M19 9h2M19 15h2M9 3v2M15 3v2M9 19v2M15 19v2"/></>,
     search: <><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16" y2="16"/></>,
     plus: <><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></>,
+    sidebar: <><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="9" y1="4" x2="9" y2="20"/></>,
     chevronDown: <polyline points="6 9 12 15 18 9"/>,
     chevronRight: <polyline points="9 6 15 12 9 18"/>,
     chevronLeft: <polyline points="15 6 9 12 15 18"/>,

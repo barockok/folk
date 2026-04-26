@@ -49,26 +49,28 @@ export function Sidebar() {
 
   return (
     <aside className={`sb${collapsed ? ' sb-collapsed' : ''}`}>
-      <div className="sb-brand">
-        <div className="sb-logo" title={collapsed ? 'folk' : undefined}>
-          <span>f</span>
-        </div>
-        {!collapsed && (
+      {/* Sidebar toggle styled as the 4th macOS chrome button — sits to the
+          right of the close/min/zoom traffic lights. Single button regardless
+          of collapsed state. */}
+      <button
+        className="sb-toggle"
+        onClick={toggleSidebar}
+        title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        type="button"
+      >
+        <Icon name="sidebar" size={14} />
+      </button>
+
+      {!collapsed && (
+        <div className="sb-brand">
+          <div className="sb-logo">
+            <span>f</span>
+          </div>
           <div className="sb-brand-name" style={{ flex: 1 }}>
             folk
           </div>
-        )}
-        {!collapsed && (
-          <button className="sb-collapse" onClick={toggleSidebar} title="Collapse sidebar">
-            <Icon name="chevronLeft" size={13} />
-          </button>
-        )}
-      </div>
-
-      {collapsed && (
-        <button className="sb-expand" onClick={toggleSidebar} title="Expand sidebar">
-          <Icon name="chevronRight" size={13} />
-        </button>
+        </div>
       )}
 
       <nav className="sb-nav scroll" aria-label="Main navigation">

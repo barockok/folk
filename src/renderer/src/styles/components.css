@@ -16,6 +16,7 @@
 
 /* Sidebar */
 .sb {
+  position: relative;
   display: flex;
   flex-direction: column;
   background: var(--bg-sub);
@@ -30,46 +31,36 @@
   gap: 10px;
   padding: 4px 14px 16px;
 }
-.sb-collapsed .sb-brand {
-  padding: 4px 0 14px;
-  justify-content: center;
-}
-.sb-collapse {
-  width: 22px; height: 22px;
-  border: 0;
+
+/* Sidebar toggle pinned at top-left, immediately after the macOS
+   traffic-light triplet, styled small and ghosted to read as a 4th
+   chrome button. */
+.sb-toggle {
+  position: absolute;
+  top: 12px;
+  left: 76px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  display: grid;
+  place-items: center;
   background: transparent;
+  border: 0;
   border-radius: 4px;
-  display: grid; place-items: center;
   color: var(--fg-faint);
   cursor: pointer;
-  transition: all 120ms;
+  z-index: 5;
+  transition: background 120ms, color 120ms;
 }
-.sb-collapse:hover {
+.sb-toggle:hover {
   background: var(--bg-card);
   color: var(--heading);
 }
-.sb-expand {
-  position: absolute;
-  top: 50px;
-  right: -11px;
-  width: 22px; height: 22px;
-  border-radius: 50%;
-  background: var(--bg-card);
-  border: var(--hair) solid var(--border);
-  display: grid; place-items: center;
-  color: var(--body);
-  cursor: pointer;
-  z-index: 2;
-  box-shadow: var(--sh-ambient);
-  transition: all 120ms;
-  padding: 0;
-}
-.sb-expand:hover {
-  color: var(--heading);
-  border-color: var(--border-soft-purple);
-  background: var(--bg-card);
-}
+/* Even when sidebar is collapsed (56px wide), keep the toggle pinned next to
+   the traffic lights — the absolute position is relative to .sb, but with
+   left: 76px the button visually lives in the main-content area. */
 .sb-collapsed { position: relative; padding-top: 36px; }
+.sb-collapsed .sb-nav { padding-top: 8px; }
 .sb-logo {
   width: 30px; height: 30px;
   border-radius: var(--r);
