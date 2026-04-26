@@ -50,22 +50,20 @@ function isCompactSummary(text: string | undefined): boolean {
 }
 
 // Internal SDK echoes that show up in the on-disk transcript after a
-// /compact run — visible junk for users. Match defensively (whitespace,
-// stray attributes) so future SDK rev variations still hide.
-const HIDDEN_PATTERNS = [
-  /<command-name>\s*\/?compact\s*<\/command-name>/i,
-  /<local-command-stdout>\s*compacted\s*<\/local-command-stdout>/i,
-  /<command-message>\s*compact\s*<\/command-message>/i
+// /compact run — visible junk for users. Strip all known echo tags and the
+// message is "internal" if nothing meaningful remains.
+const ECHO_TAG_PATTERNS = [
+  /<command-name>[^<]*<\/command-name>/gi,
+  /<command-message>[^<]*<\/command-message>/gi,
+  /<command-args>[^<]*<\/command-args>/gi,
+  /<local-command-stdout>[^<]*<\/local-command-stdout>/gi,
+  /<local-command-stderr>[^<]*<\/local-command-stderr>/gi
 ]
 function isInternalEcho(text: string | undefined): boolean {
   if (!text) return false
-  const t = text.trim()
-  if (!t) return false
-  // Treat as internal echo only if EVERY non-empty line is one of the
-  // recognised tags (or empty) — protects against false positives on real
-  // user messages that happen to mention /compact.
-  const lines = t.split('\n').map((l) => l.trim()).filter(Boolean)
-  return lines.every((l) => HIDDEN_PATTERNS.some((p) => p.test(l)))
+  let stripped = text
+  for (const p of ECHO_TAG_PATTERNS) stripped = stripped.replace(p, '')
+  return stripped.trim().length === 0 && text.trim().length > 0
 }
 
 function CompactSummaryCard({ text }: { text: string }) {
