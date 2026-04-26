@@ -98,6 +98,7 @@ function AskUserQuestionCard({
 
   // Single-question card auto-submits on first click for the snappy UX.
   const autoSubmitOnPick = parsed.questions.length === 1
+  const [activeTab, setActiveTab] = useState(0)
 
   const onPick = async (qi: number, label: string) => {
     pick(qi, label)
@@ -109,30 +110,43 @@ function AskUserQuestionCard({
       } finally {
         setBusy(false)
       }
+      return
+    }
+    // Multi-question: after picking, advance to the next unanswered tab so
+    // the user moves through them sequentially without hunting for the next
+    // pending question.
+    if (!autoSubmitOnPick && qi === activeTab) {
+      const nextPending = answers
+        .map((a, i) => (i !== qi && a === null ? i : -1))
+        .find((i) => i !== -1)
+      if (nextPending !== undefined && nextPending !== -1) {
+        setActiveTab(nextPending)
+      }
     }
   }
 
-  return (
-    <div className={`tool-card ask-card ${answered ? 'done' : 'running'}`}>
-      <div className="ask-head">
-        <Icon name="terminal" size={12} />
-        <span className="ask-title">Question</span>
-        {answered && <span className="ask-status">answered</span>}
-      </div>
-      {parsed.questions.map((q, qi) => (
-        <div key={qi} className="ask-q">
+  if (autoSubmitOnPick) {
+    const q = parsed.questions[0]
+    return (
+      <div className={`tool-card ask-card ${answered ? 'done' : 'running'}`}>
+        <div className="ask-head">
+          <Icon name="terminal" size={12} />
+          <span className="ask-title">Question</span>
+          {answered && <span className="ask-status">answered</span>}
+        </div>
+        <div className="ask-q">
           {q.header && <div className="ask-header">{q.header}</div>}
           <div className="ask-question">{q.question}</div>
           <div className="ask-options">
             {q.options.map((opt, oi) => {
-              const selected = answers[qi] === opt.label
+              const selected = answers[0] === opt.label
               return (
                 <button
                   key={oi}
                   type="button"
                   className={`ask-opt${selected ? ' on' : ''}`}
                   disabled={answered || busy}
-                  onClick={() => onPick(qi, opt.label)}
+                  onClick={() => onPick(0, opt.label)}
                 >
                   <span className="ask-opt-label">{opt.label}</span>
                   {opt.description && (
@@ -143,16 +157,73 @@ function AskUserQuestionCard({
             })}
           </div>
         </div>
-      ))}
-      {!autoSubmitOnPick && !answered && (
+      </div>
+    )
+  }
+
+  // Multi-question: tabbed UI, one question per tab.
+  const active = parsed.questions[activeTab]
+  return (
+    <div className={`tool-card ask-card ${answered ? 'done' : 'running'}`}>
+      <div className="ask-head">
+        <Icon name="terminal" size={12} />
+        <span className="ask-title">{parsed.questions.length} questions</span>
+        {answered && <span className="ask-status">answered</span>}
+      </div>
+      <div className="ask-tabs" role="tablist">
+        {parsed.questions.map((q, qi) => {
+          const picked = answers[qi]
+          const label = q.header || `Q${qi + 1}`
+          return (
+            <button
+              key={qi}
+              type="button"
+              role="tab"
+              aria-selected={qi === activeTab}
+              className={`ask-tab${qi === activeTab ? ' on' : ''}${picked ? ' picked' : ''}`}
+              onClick={() => setActiveTab(qi)}
+            >
+              <span className="ask-tab-num">{qi + 1}</span>
+              <span className="ask-tab-label">{label}</span>
+              {picked && <span className="ask-tab-dot" aria-hidden="true" />}
+            </button>
+          )
+        })}
+      </div>
+      <div className="ask-q" role="tabpanel">
+        <div className="ask-question">{active.question}</div>
+        <div className="ask-options">
+          {active.options.map((opt, oi) => {
+            const selected = answers[activeTab] === opt.label
+            return (
+              <button
+                key={oi}
+                type="button"
+                className={`ask-opt${selected ? ' on' : ''}`}
+                disabled={answered || busy}
+                onClick={() => onPick(activeTab, opt.label)}
+              >
+                <span className="ask-opt-label">{opt.label}</span>
+                {opt.description && (
+                  <span className="ask-opt-desc">{opt.description}</span>
+                )}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+      {!answered && (
         <div className="ask-foot">
+          <span className="ask-foot-status">
+            {answers.filter((a) => a !== null).length}/{parsed.questions.length} answered
+          </span>
           <button
             type="button"
             className="btn btn-primary"
             disabled={!allPicked || busy}
             onClick={submit}
           >
-            {busy ? 'Submitting…' : 'Submit answers'}
+            {busy ? 'Submitting…' : 'Submit'}
           </button>
         </div>
       )}
