@@ -219,10 +219,14 @@ export function Conversation({ session }: { session: Session | null }) {
       ? m.blocks
       : m.blocks.filter((b) => b.kind !== 'thinking')
     // The trailing assistant message of an in-flight turn shows a "still
-    // working" indicator BETWEEN deltas. Suppress it when something else is
-    // already conveying progress: a live thinking block is visible (its dots
-    // pulse), or a tool is mid-run (its card shows a spinner).
-    const hasLiveThinking = isStreamingThought && m.blocks.some((b) => b.kind === 'thinking')
+    // working" indicator BETWEEN deltas. Suppress it ONLY when something is
+    // *currently* animating progress: the live thinking block (last block,
+    // pulsing dots) or a tool that's still running. Older thinking blocks no
+    // longer pulse, so they no longer count as live — otherwise the user
+    // sees a frozen "Thought" with no indication anything is happening.
+    const lastBlock = m.blocks[m.blocks.length - 1]
+    const hasLiveThinking =
+      isStreamingThought && lastBlock?.kind === 'thinking'
     const hasRunningTool = m.blocks.some((b) => b.kind === 'tool' && b.call.output === undefined)
     const showProgress =
       isLast &&
