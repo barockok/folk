@@ -1,6 +1,6 @@
 # Claude Code ↔ folk feature parity
 
-Last updated: 2026-04-25 (priority shortlist 1–10 landed).
+Last updated: 2026-04-26 (re-audit; added web tools, worktree, fork, bg-task, allowlist gaps).
 
 A reference inventory of what Claude Code (CLI) does, what folk (desktop app) does today, and where the gaps are. Use this when scoping new work — every "should we build X?" should start by checking what bucket it falls into here.
 
@@ -58,6 +58,8 @@ These are agent-loop directives or canned prompts the SDK already understands.
 | `/output-style` | change response style | ❌ | low priority |
 | `/add-dir` | add working directory | ⚠️ folk sets cwd per-session at creation | n/a — folk model is one cwd per session |
 | `/export` | export transcript | ✅ writes a markdown blob via download dialog |
+| `/help` | show help | ❌ | add — list slash commands inline |
+| `/fork` | branch session from current point | ❌ | needs SDK fork primitive; defer |
 
 ---
 
@@ -107,8 +109,10 @@ CC CLI special-cases several tools for richer rendering. Folk renders **everythi
 | `Edit` / `Write` / `NotebookEdit` | colored diff | ✅ DiffCard renders unified diff (red/green) with file path; Write shown as all-additions |
 | `Bash` | command + stdout/stderr separated | generic | small — split output panes |
 | `Grep` / `Glob` | match table | generic | small |
-| `WebFetch` / `WebSearch` | rich link preview | generic | small |
-| `AskUserQuestion` | inline form | generic, **no way to answer** | medium — see § 4 |
+| `WebFetch` | rich link preview | ❌ tool not surfaced | wrap SDK tool, render link preview card |
+| `WebSearch` | results table | ❌ tool not surfaced | wrap SDK tool, render results list |
+| `BashOutput` (long-running) | streaming tail + status | ❌ no monitoring panel | add bg-task tail view |
+| `AskUserQuestion` | inline form | ✅ multi-question tabbed form, radio + free-text "Other", auto-submit; answer round-trips via `pendingAsks` map in AgentManager |
 | MCP tools (any) | generic | generic | n/a |
 | Custom plugin tools | depends | generic | n/a |
 
@@ -121,8 +125,8 @@ CC CLI presents inline UIs for three things folk can't do today:
 | Surface | CC behavior | Folk today | Gap |
 |---|---|---|---|
 | Tool-use permission prompt ("Allow Bash to run `rm -rf`?") | inline allow/deny/always | ✅ `canUseTool` callback wired through IPC (`agent:permissionRequest` / `agent:respondPermission`). Inline `PermissionPrompt` card renders under the matching tool block (or, if it fires before the tool block exists, at the foot of the trailing assistant message). Buttons: Deny / Allow always / Allow once. "Allow always" forwards the SDK's `suggestions` as `updatedPermissions` so the rule persists for the session. permissionMode chip (Ask / Auto-edit / Plan / Bypass) still gates whether `canUseTool` is invoked at all. |
-| `AskUserQuestion` tool | inline form, blocks turn until answered | tool call shows but no input UI; the agent is stuck waiting | render form from elicitation payload; push response back into iterable |
-| MCP `elicitation/create` | inline form | ❌ ignored | same as AskUserQuestion |
+| `AskUserQuestion` tool | inline form, blocks turn until answered | ✅ ToolCard renders tabbed multi-question form; selection or "Other" free-text resolves pending promise in AgentManager (`pendingAsks`); teardown rejects pending asks on cancel/dispose |
+| MCP `elicitation/create` | inline form | ❌ ignored | reuse AskUserQuestion plumbing |
 
 The infrastructure piece: folk needs an event from main → renderer ("agent is asking a question, here's the schema"), and an IPC back ("here's the answer"). The schema is in the SDK's elicitation messages.
 
@@ -251,7 +255,7 @@ Low priority unless folk plans to install its own hooks.
 |---|---|---|
 | Global settings | `~/.claude/settings.json` | ⚠️ folk has its own SQLite-backed settings; some overlap (model defaults, MCP) |
 | Project settings | `.claude/settings.json` | ❌ folk doesn't read project settings |
-| Permissions config | `~/.claude/settings.json` permissions | ⚠️ per-session `permissionMode` persisted in SQLite (default / acceptEdits / plan / bypassPermissions) and passed to the SDK |
+| Permissions config | `~/.claude/settings.json` permissions | ⚠️ per-session `permissionMode` persisted in SQLite (default / acceptEdits / plan / bypassPermissions) and passed to the SDK; **no allowlist editor** (e.g. `Bash(npm:*)`) — runtime "Allow always" only persists for session |
 | Theme | `/config` | ✅ light/dark via `data-theme` |
 | Density | n/a | ✅ folk-only (`data-density`) |
 | Keybindings | `~/.claude/keybindings.json` | ✅ KeybindingsPage |
@@ -270,7 +274,7 @@ The 2026-04-25 shortlist of 10 is now mostly landed. Outstanding work:
 5. ✅ **Skills / plugins / user commands hydration** — `disk-discovery.ts` IPC, SkillsPage + PluginsPage rebuilt, user commands fold into the slash menu.
 6. ✅ **Subagent nested cards** — `parent_tool_use_id` threaded into `appendToolCall` / `appendToolResult` and `mapSessionMessages`; `ToolCard` recurses.
 7. ✅ **Edit / Write diff rendering** — DiffCard with red/green unified diff (covers `Edit`, `Write`, `NotebookEdit`).
-8. ⚠️ **Elicitation form** — punted; needs SDK control-message wiring (push tool_result back into the iterable for `AskUserQuestion` / MCP `elicitation/create`). UI design also TBD.
+8. ✅ **Elicitation form** — `AskUserQuestion` shipped Apr 26: ToolCard renders tabbed multi-question form (radio + "Other" free-text), `pendingAsks` map in AgentManager round-trips response as user text message, teardown rejects pending promises on cancel/dispose. MCP `elicitation/create` still pending — reuse same plumbing.
 9. ✅ **`/cost` and `/status`** — `result.total_cost_usd` + usage aggregated into per-session `stats`; both commands render an inline divider with the totals.
 10. ✅ **Permissions** — SDK `permissionMode` (Ask / Auto-edit / Plan / Bypass) persisted per session and surfaced via a composer chip; SessionSetup's "skip permissions" toggle now sets `permissionMode: 'bypassPermissions'`. `canUseTool` is wired end-to-end: SDK calls main's callback → main emits `permissionRequest` over IPC → renderer pushes a `PermissionPrompt` card next to the matching tool block → user clicks Allow/Allow always/Deny → renderer round-trips back via `respondPermission`. "Allow always" replays the SDK's `suggestions` so subsequent same-tool calls in the session don't reprompt. Sensitive-path edits (`~/.claude/skills/*`, MCP configs) now show an actionable card instead of silently failing.
 
@@ -280,6 +284,54 @@ Next up beyond the shortlist:
 - Plugin-bundled commands (scan plugin install paths for `commands/*.md`).
 - `/memory` editor (currently a pass-through prompt).
 - `/output-style`, hooks UI, status line — defer until someone asks.
+
+---
+
+## 14. Git & worktrees
+
+| Aspect | CC | Folk |
+|---|---|---|
+| Branch / status awareness | implicit via cwd | ❌ no git-aware UI; sessions just store `workingDir` |
+| `EnterWorktree` / `ExitWorktree` | ✅ isolated worktree per task | ❌ |
+| Diff against base branch | n/a | ❌ |
+| Commit / PR helpers | via `/review`, `/pr-comments` prompts | ⚠️ slash pass-through only, no inline diff/PR view |
+
+Worktree integration would let folk run multiple sessions on isolated branches of the same repo without trampling each other.
+
+---
+
+## 15. Background tasks & monitoring
+
+| Aspect | CC | Folk |
+|---|---|---|
+| `BashOutput` tail of long-running `Bash` | ✅ live tail + kill | ❌ |
+| `Monitor` until-loop | ✅ | ❌ |
+| Log panel | stderr inline | ⚠️ stderr piped to dev console only |
+| Task lifecycle panel (`SDKTask*`) | ✅ | ❌ ignored (see § 5) |
+
+---
+
+## 16. Models & providers (extra)
+
+| Aspect | CC | Folk |
+|---|---|---|
+| Fast mode (Opus 4.6 fast) | `/fast` toggle | ❌ |
+| Model fallback chain | ✅ (Opus → Sonnet on quota) | ❌ |
+| Auto model routing | ✅ | ❌ |
+
+---
+
+## 17. Re-audit gap summary (2026-04-26)
+
+**Top 5 to close gap (priority order):**
+
+1. **Hooks config UI** — biggest CC power-user feature missing. Read/write `~/.claude/settings.json` `hooks` block. Hook lifecycle notices already render (§ 12).
+2. **Permissions allowlist editor** — pair with `/permissions` slash. Persist per-user / per-project allow/deny rules to settings.json. Reduces approval fatigue.
+3. **Worktree + git integration** — sessions know `workingDir`; add branch chip, status, EnterWorktree action.
+4. **Agent tool dispatch + `.claude/agents/` discovery** — subagent rendering already works (§ 5); folk just doesn't let user *invoke* custom agents.
+5. **WebFetch / WebSearch wrappers** — trivially exposed via SDK; small UX win with link preview / results card.
+
+**Secondary gaps:** fork session, fast mode toggle, model fallback chain, ExitPlanMode action, MCP resources/prompts CRUD, auto-memory synthesis, BashOutput monitoring panel, /help command, dev log panel surface.
 
 ---
 
