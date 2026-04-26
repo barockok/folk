@@ -1146,8 +1146,9 @@
 .sess-kebab:disabled { opacity: 0.5; cursor: default; }
 .sess-menu {
   position: absolute;
-  bottom: 30px;
+  top: 100%;
   right: 6px;
+  margin-top: 4px;
   z-index: 20;
   min-width: 140px;
   padding: 4px;
