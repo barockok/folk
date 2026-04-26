@@ -314,7 +314,7 @@ export class AgentManager extends EventEmitter {
           // with the tool_result we pushed via respondToolUse.
           if (toolName === 'AskUserQuestion') {
             const safeInput = (input ?? {}) as Record<string, unknown>
-            await new Promise<string>((resolve) => {
+            const answer = await new Promise<string>((resolve) => {
               this.#pendingAsks.set(opts.toolUseID, {
                 sessionId: session.id,
                 toolUseId: opts.toolUseID,
@@ -328,7 +328,17 @@ export class AgentManager extends EventEmitter {
               }
               opts.signal.addEventListener('abort', onAbort, { once: true })
             })
-            return { behavior: 'allow', updatedInput: safeInput }
+            // Returning `deny` here is the load-bearing trick: the SDK's
+            // built-in AskUserQuestion handler echoes the question structure
+            // (no answer field), so allow → tool runs → empty result → model
+            // is blind. Resolve with deny instead, embedding the user's
+            // answer in `message`; the SDK pipes that string to the model as
+            // the tool's content. We phrase it as a neutral statement so the
+            // model reads it as the user's answer, not a refusal.
+            if (!answer) {
+              return { behavior: 'deny', message: 'User cancelled the question.' }
+            }
+            return { behavior: 'deny', message: `User answered: ${answer}` }
           }
           const requestId = randomUUID()
           const safeInput = (input ?? {}) as Record<string, unknown>
@@ -580,24 +590,10 @@ export class AgentManager extends EventEmitter {
         this.#pendingPermissions.delete(reqId)
       }
     }
-    live.push({
-      type: 'user',
-      session_id: sessionId,
-      parent_tool_use_id: null,
-      isSynthetic: true,
-      priority: 'now',
-      tool_use_result: { tool_use_id: toolUseId, content: answer },
-      message: {
-        role: 'user',
-        content: [
-          {
-            type: 'tool_result',
-            tool_use_id: toolUseId,
-            content: [{ type: 'text', text: answer }]
-          }
-        ] as unknown as never
-      }
-    })
+    // The user's answer flows back to the model via canUseTool's deny.message
+    // (see #pendingAsks resolution above). We don't push an extra user text
+    // here because the deny message already lands in tool_result content.
+    void live
     this.emit('toolResult', {
       sessionId,
       callId: toolUseId,
