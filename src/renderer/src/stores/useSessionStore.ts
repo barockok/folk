@@ -346,6 +346,19 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     }),
   appendNotice: ({ sessionId, kind, text }) =>
     set((st) => {
+      const patch: Partial<SessionState> = {}
+      // Lifecycle notices are surfaced via the live ticker on the streaming
+      // assistant card — they should NOT land in `messages`. Pushing them
+      // splits the trailing assistant bubble (ensureAssistant sees a system
+      // message as "last" and starts a new assistant bubble for the next
+      // chunk), which fragments the timeline rail into disconnected dots
+      // within a single turn.
+      if (kind === 'lifecycle') {
+        if (text && st.streamingSessions.has(sessionId)) {
+          patch.lifecycleTicker = { ...st.lifecycleTicker, [sessionId]: text }
+        }
+        return patch as SessionState
+      }
       const cur = st.messages[sessionId] ?? []
       const notice: ChatMessage = {
         id: crypto.randomUUID(),
@@ -365,15 +378,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       } else {
         nextMessages = [...cur, notice]
       }
-      const patch: Partial<SessionState> = {
-        messages: { ...st.messages, [sessionId]: nextMessages }
-      }
-      // While a turn is streaming, mirror the latest lifecycle text into the
-      // ticker so the live thinking row can show "what's happening" without
-      // requiring the user to expand the lifecycle group.
-      if (kind === 'lifecycle' && text && st.streamingSessions.has(sessionId)) {
-        patch.lifecycleTicker = { ...st.lifecycleTicker, [sessionId]: text }
-      }
+      patch.messages = { ...st.messages, [sessionId]: nextMessages }
       return patch as SessionState
     }),
   appendUsage: (u) =>
