@@ -1114,45 +1114,94 @@
   gap: 3px;
   border: var(--hair) solid transparent;
 }
-.sess-actions {
+.sess-kebab {
   position: absolute;
   top: 6px;
   right: 6px;
-  display: flex;
-  gap: 2px;
-  opacity: 0;
-  transition: opacity 120ms;
-}
-.sess-item:hover .sess-actions,
-.sess-item:focus-within .sess-actions { opacity: 1; }
-.sess-action {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   width: 22px;
   height: 22px;
   padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: transparent;
   border: 1px solid transparent;
   border-radius: 4px;
   color: var(--fg-faint);
   font: inherit;
-  font-size: 11px;
+  font-size: 16px;
+  line-height: 1;
   cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms;
 }
-.sess-action:hover {
+.sess-item:hover .sess-kebab,
+.sess-item:focus-within .sess-kebab,
+.sess-item .sess-kebab[aria-expanded="true"] { opacity: 1; }
+.sess-kebab:hover {
   background: var(--bg-sub);
   border-color: var(--border);
   color: var(--heading);
 }
-.sess-action:disabled { opacity: 0.5; cursor: default; }
-.sess-action-danger:hover { color: var(--ruby); border-color: var(--ruby); }
-.sess-rename-input {
-  flex: 1;
-  min-width: 0;
-  font-size: 13px;
-  font-weight: 500;
-  padding: 2px 6px;
+.sess-kebab:disabled { opacity: 0.5; cursor: default; }
+.sess-menu {
+  position: absolute;
+  top: 30px;
+  right: 6px;
+  z-index: 20;
+  min-width: 140px;
+  padding: 4px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  box-shadow: var(--sh-pop, 0 8px 24px rgba(0, 0, 0, 0.18));
+  display: flex;
+  flex-direction: column;
+}
+.sess-menu-item {
+  text-align: left;
+  padding: 6px 10px;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--body);
+  cursor: pointer;
+}
+.sess-menu-item:hover { background: var(--bg-sub); color: var(--heading); }
+.sess-menu-item-danger { color: var(--ruby); }
+.sess-menu-item-danger:hover { background: rgba(225, 0, 80, 0.08); color: var(--ruby); }
+
+.sess-preview-dir { overflow: hidden; text-overflow: ellipsis; }
+.sess-preview-sep { margin: 0 6px; opacity: 0.5; }
+.sess-preview-time { font-family: var(--ff-mono); font-size: 11px; opacity: 0.8; }
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: grid;
+  place-items: center;
+  z-index: 100;
+}
+.modal-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 16px;
+  min-width: 320px;
+  max-width: 480px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.32);
+}
+.modal-hd { font-size: 14px; font-weight: 600; color: var(--heading); }
+.modal-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 .sess-item:hover { background: var(--bg-card); }
 .sess-item.on {

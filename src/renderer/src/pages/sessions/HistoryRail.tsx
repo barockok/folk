@@ -14,7 +14,6 @@ type Group = 'Today' | 'Yesterday' | 'This week' | 'Earlier'
 
 function getGroup(createdAt: number): Group {
   const now = new Date()
-  const d = new Date(createdAt)
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
   const yesterdayStart = todayStart - 86400000
   const weekStart = todayStart - 6 * 86400000
@@ -36,9 +35,8 @@ function formatRelTime(createdAt: number): string {
   return `${days}d ago`
 }
 
-function sessionPreview(s: Session): string {
+function dirBase(s: Session): string {
   const base = s.workingDir.split('/').filter(Boolean).pop() ?? s.workingDir
-  if (!s.claudeStarted) return `${base} · not started`
   return base
 }
 
@@ -60,6 +58,71 @@ function StatusDot({ status }: { status: SessionStatus }) {
 
 const GROUP_ORDER: Group[] = ['Today', 'Yesterday', 'This week', 'Earlier']
 
+interface RenameModalProps {
+  session: Session
+  onClose: () => void
+  onSubmit: (title: string) => Promise<void>
+}
+
+function RenameModal({ session, onClose, onSubmit }: RenameModalProps) {
+  const [title, setTitle] = useState(session.title)
+  const [busy, setBusy] = useState(false)
+  const inputRef = useRef<HTMLInputElement | null>(null)
+
+  useEffect(() => {
+    inputRef.current?.focus()
+    inputRef.current?.select()
+  }, [])
+
+  const submit = async () => {
+    const trimmed = title.trim()
+    if (!trimmed || trimmed === session.title) {
+      onClose()
+      return
+    }
+    setBusy(true)
+    try {
+      await onSubmit(trimmed)
+      onClose()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-card" role="dialog" aria-label="Rename session" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-hd">Rename session</div>
+        <input
+          ref={inputRef}
+          type="text"
+          className="input"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              void submit()
+            } else if (e.key === 'Escape') {
+              e.preventDefault()
+              onClose()
+            }
+          }}
+          disabled={busy}
+        />
+        <div className="modal-foot">
+          <button className="btn btn-plain" type="button" onClick={onClose} disabled={busy}>
+            Cancel
+          </button>
+          <button className="btn btn-primary" type="button" onClick={submit} disabled={busy}>
+            {busy ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function HistoryRail({
   sessions,
   activeId,
@@ -70,16 +133,21 @@ export function HistoryRail({
 }: HistoryRailProps) {
   const [query, setQuery] = useState('')
   const [pendingId, setPendingId] = useState<string | null>(null)
-  const [renamingId, setRenamingId] = useState<string | null>(null)
-  const [draftTitle, setDraftTitle] = useState('')
-  const inputRef = useRef<HTMLInputElement | null>(null)
+  const [menuId, setMenuId] = useState<string | null>(null)
+  const [renameTarget, setRenameTarget] = useState<Session | null>(null)
 
+  // Click-outside closes menu.
   useEffect(() => {
-    if (renamingId && inputRef.current) {
-      inputRef.current.focus()
-      inputRef.current.select()
+    if (!menuId) return
+    const handler = (e: MouseEvent) => {
+      const t = e.target as HTMLElement
+      if (!t.closest('.sess-menu') && !t.closest('.sess-kebab')) {
+        setMenuId(null)
+      }
     }
-  }, [renamingId])
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [menuId])
 
   const filtered = useMemo(() => {
     if (!query.trim()) return sessions
@@ -100,40 +168,15 @@ export function HistoryRail({
     return map
   }, [filtered])
 
-  const handleDelete = async (e: React.MouseEvent, id: string, title: string) => {
-    e.stopPropagation()
-    if (!confirm(`Delete "${title}"? This cannot be undone.`)) return
-    setPendingId(id)
+  const handleDelete = async (s: Session) => {
+    setMenuId(null)
+    if (!confirm(`Delete "${s.title}"? This cannot be undone.`)) return
+    setPendingId(s.id)
     try {
-      await onDelete(id)
+      await onDelete(s.id)
     } finally {
       setPendingId(null)
     }
-  }
-
-  const startRename = (e: React.MouseEvent, s: Session) => {
-    e.stopPropagation()
-    setRenamingId(s.id)
-    setDraftTitle(s.title)
-  }
-
-  const commitRename = async (id: string) => {
-    const title = draftTitle.trim()
-    setRenamingId(null)
-    if (!title) return
-    const orig = sessions.find((s) => s.id === id)
-    if (!orig || title === orig.title) return
-    setPendingId(id)
-    try {
-      await onRename(id, title)
-    } finally {
-      setPendingId(null)
-    }
-  }
-
-  const cancelRename = () => {
-    setRenamingId(null)
-    setDraftTitle('')
   }
 
   return (
@@ -171,17 +214,16 @@ export function HistoryRail({
               <div className="sess-group">{group}</div>
               {items.map((s) => {
                 const isActive = s.id === activeId
-                const isRenaming = renamingId === s.id
+                const subtitle = s.goal ?? dirBase(s)
+                const notStarted = !s.claudeStarted
                 return (
                   <div
                     key={s.id}
                     className={`sess-item ${isActive ? 'on' : ''}`}
                     role="button"
                     tabIndex={0}
-                    onClick={() => !isRenaming && onPick(s.id)}
-                    onDoubleClick={(e) => startRename(e, s)}
+                    onClick={() => onPick(s.id)}
                     onKeyDown={(e) => {
-                      if (isRenaming) return
                       if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault()
                         onPick(s.id)
@@ -192,57 +234,61 @@ export function HistoryRail({
                       <div className="sess-meta">
                         <StatusDot status={s.status} />
                       </div>
-                      {isRenaming ? (
-                        <input
-                          ref={inputRef}
-                          className="input sess-rename-input"
-                          value={draftTitle}
-                          onClick={(e) => e.stopPropagation()}
-                          onChange={(e) => setDraftTitle(e.target.value)}
-                          onBlur={() => void commitRename(s.id)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault()
-                              void commitRename(s.id)
-                            } else if (e.key === 'Escape') {
-                              e.preventDefault()
-                              cancelRename()
-                            }
-                          }}
-                        />
-                      ) : (
-                        <span className="sess-name" title="Double-click to rename">
-                          {s.title}
-                        </span>
-                      )}
-                      <span className="sess-time">{formatRelTime(s.createdAt)}</span>
+                      <span className="sess-name" title={s.title}>
+                        {s.title}
+                      </span>
                     </div>
                     <div className="sess-preview">
-                      {s.goal ?? sessionPreview(s)}
+                      <span className="sess-preview-dir">{subtitle}</span>
+                      <span className="sess-preview-sep">·</span>
+                      <span className="sess-preview-time">
+                        {notStarted ? 'not started' : formatRelTime(s.createdAt)}
+                      </span>
                     </div>
 
-                    <div className="sess-actions" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        className="sess-action"
-                        type="button"
-                        title="Rename"
-                        aria-label={`Rename session ${s.title}`}
-                        disabled={pendingId === s.id || isRenaming}
-                        onClick={(e) => startRename(e, s)}
+                    <button
+                      className="sess-kebab"
+                      type="button"
+                      title="More"
+                      aria-haspopup="menu"
+                      aria-expanded={menuId === s.id}
+                      aria-label={`Session options for ${s.title}`}
+                      disabled={pendingId === s.id}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setMenuId((cur) => (cur === s.id ? null : s.id))
+                      }}
+                    >
+                      ⋯
+                    </button>
+
+                    {menuId === s.id && (
+                      <div
+                        className="sess-menu"
+                        role="menu"
+                        onClick={(e) => e.stopPropagation()}
                       >
-                        ✎
-                      </button>
-                      <button
-                        className="sess-action sess-action-danger"
-                        type="button"
-                        title="Delete"
-                        aria-label={`Delete session ${s.title}`}
-                        disabled={pendingId === s.id}
-                        onClick={(e) => void handleDelete(e, s.id, s.title)}
-                      >
-                        {pendingId === s.id ? '…' : '✕'}
-                      </button>
-                    </div>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="sess-menu-item"
+                          onClick={() => {
+                            setMenuId(null)
+                            setRenameTarget(s)
+                          }}
+                        >
+                          Rename
+                        </button>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="sess-menu-item sess-menu-item-danger"
+                          onClick={() => void handleDelete(s)}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )
               })}
@@ -256,6 +302,16 @@ export function HistoryRail({
           </div>
         )}
       </div>
+
+      {renameTarget && (
+        <RenameModal
+          session={renameTarget}
+          onClose={() => setRenameTarget(null)}
+          onSubmit={async (title) => {
+            await onRename(renameTarget.id, title)
+          }}
+        />
+      )}
     </div>
   )
 }
