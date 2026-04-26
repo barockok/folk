@@ -38,40 +38,6 @@ function collectCallIds(call: PersistedToolCall, into: Set<string>): void {
   }
 }
 
-function LifecycleRow({ labels }: { labels: string[] }) {
-  const [open, setOpen] = useState(false)
-  if (labels.length === 0) return null
-  const head = labels[labels.length - 1] || 'lifecycle'
-  const more = labels.length - 1
-  return (
-    <div className={`lifecycle${open ? ' open' : ''}`} role="group">
-      <button
-        type="button"
-        className="lifecycle-head"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-      >
-        <span className="lifecycle-dot" aria-hidden="true" />
-        <span className="lifecycle-label">{head}</span>
-        {more > 0 && <span className="lifecycle-more">+{more} more</span>}
-        <span className="lifecycle-chev" aria-hidden="true">
-          {open ? '▾' : '▸'}
-        </span>
-      </button>
-      {open && (
-        <ul className="lifecycle-list">
-          {labels.map((l, idx) => (
-            <li key={idx} className="lifecycle-item">
-              <span className="lifecycle-bul" aria-hidden="true" />
-              <span>{l}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  )
-}
-
 function PermissionPrompt({ req }: { req: PermissionRequest }) {
   const remove = useSessionStore((s) => s.removePermissionRequest)
   const [busy, setBusy] = useState(false)
@@ -270,44 +236,19 @@ export function Conversation({ session }: { session: Session | null }) {
   })
   const visible = prepared.filter((p) => p.renderable)
 
-  // Coalesce consecutive lifecycle notices (hook started/done, session ready,
-  // status: requesting, etc.) into a single collapsible row so a routine
-  // resume doesn't carpet the transcript with seven full-width dividers.
-  // Non-lifecycle system messages (compact_boundary, api_retry, rate_limit,
-  // info — /cost, /status, summary) still render as standalone dividers.
-  type RenderItem =
-    | { kind: 'msg'; p: typeof visible[number] }
-    | { kind: 'lifecycle-group'; ids: string[]; labels: string[] }
-  const items: RenderItem[] = []
-  for (const p of visible) {
-    const isLifecycle = p.m.role === 'system' && p.m.notice === 'lifecycle'
-    if (isLifecycle) {
-      const label = p.m.blocks.find((b) => b.kind === 'text')?.text ?? ''
-      const last = items[items.length - 1]
-      if (last && last.kind === 'lifecycle-group') {
-        last.ids.push(p.m.id)
-        last.labels.push(label)
-      } else {
-        items.push({ kind: 'lifecycle-group', ids: [p.m.id], labels: [label] })
-      }
-    } else {
-      items.push({ kind: 'msg', p })
-    }
-  }
+  // Lifecycle notices (hook started/done, session ready, status: requesting,
+  // etc.) are surfaced ephemerally via the thinking-card ticker — they never
+  // render as standalone cards / dividers. Non-lifecycle system messages
+  // (compact_boundary, api_retry, rate_limit, info — /cost, /status, summary)
+  // still render as standalone dividers below.
+  const items = visible.filter(
+    (p) => !(p.m.role === 'system' && p.m.notice === 'lifecycle')
+  )
 
   return (
     <div className="conv" ref={scrollRef}>
       <div className="conv-inner">
-        {items.map((it, i) => {
-          if (it.kind === 'lifecycle-group') {
-            return (
-              <LifecycleRow
-                key={`lc-${it.ids[0]}-${it.ids.length}`}
-                labels={it.labels}
-              />
-            )
-          }
-          const p = it.p
+        {items.map((p, i) => {
           const { m, visibleBlocks, showProgress } = p
           if (m.role === 'system') {
             const label = m.blocks.find((b) => b.kind === 'text')?.text ?? 'Context compacted'
@@ -319,10 +260,8 @@ export function Conversation({ session }: { session: Session | null }) {
               </div>
             )
           }
-          const prevItem = i > 0 ? items[i - 1] : null
-          const nextItem = i < items.length - 1 ? items[i + 1] : null
-          const prev = prevItem && prevItem.kind === 'msg' ? prevItem.p.m : null
-          const next = nextItem && nextItem.kind === 'msg' ? nextItem.p.m : null
+          const prev = i > 0 ? items[i - 1].m : null
+          const next = i < items.length - 1 ? items[i + 1].m : null
           const continuation = prev != null && prev.role !== 'system' && prev.role === m.role
           const continuesBelow = next != null && next.role !== 'system' && next.role === m.role
           return (
