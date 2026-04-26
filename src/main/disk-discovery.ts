@@ -103,7 +103,7 @@ export async function discoverSkills(workingDir: string | null): Promise<Discove
 async function readCommandFile(
   parent: string,
   entryName: string,
-  scope: 'user' | 'project'
+  scope: DiscoveredCommand['scope']
 ): Promise<DiscoveredCommand | null> {
   if (!entryName.endsWith('.md')) return null
   const full = join(parent, entryName)

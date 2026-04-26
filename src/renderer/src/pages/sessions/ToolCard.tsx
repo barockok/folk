@@ -1,5 +1,5 @@
 // src/renderer/src/pages/sessions/ToolCard.tsx
-import { useState } from 'react'
+import { useState, type ReactElement } from 'react'
 import { Icon } from '../../components/icons'
 
 import type { PersistedToolCall } from '@shared/types'
@@ -85,7 +85,7 @@ function buildDiffLines(call: PersistedToolCall): { path: string; lines: string[
   return { path, lines }
 }
 
-function renderDiffPanel(call: PersistedToolCall): JSX.Element | null {
+function renderDiffPanel(call: PersistedToolCall): ReactElement | null {
   const built = buildDiffLines(call)
   if (!built) return null
   const status: 'running' | 'success' | 'error' =

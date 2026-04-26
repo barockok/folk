@@ -15,6 +15,9 @@
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "test": "vitest run",
     "test:watch": "vitest",
+    "smoke": "bash scripts/smoke.sh full",
+    "smoke:unit": "bash scripts/smoke.sh unit",
+    "smoke:e2e": "bash scripts/smoke.sh e2e",
     "package:mac": "npm run build && electron-builder --mac --config electron-builder.yml"
   },
   "dependencies": {
@@ -31,6 +34,7 @@
     "zustand": "^5.0.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.50.0",
     "@types/better-sqlite3": "^7.6.11",
     "@types/node": "^22.10.0",
     "@types/react": "^19.0.0",

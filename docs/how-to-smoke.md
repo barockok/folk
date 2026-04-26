@@ -176,3 +176,43 @@ After running tests, restore the Electron binding before launching dev:
 ```bash
 npx @electron/rebuild -w better-sqlite3 --build-from-source
 ```
+
+---
+
+## Automation: `npm run smoke`
+
+`scripts/smoke.sh` orchestrates the full pipeline so the binding swap, vitest,
+and the Playwright Electron spec run with one command:
+
+```bash
+npm install
+npx playwright install chromium     # one-time — fetches Playwright's driver binary
+npm run smoke                       # vitest → electron rebuild → build → e2e
+npm run smoke:unit                  # only the vitest leg (still restores Electron binding)
+npm run smoke:e2e                   # only the Electron + Playwright leg
+```
+
+The Playwright Electron spec lives in `tests/e2e/smoke.spec.ts`. It boots the
+built app against a throwaway `--user-data-dir`, primes the onboarding flag in
+`localStorage`, and exercises the deterministic UI surface:
+
+| Doc # | Scenario | Auto |
+|---|---|---|
+| 1 | slash menu opens with built-in commands | ✅ |
+| 3 | Skills + Plugins pages render | ✅ |
+| 13 | Composer permission chip exposes Ask/Auto/Plan/Bypass | ✅ |
+| 14 | SessionSetup "Skip permissions" toggle present | ✅ |
+| 20 | Models page renders Test buttons | ✅ |
+| 21 | Custom provider model add UI present | ✅ |
+| 23 | SessionSetup picker grouped by provider | ✅ |
+| 24 | Markdown table renders content-hugging width | ✅ |
+| 2, 4–12, 15–19, 25, 26 | live-agent / keychain / file-watch flows | ❌ manual |
+
+Live-agent scenarios (compact boundary, /cost, /status, subagents, diff cards,
+TodoWrite, MCP humanize, tool group, live thinking, auto-title, /clear
+inheritance, tool progress, prompt suggestions, rate-limit/retry, system
+notices, inline image, dev keychain bypass) need a real Anthropic API key and
+a turn against a real model — they stay manual. The SDK-side dispatch logic
+those scenarios depend on is already covered by
+`src/main/agent-manager.test.ts` (vitest), so the manual checks are about UI
+rendering of real events, not about the routing itself.

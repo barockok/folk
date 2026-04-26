@@ -1,4 +1,4 @@
-import { BrowserWindow, dialog, ipcMain } from 'electron'
+import { BrowserWindow, dialog, ipcMain, type OpenDialogOptions } from 'electron'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { access, readFile } from 'node:fs/promises'
@@ -127,7 +127,7 @@ export function registerIpc(
 
   ipcMain.handle('dialog:openFolder', async (_e, defaultPath?: string) => {
     const parent = BrowserWindow.getFocusedWindow() ?? undefined
-    const opts: Parameters<typeof dialog.showOpenDialog>[1] = {
+    const opts: OpenDialogOptions = {
       title: 'Choose working folder',
       properties: ['openDirectory', 'createDirectory']
     }

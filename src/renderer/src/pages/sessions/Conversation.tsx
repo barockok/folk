@@ -250,8 +250,8 @@ export function Conversation({ session }: { session: Session | null }) {
           }
           const prev = i > 0 ? visible[i - 1].m : null
           const next = i < visible.length - 1 ? visible[i + 1].m : null
-          const continuation = prev != null && prev.role === m.role && prev.role !== 'system'
-          const continuesBelow = next != null && next.role === m.role && next.role !== 'system'
+          const continuation = prev != null && prev.role !== 'system' && prev.role === m.role
+          const continuesBelow = next != null && next.role !== 'system' && next.role === m.role
           return (
             <article
               key={m.id}
