@@ -207,7 +207,19 @@ export function Conversation({ session }: { session: Session | null }) {
   // Pre-compute which messages will actually render, so timeline grouping
   // (continuation / continuesBelow) is based on rendered neighbours — not on
   // hidden thinking-only messages that would leave orphan dots on the rail.
-  const lastIdx = messages.length - 1
+  // Compute "effective last" by skipping lifecycle notices, which never
+  // render but would otherwise steal isLast from the trailing assistant
+  // placeholder — making its progress chip vanish the moment the SDK emits
+  // its first system/init or status: requesting event.
+  let lastIdx = messages.length - 1
+  while (lastIdx >= 0) {
+    const t = messages[lastIdx]
+    if (t.role === 'system' && t.notice === 'lifecycle') {
+      lastIdx--
+      continue
+    }
+    break
+  }
   const prepared = messages.map((m, i) => {
     const isLast = i === lastIdx
     if (m.role === 'system') {
