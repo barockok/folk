@@ -49,6 +49,25 @@ function isCompactSummary(text: string | undefined): boolean {
   return text.trimStart().startsWith(COMPACT_SUMMARY_PREFIX)
 }
 
+// Internal SDK echoes that show up in the on-disk transcript after a
+// /compact run — visible junk for users. Match defensively (whitespace,
+// stray attributes) so future SDK rev variations still hide.
+const HIDDEN_PATTERNS = [
+  /<command-name>\s*\/?compact\s*<\/command-name>/i,
+  /<local-command-stdout>\s*compacted\s*<\/local-command-stdout>/i,
+  /<command-message>\s*compact\s*<\/command-message>/i
+]
+function isInternalEcho(text: string | undefined): boolean {
+  if (!text) return false
+  const t = text.trim()
+  if (!t) return false
+  // Treat as internal echo only if EVERY non-empty line is one of the
+  // recognised tags (or empty) — protects against false positives on real
+  // user messages that happen to mention /compact.
+  const lines = t.split('\n').map((l) => l.trim()).filter(Boolean)
+  return lines.every((l) => HIDDEN_PATTERNS.some((p) => p.test(l)))
+}
+
 function CompactSummaryCard({ text }: { text: string }) {
   const [open, setOpen] = useState(false)
   return (
@@ -294,7 +313,14 @@ export function Conversation({ session }: { session: Session | null }) {
       isStreaming &&
       !hasLiveThinking &&
       !hasRunningTool
-    const renderable = visibleBlocks.length > 0 || showProgress || !!m.error
+    // Hide messages that contain only post-compact internal echo tags
+    // (<command-name>/compact</command-name>, <local-command-stdout>Compacted
+    // </local-command-stdout>) — they're SDK transcript bookkeeping, not
+    // anything the user typed.
+    const onlyEcho =
+      visibleBlocks.length > 0 &&
+      visibleBlocks.every((b) => b.kind === 'text' && isInternalEcho(b.text))
+    const renderable = !onlyEcho && (visibleBlocks.length > 0 || showProgress || !!m.error)
     return { m, isLast, visibleBlocks, showProgress, renderable }
   })
   const visible = prepared.filter((p) => p.renderable)
