@@ -10,6 +10,7 @@ import type {
   AgentToolProgress,
   AgentPromptSuggestion,
   MessageBlock,
+  MCPElicitationRequest,
   PermissionRequest
 } from '@shared/types'
 
@@ -49,6 +50,10 @@ interface SessionState {
   // Pending permission requests keyed by sessionId. Each entry includes the
   // toolUseID so the UI can attach an approval card to the matching tool block.
   pendingPermissions: Record<string, PermissionRequest[]>
+  // Pending MCP elicitation requests keyed by sessionId. Server asked for
+  // form input or URL-based auth; renderer shows a modal until the user
+  // resolves it via window.folk.agent.respondElicitation.
+  pendingElicitations: Record<string, MCPElicitationRequest[]>
   // Suggested next prompts emitted by the SDK, per session. Cleared when the
   // user sends a turn or accepts a suggestion.
   promptSuggestions: Record<string, string[]>
@@ -82,6 +87,8 @@ interface SessionState {
   clearPromptSuggestions: (sessionId: string) => void
   addPermissionRequest: (e: PermissionRequest) => void
   removePermissionRequest: (sessionId: string, requestId: string) => void
+  addElicitationRequest: (e: MCPElicitationRequest) => void
+  removeElicitationRequest: (sessionId: string, requestId: string) => void
   setError: (e: AgentError) => void
 }
 
@@ -190,6 +197,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   messages: {},
   stats: {},
   pendingPermissions: {},
+  pendingElicitations: {},
   promptSuggestions: {},
   streamingSessions: new Set<string>(),
   lifecycleTicker: {},
@@ -464,6 +472,26 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         pendingPermissions: {
           ...st.pendingPermissions,
           [sessionId]: next
+        }
+      }
+    }),
+  addElicitationRequest: (req) =>
+    set((st) => {
+      const cur = st.pendingElicitations[req.sessionId] ?? []
+      return {
+        pendingElicitations: {
+          ...st.pendingElicitations,
+          [req.sessionId]: [...cur, req]
+        }
+      }
+    }),
+  removeElicitationRequest: (sessionId, requestId) =>
+    set((st) => {
+      const cur = st.pendingElicitations[sessionId] ?? []
+      return {
+        pendingElicitations: {
+          ...st.pendingElicitations,
+          [sessionId]: cur.filter((r) => r.requestId !== requestId)
         }
       }
     }),

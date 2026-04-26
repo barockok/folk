@@ -13,6 +13,7 @@ export function useAgent(): void {
     applyToolProgress,
     addPromptSuggestion,
     addPermissionRequest,
+    addElicitationRequest,
     setError,
     markIdle
   } = useSessionStore()
@@ -27,6 +28,7 @@ export function useAgent(): void {
       window.folk.agent.onNotice((e) => appendNotice(e)),
       window.folk.agent.onUsage((e) => appendUsage(e)),
       window.folk.agent.onPermissionRequest((e) => addPermissionRequest(e)),
+      window.folk.agent.onMCPElicitation((e) => addElicitationRequest(e)),
       window.folk.agent.onToolProgress((e) => applyToolProgress(e)),
       window.folk.agent.onPromptSuggestion((e) => addPromptSuggestion(e)),
       window.folk.agent.onError((e) => {
@@ -45,6 +47,7 @@ export function useAgent(): void {
     applyToolProgress,
     addPromptSuggestion,
     addPermissionRequest,
+    addElicitationRequest,
     setError,
     markIdle,
     toast

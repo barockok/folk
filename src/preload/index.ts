@@ -33,6 +33,8 @@ const folk: FolkAPI = {
     onNotice: (fn) => listen('agent:notice', fn),
     onUsage: (fn) => listen('agent:usage', fn),
     onPermissionRequest: (fn) => listen('agent:permissionRequest', fn),
+    onMCPElicitation: (fn) => listen('agent:mcpElicitation', fn),
+    respondElicitation: (response) => ipcRenderer.invoke('agent:respondElicitation', response),
     onToolProgress: (fn) => listen('agent:toolProgress', fn),
     onPromptSuggestion: (fn) => listen('agent:promptSuggestion', fn),
     respondPermission: (response) => ipcRenderer.invoke('agent:respondPermission', response),
@@ -50,7 +52,11 @@ const folk: FolkAPI = {
     save: (s) => ipcRenderer.invoke('mcpServers:save', s),
     delete: (id) => ipcRenderer.invoke('mcpServers:delete', id),
     test: (id) => ipcRenderer.invoke('mcpServers:test', id),
-    templates: () => ipcRenderer.invoke('mcpServers:templates')
+    templates: () => ipcRenderer.invoke('mcpServers:templates'),
+    listResources: (id) => ipcRenderer.invoke('mcpServers:listResources', id),
+    readResource: (id, uri) => ipcRenderer.invoke('mcpServers:readResource', id, uri),
+    listPrompts: (id) => ipcRenderer.invoke('mcpServers:listPrompts', id),
+    getPrompt: (id, name, args) => ipcRenderer.invoke('mcpServers:getPrompt', id, name, args)
   },
   profile: {
     get: () => ipcRenderer.invoke('profile:get'),

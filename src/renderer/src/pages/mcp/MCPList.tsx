@@ -111,9 +111,19 @@ export function MCPList({ onOpen, onNew }: MCPListProps) {
                 <div className="row-title">
                   <span className="trunc">{s.name}</span>
                   {!s.isEnabled && <span className="badge">Off</span>}
+                  {s.source === 'local' && (
+                    <span
+                      className="badge badge-ac"
+                      title={s.sourcePath ? `from ${s.sourcePath}` : 'Claude Code config'}
+                    >
+                      Local
+                    </span>
+                  )}
                 </div>
                 <div className="row-desc trunc">
-                  {s.template ?? (s.transport === 'http' ? 'Remote (HTTP)' : 'Local command')}
+                  {s.source === 'local'
+                    ? `Claude Code · ${s.transport === 'http' ? 'remote' : 'stdio'}`
+                    : (s.template ?? (s.transport === 'http' ? 'Remote (HTTP)' : 'Local command'))}
                 </div>
               </div>
             </div>

@@ -160,6 +160,26 @@ export class Database {
         )
         .run()
     }
+    const mcpCols = new Set(
+      (this.db.prepare(`PRAGMA table_info(mcp_servers)`).all() as Array<{ name: string }>).map(
+        (c) => c.name
+      )
+    )
+    const mcpAdditions: Array<[string, string]> = [
+      ['template', `ALTER TABLE mcp_servers ADD COLUMN template TEXT`],
+      ['transport', `ALTER TABLE mcp_servers ADD COLUMN transport TEXT NOT NULL DEFAULT 'stdio'`],
+      ['command', `ALTER TABLE mcp_servers ADD COLUMN command TEXT`],
+      ['args', `ALTER TABLE mcp_servers ADD COLUMN args TEXT`],
+      ['env', `ALTER TABLE mcp_servers ADD COLUMN env TEXT`],
+      ['url', `ALTER TABLE mcp_servers ADD COLUMN url TEXT`],
+      ['is_enabled', `ALTER TABLE mcp_servers ADD COLUMN is_enabled INTEGER NOT NULL DEFAULT 1`],
+      ['status', `ALTER TABLE mcp_servers ADD COLUMN status TEXT NOT NULL DEFAULT 'stopped'`],
+      ['last_error', `ALTER TABLE mcp_servers ADD COLUMN last_error TEXT`],
+      ['tool_count', `ALTER TABLE mcp_servers ADD COLUMN tool_count INTEGER`]
+    ]
+    for (const [col, ddl] of mcpAdditions) {
+      if (!mcpCols.has(col)) this.db.prepare(ddl).run()
+    }
   }
 
   close(): void {

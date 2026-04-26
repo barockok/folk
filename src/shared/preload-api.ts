@@ -17,6 +17,8 @@ import type {
   AgentPromptSuggestion,
   PermissionRequest,
   PermissionResponse,
+  MCPElicitationRequest,
+  MCPElicitationResponse,
   ClaudeCodeAuthStatus,
   PersistedMessage,
   PermissionMode,
@@ -24,7 +26,11 @@ import type {
   DiscoveredCommand,
   DiscoveredPlugin,
   MarketplaceSummary,
-  MarketplacePlugin
+  MarketplacePlugin,
+  MCPResource,
+  MCPResourceContent,
+  MCPPrompt,
+  MCPPromptMessage
 } from './types'
 
 export interface FolkAPI {
@@ -51,6 +57,8 @@ export interface FolkAPI {
     onNotice: (fn: (e: AgentNotice) => void) => () => void
     onUsage: (fn: (e: AgentUsage) => void) => () => void
     onPermissionRequest: (fn: (e: PermissionRequest) => void) => () => void
+    onMCPElicitation: (fn: (e: MCPElicitationRequest) => void) => () => void
+    respondElicitation: (response: MCPElicitationResponse) => Promise<void>
     onToolProgress: (fn: (e: AgentToolProgress) => void) => () => void
     onPromptSuggestion: (fn: (e: AgentPromptSuggestion) => void) => () => void
     respondPermission: (response: PermissionResponse) => Promise<void>
@@ -68,6 +76,26 @@ export interface FolkAPI {
     delete: (id: string) => Promise<void>
     test: (id: string) => Promise<{ ok: boolean; tools: ToolInfo[]; error?: string }>
     templates: () => Promise<Record<string, MCPTemplate>>
+    listResources: (
+      id: string
+    ) => Promise<{ ok: boolean; resources: MCPResource[]; error?: string }>
+    readResource: (
+      id: string,
+      uri: string
+    ) => Promise<{ ok: boolean; contents: MCPResourceContent[]; error?: string }>
+    listPrompts: (
+      id: string
+    ) => Promise<{ ok: boolean; prompts: MCPPrompt[]; error?: string }>
+    getPrompt: (
+      id: string,
+      name: string,
+      args?: Record<string, string>
+    ) => Promise<{
+      ok: boolean
+      description?: string
+      messages: MCPPromptMessage[]
+      error?: string
+    }>
   }
   profile: {
     get: () => Promise<Profile>

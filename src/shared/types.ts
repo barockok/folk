@@ -81,11 +81,44 @@ export interface MCPServer {
   lastError: string | null
   toolCount: number | null
   createdAt: number
+  // 'folk' = managed in folk's SQLite DB (editable, persisted by us).
+  // 'local' = discovered from Claude Code config files (~/.claude/mcp_servers.json,
+  // ~/.claude/.mcp.json, per-project entries in ~/.claude.json). Read-only here;
+  // we surface them so the user can browse resources/prompts without re-adding.
+  source?: 'folk' | 'local'
+  // For 'local' servers, where on disk the entry lives — purely informational
+  // so the UI can label "from ~/.claude/.mcp.json" or "project: <path>".
+  sourcePath?: string
 }
 
 export interface ToolInfo {
   name: string
   description?: string
+}
+
+export interface MCPResource {
+  uri: string
+  name: string
+  description?: string
+  mimeType?: string
+}
+
+export interface MCPResourceContent {
+  uri: string
+  mimeType?: string
+  text?: string
+  blob?: string
+}
+
+export interface MCPPrompt {
+  name: string
+  description?: string
+  arguments?: Array<{ name: string; description?: string; required?: boolean }>
+}
+
+export interface MCPPromptMessage {
+  role: 'user' | 'assistant'
+  content: { type: 'text'; text: string } | { type: 'image' | 'resource'; [k: string]: unknown }
 }
 
 export interface Profile {
@@ -170,6 +203,28 @@ export interface PermissionRequest {
   blockedPath?: string
   decisionReason?: string
 }
+
+export interface MCPElicitationRequest {
+  sessionId: string
+  requestId: string
+  serverName: string
+  message: string
+  mode: 'form' | 'url'
+  url?: string
+  elicitationId?: string
+  requestedSchema?: Record<string, unknown>
+  title?: string
+  displayName?: string
+  description?: string
+}
+
+export type MCPElicitationResponse =
+  | {
+      requestId: string
+      action: 'accept'
+      content?: Record<string, string | number | boolean | string[]>
+    }
+  | { requestId: string; action: 'decline' | 'cancel' }
 
 export type PermissionResponse =
   | { requestId: string; behavior: 'allow'; allowAlways?: boolean }

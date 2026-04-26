@@ -92,6 +92,11 @@ export function registerIpc(
       agent.respondPermission(response)
   )
   ipcMain.handle(
+    'agent:respondElicitation',
+    (_e, response: import('@shared/types').MCPElicitationResponse) =>
+      agent.respondElicitation(response)
+  )
+  ipcMain.handle(
     'agent:respondToolUse',
     (_e, sessionId: string, toolUseId: string, answer: string) =>
       agent.respondToolUse(sessionId, toolUseId, answer)
@@ -163,6 +168,16 @@ export function registerIpc(
   ipcMain.handle('mcpServers:delete', (_e, id: string) => mcp.delete(id))
   ipcMain.handle('mcpServers:test', (_e, id: string) => mcp.testConnection(id))
   ipcMain.handle('mcpServers:templates', () => MCP_TEMPLATES)
+  ipcMain.handle('mcpServers:listResources', (_e, id: string) => mcp.listResources(id))
+  ipcMain.handle('mcpServers:readResource', (_e, id: string, uri: string) =>
+    mcp.readResource(id, uri)
+  )
+  ipcMain.handle('mcpServers:listPrompts', (_e, id: string) => mcp.listPrompts(id))
+  ipcMain.handle(
+    'mcpServers:getPrompt',
+    (_e, id: string, name: string, args?: Record<string, string>) =>
+      mcp.getPrompt(id, name, args)
+  )
 
   ipcMain.handle('profile:get', () => db.getProfile())
   ipcMain.handle('profile:save', (_e, p: Profile) => db.saveProfile(p))

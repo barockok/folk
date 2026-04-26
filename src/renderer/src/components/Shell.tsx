@@ -3,6 +3,7 @@ import { Sidebar } from './Sidebar'
 import { Topbar } from './Topbar'
 import { CommandPalette } from './CommandPalette'
 import { ToastContainer } from './ToastContainer'
+import { MCPElicitationModal } from './MCPElicitationModal'
 import { useUIStore } from '../stores/useUIStore'
 
 export function Shell({ children }: { children: ReactNode }) {
@@ -18,6 +19,7 @@ export function Shell({ children }: { children: ReactNode }) {
       </div>
       <CommandPalette />
       <ToastContainer />
+      <MCPElicitationModal />
     </>
   )
 }

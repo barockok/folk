@@ -1,6 +1,12 @@
 // MCPConfigDrawer.tsx — MCP config editor (modal, template-driven)
 import { useState, useEffect, useCallback } from 'react'
-import type { MCPTemplate } from '@shared/types'
+import type {
+  MCPPrompt,
+  MCPPromptMessage,
+  MCPResource,
+  MCPResourceContent,
+  MCPTemplate
+} from '@shared/types'
 import { useMCPStore } from '../../stores/useMCPStore'
 import { useUIStore } from '../../stores/useUIStore'
 import { Icon } from '../../components/icons'
@@ -88,6 +94,242 @@ const TEMPLATE_META: Record<string, { icon: string; desc: string; tag: string }>
   custom: { icon: '+', desc: 'Paste a command or URL from documentation.', tag: 'Custom' }
 }
 
+// ─── Resources tab ────────────────────────────────────────────────────────────
+
+function ResourcesTab({ serverId }: { serverId: string }) {
+  const toast = useUIStore((s) => s.toast)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [resources, setResources] = useState<MCPResource[]>([])
+  const [openUri, setOpenUri] = useState<string | null>(null)
+  const [contents, setContents] = useState<MCPResourceContent[]>([])
+  const [reading, setReading] = useState(false)
+
+  useEffect(() => {
+    setLoading(true)
+    setError(null)
+    void window.folk.mcp.listResources(serverId).then((r) => {
+      setLoading(false)
+      if (r.ok) setResources(r.resources)
+      else setError(r.error ?? 'Failed to list resources')
+    })
+  }, [serverId])
+
+  const open = async (uri: string) => {
+    setOpenUri(uri)
+    setReading(true)
+    setContents([])
+    const r = await window.folk.mcp.readResource(serverId, uri)
+    setReading(false)
+    if (r.ok) setContents(r.contents)
+    else toast({ kind: 'err', text: r.error ?? 'Read failed' })
+  }
+
+  if (loading) return <div className="sub">Connecting…</div>
+  if (error) return <div className="sub" style={{ color: 'var(--err)' }}>{error}</div>
+  if (resources.length === 0) return <div className="sub">No resources exposed.</div>
+
+  return (
+    <div style={{ display: 'flex', gap: 16, minHeight: 0 }}>
+      <div style={{ flex: '0 0 240px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {resources.map((r) => (
+          <button
+            key={r.uri}
+            className={'mk-cat' + (openUri === r.uri ? ' on' : '')}
+            onClick={() => void open(r.uri)}
+            style={{ textAlign: 'left' }}
+            title={r.description}
+          >
+            <div style={{ fontWeight: 500 }}>{r.name}</div>
+            <div className="hint" style={{ fontSize: 11 }}>{r.uri}</div>
+          </button>
+        ))}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        {!openUri && <div className="sub">Select a resource to view its contents.</div>}
+        {openUri && reading && <div className="sub">Reading…</div>}
+        {openUri && !reading && contents.length === 0 && (
+          <div className="sub">No content returned.</div>
+        )}
+        {openUri && !reading && contents.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {contents.map((c, i) => (
+              <div
+                key={i}
+                style={{
+                  background: 'var(--bg-sub)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 6,
+                  padding: 12
+                }}
+              >
+                <div className="hint" style={{ marginBottom: 6 }}>
+                  {c.mimeType ?? 'unknown'} · {c.uri}
+                </div>
+                {c.text !== undefined ? (
+                  <pre
+                    className="mono"
+                    style={{
+                      margin: 0,
+                      fontSize: 12,
+                      whiteSpace: 'pre-wrap',
+                      wordBreak: 'break-word',
+                      maxHeight: 360,
+                      overflow: 'auto'
+                    }}
+                  >
+                    {c.text}
+                  </pre>
+                ) : (
+                  <div className="sub">Binary content ({c.blob?.length ?? 0} bytes base64)</div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── Prompts tab ──────────────────────────────────────────────────────────────
+
+function PromptsTab({ serverId }: { serverId: string }) {
+  const toast = useUIStore((s) => s.toast)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [prompts, setPrompts] = useState<MCPPrompt[]>([])
+  const [openName, setOpenName] = useState<string | null>(null)
+  const [args, setArgs] = useState<Record<string, string>>({})
+  const [messages, setMessages] = useState<MCPPromptMessage[]>([])
+  const [description, setDescription] = useState<string | null>(null)
+  const [running, setRunning] = useState(false)
+
+  useEffect(() => {
+    setLoading(true)
+    setError(null)
+    void window.folk.mcp.listPrompts(serverId).then((r) => {
+      setLoading(false)
+      if (r.ok) setPrompts(r.prompts)
+      else setError(r.error ?? 'Failed to list prompts')
+    })
+  }, [serverId])
+
+  const select = (p: MCPPrompt) => {
+    setOpenName(p.name)
+    setMessages([])
+    setDescription(null)
+    const init: Record<string, string> = {}
+    for (const a of p.arguments ?? []) init[a.name] = ''
+    setArgs(init)
+  }
+
+  const run = async () => {
+    if (!openName) return
+    setRunning(true)
+    const r = await window.folk.mcp.getPrompt(serverId, openName, args)
+    setRunning(false)
+    if (r.ok) {
+      setMessages(r.messages)
+      setDescription(r.description ?? null)
+    } else {
+      toast({ kind: 'err', text: r.error ?? 'Failed to render prompt' })
+    }
+  }
+
+  if (loading) return <div className="sub">Connecting…</div>
+  if (error) return <div className="sub" style={{ color: 'var(--err)' }}>{error}</div>
+  if (prompts.length === 0) return <div className="sub">No prompts exposed.</div>
+
+  const current = prompts.find((p) => p.name === openName)
+
+  return (
+    <div style={{ display: 'flex', gap: 16, minHeight: 0 }}>
+      <div style={{ flex: '0 0 240px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {prompts.map((p) => (
+          <button
+            key={p.name}
+            className={'mk-cat' + (openName === p.name ? ' on' : '')}
+            onClick={() => select(p)}
+            style={{ textAlign: 'left' }}
+            title={p.description}
+          >
+            <div style={{ fontWeight: 500 }}>{p.name}</div>
+            {p.description && (
+              <div className="hint" style={{ fontSize: 11 }}>{p.description}</div>
+            )}
+          </button>
+        ))}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        {!openName && <div className="sub">Select a prompt to view its template.</div>}
+        {current && (
+          <>
+            {(current.arguments ?? []).length > 0 && (
+              <div style={{ marginBottom: 12 }}>
+                {(current.arguments ?? []).map((a) => (
+                  <div key={a.name} className="field" style={{ marginTop: 8 }}>
+                    <label className="label">
+                      {a.name}
+                      {a.required && <span style={{ color: 'var(--err)' }}> *</span>}
+                    </label>
+                    <input
+                      className="input"
+                      value={args[a.name] ?? ''}
+                      onChange={(e) => setArgs((p) => ({ ...p, [a.name]: e.target.value }))}
+                    />
+                    {a.description && <div className="hint">{a.description}</div>}
+                  </div>
+                ))}
+              </div>
+            )}
+            <button className="btn btn-primary btn-sm" onClick={() => void run()} disabled={running}>
+              {running ? <span className="spinner" /> : 'Render prompt'}
+            </button>
+            {description && (
+              <div className="sub" style={{ marginTop: 12 }}>{description}</div>
+            )}
+            {messages.length > 0 && (
+              <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {messages.map((m, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      border: '1px solid var(--border)',
+                      borderRadius: 6,
+                      padding: 10,
+                      background: 'var(--bg-sub)'
+                    }}
+                  >
+                    <div className="eyebrow" style={{ marginBottom: 6 }}>{m.role}</div>
+                    {m.content && (m.content as { type?: string }).type === 'text' ? (
+                      <pre
+                        className="mono"
+                        style={{
+                          margin: 0,
+                          fontSize: 12,
+                          whiteSpace: 'pre-wrap',
+                          wordBreak: 'break-word'
+                        }}
+                      >
+                        {(m.content as { text: string }).text}
+                      </pre>
+                    ) : (
+                      <div className="sub">Non-text content</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+type DrawerTab = 'settings' | 'resources' | 'prompts'
+
 // ─── MCPConfigDrawer ─────────────────────────────────────────────────────────
 
 export function MCPConfigDrawer({ id, isNew, onClose }: MCPConfigDrawerProps) {
@@ -110,6 +352,8 @@ export function MCPConfigDrawer({ id, isNew, onClose }: MCPConfigDrawerProps) {
   const [showRaw, setShowRaw] = useState(false)
   const [testing, setTesting] = useState(false)
   const [saving, setSaving] = useState(false)
+  const isLocal = existing?.source === 'local'
+  const [tab, setTab] = useState<DrawerTab>(isLocal ? 'resources' : 'settings')
 
   // Load templates from main process once
   useEffect(() => {
@@ -211,8 +455,87 @@ export function MCPConfigDrawer({ id, isNew, onClose }: MCPConfigDrawerProps) {
           </button>
         </div>
 
+        {/* Tabs (existing servers only) */}
+        {!isNew && existing && (
+          <div className="mk-kind-tabs" style={{ paddingLeft: 24, paddingRight: 24 }}>
+            <button
+              className={'mk-kind-tab' + (tab === 'settings' ? ' on' : '')}
+              onClick={() => setTab('settings')}
+            >
+              <span>{isLocal ? 'Source' : 'Settings'}</span>
+            </button>
+            <button
+              className={'mk-kind-tab' + (tab === 'resources' ? ' on' : '')}
+              onClick={() => setTab('resources')}
+            >
+              <span>Resources</span>
+            </button>
+            <button
+              className={'mk-kind-tab' + (tab === 'prompts' ? ' on' : '')}
+              onClick={() => setTab('prompts')}
+            >
+              <span>Prompts</span>
+            </button>
+          </div>
+        )}
+
         {/* Body */}
         <div className="modal-bd">
+          {!isNew && existing && tab === 'resources' && (
+            <ResourcesTab serverId={existing.id} />
+          )}
+          {!isNew && existing && tab === 'prompts' && (
+            <PromptsTab serverId={existing.id} />
+          )}
+          {!isNew && existing && isLocal && tab === 'settings' && (
+            <div>
+              <div className="sub" style={{ marginBottom: 12 }}>
+                Read-only — defined in a Claude Code config file.
+              </div>
+              <div className="field">
+                <label className="label">Source file</label>
+                <input className="input mono" value={existing.sourcePath ?? ''} readOnly />
+              </div>
+              {existing.command && (
+                <div className="field">
+                  <label className="label">Command</label>
+                  <input className="input mono" value={existing.command} readOnly />
+                </div>
+              )}
+              {existing.args && existing.args.length > 0 && (
+                <div className="field">
+                  <label className="label">Args</label>
+                  <input className="input mono" value={existing.args.join(' ')} readOnly />
+                </div>
+              )}
+              {existing.url && (
+                <div className="field">
+                  <label className="label">URL</label>
+                  <input className="input mono" value={existing.url} readOnly />
+                </div>
+              )}
+              {existing.env && Object.keys(existing.env).length > 0 && (
+                <div className="field">
+                  <label className="label">Env vars</label>
+                  <pre
+                    className="mono"
+                    style={{
+                      margin: 0,
+                      background: 'var(--bg-sub)',
+                      padding: 10,
+                      borderRadius: 6,
+                      border: '1px solid var(--border)',
+                      fontSize: 12
+                    }}
+                  >
+                    {Object.keys(existing.env).join('\n')}
+                  </pre>
+                </div>
+              )}
+            </div>
+          )}
+          {(isNew || (tab === 'settings' && !isLocal)) && (
+          <>
           {/* Step 0: template picker */}
           {step === 0 && (
             <>
@@ -322,16 +645,18 @@ export function MCPConfigDrawer({ id, isNew, onClose }: MCPConfigDrawerProps) {
               </div>
             </>
           )}
+          </>
+          )}
         </div>
 
         {/* Footer */}
         <div className="modal-ft">
-          {step === 1 && isNew && (
+          {tab === 'settings' && step === 1 && isNew && (
             <button className="btn btn-plain" onClick={() => setStep(0)}>
               <Icon name="chevronLeft" size={13} /> Back
             </button>
           )}
-          {step === 1 && !isNew && existing && (
+          {tab === 'settings' && step === 1 && !isNew && existing && (
             <button
               type="button"
               className="btn btn-plain"
@@ -344,9 +669,9 @@ export function MCPConfigDrawer({ id, isNew, onClose }: MCPConfigDrawerProps) {
           )}
           <div className="grow" />
           <button className="btn" onClick={onClose}>
-            Cancel
+            {tab === 'settings' ? 'Cancel' : 'Close'}
           </button>
-          {step === 1 && (
+          {tab === 'settings' && step === 1 && !isLocal && (
             <button
               className="btn btn-primary"
               onClick={handleSave}

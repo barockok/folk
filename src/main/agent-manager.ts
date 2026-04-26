@@ -4,6 +4,8 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { query, AbortError, getSessionMessages } from '@anthropic-ai/claude-agent-sdk'
 import type {
+  ElicitationRequest as SDKElicitationRequest,
+  ElicitationResult,
   McpServerConfig,
   PermissionResult,
   PermissionUpdate,
@@ -26,6 +28,8 @@ import type {
   AgentPromptSuggestion,
   PermissionRequest,
   PermissionResponse,
+  MCPElicitationRequest,
+  MCPElicitationResponse,
   PersistedMessage,
   PersistedToolCall,
   MessageBlock
@@ -216,10 +220,16 @@ interface PendingAsk {
   input: Record<string, unknown>
 }
 
+interface PendingElicitation {
+  sessionId: string
+  resolve: (result: ElicitationResult) => void
+}
+
 export class AgentManager extends EventEmitter {
   #live = new Map<string, LiveSession>()
   #pendingPermissions = new Map<string, PendingPermission>()
   #pendingAsks = new Map<string, PendingAsk>()
+  #pendingElicitations = new Map<string, PendingElicitation>()
   constructor(private db: Database) {
     super()
   }
@@ -385,6 +395,32 @@ export class AgentManager extends EventEmitter {
           })
           return result
         },
+        onElicitation: async (request: SDKElicitationRequest, opts) => {
+          const requestId = randomUUID()
+          return await new Promise<ElicitationResult>((resolve) => {
+            this.#pendingElicitations.set(requestId, { sessionId: session.id, resolve })
+            const onAbort = () => {
+              if (this.#pendingElicitations.delete(requestId)) {
+                resolve({ action: 'cancel' })
+              }
+            }
+            opts.signal.addEventListener('abort', onAbort, { once: true })
+            const event: MCPElicitationRequest = {
+              sessionId: session.id,
+              requestId,
+              serverName: request.serverName,
+              message: request.message,
+              mode: request.mode ?? 'form',
+              url: request.url,
+              elicitationId: request.elicitationId,
+              requestedSchema: request.requestedSchema,
+              title: request.title,
+              displayName: request.displayName,
+              description: request.description
+            }
+            this.emit('mcpElicitation', event)
+          })
+        },
         ...continuity
       }
     })
@@ -452,6 +488,14 @@ export class AgentManager extends EventEmitter {
       if (ask.sessionId === sessionId) {
         this.#pendingAsks.delete(toolUseId)
         ask.resolve('')
+      }
+    }
+    // Same for in-flight MCP elicitations — resolve with cancel so the SDK
+    // can finish its onElicitation await before we abort.
+    for (const [reqId, pending] of this.#pendingElicitations) {
+      if (pending.sessionId === sessionId) {
+        this.#pendingElicitations.delete(reqId)
+        pending.resolve({ action: 'cancel' })
       }
     }
 
@@ -576,6 +620,17 @@ export class AgentManager extends EventEmitter {
   dispose(): void {
     const ids = [...this.#live.keys()]
     void Promise.all(ids.map((id) => this.#teardown(id, 'dispose')))
+  }
+
+  respondElicitation(response: MCPElicitationResponse): void {
+    const pending = this.#pendingElicitations.get(response.requestId)
+    if (!pending) return
+    this.#pendingElicitations.delete(response.requestId)
+    if (response.action === 'accept') {
+      pending.resolve({ action: 'accept', content: response.content })
+    } else {
+      pending.resolve({ action: response.action })
+    }
   }
 
   respondPermission(response: PermissionResponse): void {
