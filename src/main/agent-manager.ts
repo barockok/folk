@@ -53,6 +53,10 @@ function mapSessionMessages(
   const out: PersistedMessage[] = []
   // callId → reference to the tool block that the SDK tool_result should patch
   const callIndex = new Map<string, PersistedToolCall>()
+  // Assistant message ids we've already folded in. With
+  // includePartialMessages on, the SDK can write a partial AND a snapshot
+  // entry for the same logical message — replay should treat them as one.
+  const seenAssistantIds = new Set<string>()
 
   for (const entry of raw) {
     const m = entry.message as
@@ -64,6 +68,9 @@ function mapSessionMessages(
       (entry as { parent_tool_use_id?: string | null }).parent_tool_use_id ?? null
 
     if (entry.type === 'assistant') {
+      const msgId = (m?.id as string | undefined) ?? null
+      if (msgId && seenAssistantIds.has(msgId)) continue
+      if (msgId) seenAssistantIds.add(msgId)
       const blocks: MessageBlock[] = []
       if (Array.isArray(content)) {
         for (const blk of content) {
@@ -80,6 +87,11 @@ function mapSessionMessages(
           } else if (b.type === 'thinking' && b.thinking) {
             blocks.push({ kind: 'thinking', text: b.thinking })
           } else if (b.type === 'tool_use' && b.id && b.name) {
+            // Dedup against the partials/snapshots split: with
+            // includePartialMessages enabled, the SDK writes streaming deltas
+            // AND a final assistant snapshot to JSONL — both contain the same
+            // tool_use block, which makes replay render the call twice.
+            if (callIndex.has(b.id)) continue
             const call: PersistedToolCall = { callId: b.id, tool: b.name, input: b.input }
             // Nest under parent Task tool if the envelope says so.
             if (parentToolUseId) {
@@ -238,6 +250,15 @@ export class AgentManager extends EventEmitter {
     private resolveMcpAccessToken?: (id: string) => Promise<string | null>
   ) {
     super()
+    // Sessions whose status was 'running' when the previous app process died
+    // are stale — there's no live SDK query backing them. Reset to 'idle' so
+    // the composer doesn't show a Stop button for a session that can't
+    // actually be stopped.
+    for (const s of this.db.listSessions()) {
+      if (s.status === 'running') {
+        this.db.updateSession(s.id, { status: 'cancelled' })
+      }
+    }
   }
 
   #createPromptIterable(): {
