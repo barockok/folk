@@ -24,6 +24,8 @@ interface ProviderPreset {
   keyLabel: string
   keyPrefix?: string
   noAuth?: boolean
+  proxied?: boolean
+  upstreamLabel?: string
   description: string
 }
 
@@ -50,17 +52,21 @@ const PROVIDER_PRESETS: ProviderPreset[] = [
     id: 'opencode-free',
     name: 'OpenCode (Free)',
     brand: 'opencode',
-    baseUrl: 'https://opencode.ai/zen',
+    baseUrl: null,
     keyLabel: 'No key required',
     noAuth: true,
+    proxied: true,
+    upstreamLabel: 'opencode.ai/zen (via folk bridge)',
     description: 'Public free tier — Bearer public.'
   },
   {
     id: 'opencode-paid',
     name: 'OpenCode (Paid)',
     brand: 'opencode',
-    baseUrl: 'https://opencode.ai/zen',
+    baseUrl: null,
     keyLabel: 'OpenCode API key',
+    proxied: true,
+    upstreamLabel: 'opencode.ai/zen (via folk bridge)',
     description: 'Paid tier — your token.'
   }
 ]
@@ -426,7 +432,9 @@ export function FirstRunOnboarding() {
                       {preset.name}
                     </div>
                     <div className="sub" style={{ fontSize: 12 }}>
-                      {preset.baseUrl ?? 'api.anthropic.com'}
+                      {preset.proxied
+                        ? (preset.upstreamLabel ?? 'managed by folk')
+                        : (preset.baseUrl ?? 'api.anthropic.com')}
                     </div>
                   </div>
                 </div>

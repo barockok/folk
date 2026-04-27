@@ -14,6 +14,7 @@ import type {
 import { randomUUID } from 'node:crypto'
 import { Database } from './database'
 import { FOLK_PRESENTATION_PROMPT } from './system-prompt'
+import { getOpencodeProxyPort } from './opencode-proxy/state'
 import type {
   Session,
   SessionConfig,
@@ -282,34 +283,34 @@ export class AgentManager extends EventEmitter {
     const envOverlay: Record<string, string | undefined> = { ...process.env }
     // Auth env vars depend on the upstream's preferred header style:
     //   - Anthropic / custom (default): x-api-key via ANTHROPIC_API_KEY
-    //   - OpenRouter / OpenCode: Bearer via ANTHROPIC_AUTH_TOKEN
-    // OpenCode also requires the x-opencode-client header injected via
-    // ANTHROPIC_CUSTOM_HEADERS; the free tier uses the literal token "public".
+    //   - OpenRouter: Bearer via ANTHROPIC_AUTH_TOKEN
+    //   - OpenCode (free/paid): routed through folk's local bridge proxy,
+    //     which translates Anthropic Messages → OpenCode's OpenAI-format
+    //     /chat/completions and forwards as Bearer + x-opencode-client. The
+    //     free tier uses literal token "public".
     delete envOverlay.ANTHROPIC_API_KEY
     delete envOverlay.ANTHROPIC_AUTH_TOKEN
+    let baseUrlOverride: string | null = provider.baseUrl
     if (provider.authMode !== 'claude-code') {
-      const usesBearer =
-        provider.id === 'openrouter' ||
-        provider.id === 'opencode-free' ||
-        provider.id === 'opencode-paid'
-      const tokenForOpenCodeFree = provider.id === 'opencode-free' ? 'public' : provider.apiKey
-      if (usesBearer) {
-        envOverlay.ANTHROPIC_AUTH_TOKEN =
-          provider.id === 'opencode-free' ? tokenForOpenCodeFree : provider.apiKey
+      const isOpencode = provider.id === 'opencode-free' || provider.id === 'opencode-paid'
+      const usesBearer = provider.id === 'openrouter' || isOpencode
+      if (isOpencode) {
+        const port = getOpencodeProxyPort()
+        if (port == null) {
+          throw new Error(
+            'OpenCode proxy not ready — try again in a moment or restart the app.'
+          )
+        }
+        baseUrlOverride = `http://127.0.0.1:${port}`
+        const token = provider.id === 'opencode-free' ? 'public' : provider.apiKey
+        envOverlay.ANTHROPIC_AUTH_TOKEN = token
+      } else if (usesBearer) {
+        envOverlay.ANTHROPIC_AUTH_TOKEN = provider.apiKey
       } else {
         envOverlay.ANTHROPIC_API_KEY = provider.apiKey
       }
-      if (provider.id === 'opencode-free' || provider.id === 'opencode-paid') {
-        const existing = envOverlay.ANTHROPIC_CUSTOM_HEADERS ?? ''
-        const ours = 'x-opencode-client: desktop'
-        envOverlay.ANTHROPIC_CUSTOM_HEADERS = existing
-          ? existing.includes('x-opencode-client')
-            ? existing
-            : `${existing}\n${ours}`
-          : ours
-      }
     }
-    if (provider.baseUrl) envOverlay.ANTHROPIC_BASE_URL = provider.baseUrl
+    if (baseUrlOverride) envOverlay.ANTHROPIC_BASE_URL = baseUrlOverride
 
     const mcpMap: Record<string, McpServerConfig> = {}
     for (const m of this.db.listMCPs().filter((x) => x.isEnabled)) {

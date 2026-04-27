@@ -106,6 +106,15 @@ export interface ProviderPreset {
   noAuth?: boolean
   fetchable: boolean
   description: string
+  // True when folk's local bridge proxy handles routing (opencode). The Base
+  // URL field is hidden in the UI and the saved baseUrl is null — the
+  // agent-manager rewrites ANTHROPIC_BASE_URL to the loopback proxy at
+  // runtime.
+  proxied?: boolean
+  // Informational endpoint string shown in the detail header in place of the
+  // editable Base URL field, so the user can still see where their requests
+  // ultimately go.
+  upstreamLabel?: string
   models: Array<{ id: string; label: string }>
 }
 
@@ -134,10 +143,12 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     id: 'opencode-free',
     name: 'OpenCode (Free)',
     brand: 'opencode',
-    baseUrl: 'https://opencode.ai/zen',
+    baseUrl: null,
     keyLabel: 'No key required',
     noAuth: true,
     fetchable: true,
+    proxied: true,
+    upstreamLabel: 'opencode.ai/zen (via folk bridge)',
     description: 'Public free tier. Bearer public, models ending with -free.',
     models: []
   },
@@ -145,9 +156,11 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     id: 'opencode-paid',
     name: 'OpenCode (Paid)',
     brand: 'opencode',
-    baseUrl: 'https://opencode.ai/zen',
+    baseUrl: null,
     keyLabel: 'OpenCode API key',
     fetchable: true,
+    proxied: true,
+    upstreamLabel: 'opencode.ai/zen (via folk bridge)',
     description: 'Paid tier. Bearer key from opencode.ai.',
     models: []
   }
@@ -299,15 +312,25 @@ function AddProviderModal({ usedIds, onAdd, onClose }: AddProviderModalProps) {
                 </div>
               )}
 
-              <div className="field">
-                <label className="label">Base URL</label>
-                <input
-                  className="input mono"
-                  value={baseUrl}
-                  onChange={(e) => setBaseUrl(e.target.value)}
-                  placeholder="https://api.example.com/v1"
-                />
-              </div>
+              {!preset?.proxied && (
+                <div className="field">
+                  <label className="label">Base URL</label>
+                  <input
+                    className="input mono"
+                    value={baseUrl}
+                    onChange={(e) => setBaseUrl(e.target.value)}
+                    placeholder="https://api.example.com/v1"
+                  />
+                </div>
+              )}
+              {preset?.proxied && (
+                <div className="field">
+                  <label className="label">Endpoint</label>
+                  <div className="hint">
+                    <code className="mono">{preset.upstreamLabel ?? 'managed by folk'}</code>
+                  </div>
+                </div>
+              )}
 
               {selectedId === 'anthropic' && (
                 <div className="field">
@@ -652,7 +675,11 @@ export function ModelPage() {
             <ProviderLogo brand={preset?.brand ?? 'custom'} size={44} />
             <div className="prov-info">
               <div className="prov-name">{preset?.name ?? active.name}</div>
-              <div className="prov-sub">{active.baseUrl ?? 'Anthropic default endpoint'}</div>
+              <div className="prov-sub">
+                {preset?.proxied
+                  ? (preset.upstreamLabel ?? 'managed by folk')
+                  : (active.baseUrl ?? 'Anthropic default endpoint')}
+              </div>
             </div>
 
             <button
@@ -751,19 +778,29 @@ export function ModelPage() {
               </div>
             )}
 
-            <div className="field">
-              <label className="label">
-                Base URL{' '}
-                <span style={{ color: 'var(--fg-faint)', fontWeight: 400 }}>
-                  (override for proxies or self-hosted)
-                </span>
-              </label>
-              <input
-                className="input mono"
-                value={draft.baseUrl ?? ''}
-                onChange={(e) => updateDraft({ baseUrl: e.target.value || null })}
-              />
-            </div>
+            {preset?.proxied ? (
+              <div className="field">
+                <label className="label">Endpoint</label>
+                <div className="hint">
+                  Routed through folk's local OpenCode bridge —{' '}
+                  <code className="mono">{preset.upstreamLabel ?? 'managed by folk'}</code>.
+                </div>
+              </div>
+            ) : (
+              <div className="field">
+                <label className="label">
+                  Base URL{' '}
+                  <span style={{ color: 'var(--fg-faint)', fontWeight: 400 }}>
+                    (override for proxies or self-hosted)
+                  </span>
+                </label>
+                <input
+                  className="input mono"
+                  value={draft.baseUrl ?? ''}
+                  onChange={(e) => updateDraft({ baseUrl: e.target.value || null })}
+                />
+              </div>
+            )}
           </div>
 
           {/* Models section */}

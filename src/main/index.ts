@@ -29,11 +29,14 @@ import { AgentManager } from './agent-manager'
 import { MCPManager } from './mcp-manager'
 import { registerIpc } from './ipc-handlers'
 import { wireStreaming } from './ipc-streaming'
+import { startProxy, ProxyHandle } from './opencode-proxy/server'
+import { setProxyHandle } from './opencode-proxy/state'
 
 let db: Database
 let agentManager: AgentManager
 let mcpManager: MCPManager
 let mainWindow: BrowserWindow | null = null
+let opencodeProxy: ProxyHandle | null = null
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -94,6 +97,18 @@ app.whenReady().then(() => {
     }
   })
 
+  // Boot the OpenCode bridge proxy. It's used as ANTHROPIC_BASE_URL for the
+  // opencode-* presets so Claude Code's Messages requests can be translated to
+  // OpenCode's OpenAI-format /chat/completions route. Loopback only.
+  void startProxy()
+    .then((handle) => {
+      opencodeProxy = handle
+      setProxyHandle(handle)
+    })
+    .catch((err) => {
+      console.error('[opencode-proxy] failed to start:', err)
+    })
+
   db = new Database(join(app.getPath('userData'), 'folk.db'))
   mcpManager = new MCPManager(
     db,
@@ -121,4 +136,5 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   agentManager?.dispose()
   db?.close()
+  void opencodeProxy?.close()
 })
