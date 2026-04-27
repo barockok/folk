@@ -56,7 +56,9 @@ const folk: FolkAPI = {
     listResources: (id) => ipcRenderer.invoke('mcpServers:listResources', id),
     readResource: (id, uri) => ipcRenderer.invoke('mcpServers:readResource', id, uri),
     listPrompts: (id) => ipcRenderer.invoke('mcpServers:listPrompts', id),
-    getPrompt: (id, name, args) => ipcRenderer.invoke('mcpServers:getPrompt', id, name, args)
+    getPrompt: (id, name, args) => ipcRenderer.invoke('mcpServers:getPrompt', id, name, args),
+    signIn: (id) => ipcRenderer.invoke('mcpServers:signIn', id),
+    signOut: (id) => ipcRenderer.invoke('mcpServers:signOut', id)
   },
   profile: {
     get: () => ipcRenderer.invoke('profile:get'),

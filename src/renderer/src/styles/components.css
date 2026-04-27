@@ -3445,3 +3445,34 @@
 [data-theme="dark"] .mcp-card-ft {
   background: rgba(255, 255, 255, 0.02);
 }
+
+/* ── MCP OAuth sign-in row ────────────────────────────────────────────────── */
+.oauth-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.oauth-row-lhs {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.oauth-row-lhs .dot {
+  width: 9px;
+  height: 9px;
+  flex: none;
+  margin-top: 2px;
+}
+.oauth-row-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--heading);
+}
+.oauth-row-sub {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--body);
+  margin-top: 2px;
+}

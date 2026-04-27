@@ -96,6 +96,8 @@ export interface FolkAPI {
       messages: MCPPromptMessage[]
       error?: string
     }>
+    signIn: (id: string) => Promise<{ ok: boolean; error?: string }>
+    signOut: (id: string) => Promise<{ ok: boolean; error?: string }>
   }
   profile: {
     get: () => Promise<Profile>

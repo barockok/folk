@@ -230,7 +230,12 @@ export class AgentManager extends EventEmitter {
   #pendingPermissions = new Map<string, PendingPermission>()
   #pendingAsks = new Map<string, PendingAsk>()
   #pendingElicitations = new Map<string, PendingElicitation>()
-  constructor(private db: Database) {
+  constructor(
+    private db: Database,
+    // Optional: when provided, agent-manager will refresh OAuth tokens for
+    // HTTP MCP servers right before each session starts.
+    private resolveMcpAccessToken?: (id: string) => Promise<string | null>
+  ) {
     super()
   }
 
@@ -292,10 +297,18 @@ export class AgentManager extends EventEmitter {
           env: m.env ?? undefined
         }
       } else if (m.transport === 'http' && m.url) {
+        // Resolve OAuth access token (refreshing if near-expiry) and inject
+        // as Bearer header. Falls through to whatever the user supplied in
+        // headers if there's no OAuth state.
+        const headers: Record<string, string> = { ...(m.headers ?? {}) }
+        if (m.oauthStatus === 'authorized' && this.resolveMcpAccessToken) {
+          const token = await this.resolveMcpAccessToken(m.id)
+          if (token) headers['Authorization'] = `Bearer ${token}`
+        }
         mcpMap[m.name] = {
           type: 'http',
           url: m.url,
-          headers: m.headers ?? undefined
+          headers: Object.keys(headers).length > 0 ? headers : undefined
         }
       }
     }

@@ -24,6 +24,8 @@ export interface FormValues {
   url: string
   apiKey: string
   headerRows: KVRow[]
+  oauthClientId: string
+  oauthClientSecret: string
 }
 
 const AUTH_HEADER = 'Authorization'
@@ -86,7 +88,9 @@ export function valuesFromServer(server: MCPServer | null): FormValues {
       envRows: [],
       url: '',
       apiKey: '',
-      headerRows: []
+      headerRows: [],
+      oauthClientId: '',
+      oauthClientSecret: ''
     }
   }
   const headerRows = rowsFrom(server.headers)
@@ -104,7 +108,9 @@ export function valuesFromServer(server: MCPServer | null): FormValues {
     envRows: rowsFrom(server.env),
     url: server.url ?? '',
     apiKey,
-    headerRows
+    headerRows,
+    oauthClientId: server.oauthClientId ?? '',
+    oauthClientSecret: server.oauthClientSecret ?? ''
   }
 }
 
@@ -126,6 +132,13 @@ export function serverFromValues(base: MCPServer | null, v: FormValues): MCPServ
       env: null,
       url: v.url.trim() || null,
       headers: recordFromRows(headerRows),
+      // OAuth credentials in the form take precedence over baseline; an empty
+      // string clears the field so the next sign-in does Dynamic Client
+      // Registration again.
+      oauthClientId: v.oauthClientId.trim() || base?.oauthClientId || null,
+      oauthClientSecret: v.oauthClientSecret.trim() || base?.oauthClientSecret || null,
+      oauthMetadata: base?.oauthMetadata ?? null,
+      oauthStatus: base?.oauthStatus ?? null,
       isEnabled: base?.isEnabled ?? true,
       status: base?.status ?? 'stopped',
       lastError: null,
@@ -144,6 +157,10 @@ export function serverFromValues(base: MCPServer | null, v: FormValues): MCPServ
     env: recordFromRows(v.envRows),
     url: null,
     headers: null,
+    oauthClientId: null,
+    oauthClientSecret: null,
+    oauthMetadata: null,
+    oauthStatus: null,
     isEnabled: base?.isEnabled ?? true,
     status: base?.status ?? 'stopped',
     lastError: null,
@@ -221,7 +238,7 @@ export function MCPForm({ values, onChange, readOnly, focusApiKey }: MCPFormProp
 
       {isHttp ? (
         <>
-          <Field label="Server URL" hint="The full URL of the MCP server.">
+          <Field label="Remote MCP server URL" hint="The full URL of the MCP server.">
             <input
               className="input mono"
               value={values.url}
@@ -231,25 +248,62 @@ export function MCPForm({ values, onChange, readOnly, focusApiKey }: MCPFormProp
             />
           </Field>
 
-          <SecretField
-            label="API key"
-            hint="Optional. We'll send this as an Authorization header."
-            value={values.apiKey}
-            onChange={(v) => set('apiKey', v)}
-            placeholder="Paste your API key or token"
-            disabled={readOnly}
-            focusSignal={focusApiKey}
-          />
+          <Collapsible
+            label="Advanced settings"
+            hint="API keys, OAuth, custom headers"
+            defaultOpen={
+              values.apiKey.length > 0 ||
+              values.oauthClientId.length > 0 ||
+              values.headerRows.length > 0
+            }
+          >
+            <SecretField
+              label="API key"
+              hint="Static bearer token, sent as Authorization header. Skip this if the server uses OAuth."
+              value={values.apiKey}
+              onChange={(v) => set('apiKey', v)}
+              placeholder="Paste your API key or token"
+              disabled={readOnly}
+              focusSignal={focusApiKey}
+            />
 
-          <Collapsible label="Custom headers" hint="Advanced — only if the service requires extra headers.">
-            <KVList
-              rows={values.headerRows}
-              onChange={(rows) => set('headerRows', rows)}
-              keyPlaceholder="Header name"
-              valuePlaceholder="Header value"
-              addLabel="Add header"
+            <Field
+              label="OAuth Client ID (optional)"
+              hint="Leave empty to let folk register itself with the server when you sign in."
+            >
+              <input
+                className="input mono"
+                value={values.oauthClientId}
+                placeholder="e.g. lin_app_…"
+                onChange={(e) => set('oauthClientId', e.target.value)}
+                disabled={readOnly}
+                autoCapitalize="off"
+                autoCorrect="off"
+                spellCheck={false}
+              />
+            </Field>
+
+            <SecretField
+              label="OAuth Client Secret (optional)"
+              hint="Only required for confidential OAuth clients."
+              value={values.oauthClientSecret}
+              onChange={(v) => set('oauthClientSecret', v)}
+              placeholder="Paste your OAuth client secret"
               disabled={readOnly}
             />
+
+            <div className="field">
+              <label className="label">Custom headers</label>
+              <KVList
+                rows={values.headerRows}
+                onChange={(rows) => set('headerRows', rows)}
+                keyPlaceholder="Header name"
+                valuePlaceholder="Header value"
+                addLabel="Add header"
+                disabled={readOnly}
+              />
+              <div className="hint">Only if the service requires extra headers.</div>
+            </div>
           </Collapsible>
         </>
       ) : (

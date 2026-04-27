@@ -176,7 +176,11 @@ export class Database {
       ['status', `ALTER TABLE mcp_servers ADD COLUMN status TEXT NOT NULL DEFAULT 'stopped'`],
       ['last_error', `ALTER TABLE mcp_servers ADD COLUMN last_error TEXT`],
       ['tool_count', `ALTER TABLE mcp_servers ADD COLUMN tool_count INTEGER`],
-      ['headers', `ALTER TABLE mcp_servers ADD COLUMN headers TEXT`]
+      ['headers', `ALTER TABLE mcp_servers ADD COLUMN headers TEXT`],
+      ['oauth_client_id', `ALTER TABLE mcp_servers ADD COLUMN oauth_client_id TEXT`],
+      ['oauth_client_secret', `ALTER TABLE mcp_servers ADD COLUMN oauth_client_secret TEXT`],
+      ['oauth_metadata', `ALTER TABLE mcp_servers ADD COLUMN oauth_metadata TEXT`],
+      ['oauth_status', `ALTER TABLE mcp_servers ADD COLUMN oauth_status TEXT`]
     ]
     for (const [col, ddl] of mcpAdditions) {
       if (!mcpCols.has(col)) this.db.prepare(ddl).run()
@@ -369,13 +373,19 @@ export class Database {
     this.db
       .prepare(
         `INSERT INTO mcp_servers (id, name, template, transport, command, args, env, url, headers,
+           oauth_client_id, oauth_client_secret, oauth_metadata, oauth_status,
            is_enabled, status, last_error, tool_count, created_at)
          VALUES (@id, @name, @template, @transport, @command, @args, @env, @url, @headers,
+           @oauthClientId, @oauthClientSecret, @oauthMetadata, @oauthStatus,
            @isEnabled, @status, @lastError, @toolCount, @createdAt)
          ON CONFLICT(id) DO UPDATE SET
            name = excluded.name, template = excluded.template, transport = excluded.transport,
            command = excluded.command, args = excluded.args, env = excluded.env, url = excluded.url,
            headers = excluded.headers,
+           oauth_client_id = excluded.oauth_client_id,
+           oauth_client_secret = excluded.oauth_client_secret,
+           oauth_metadata = excluded.oauth_metadata,
+           oauth_status = excluded.oauth_status,
            is_enabled = excluded.is_enabled, status = excluded.status,
            last_error = excluded.last_error, tool_count = excluded.tool_count`
       )
@@ -389,6 +399,10 @@ export class Database {
         env: m.env ? JSON.stringify(m.env) : null,
         url: m.url,
         headers: m.headers ? JSON.stringify(m.headers) : null,
+        oauthClientId: m.oauthClientId,
+        oauthClientSecret: m.oauthClientSecret,
+        oauthMetadata: m.oauthMetadata ? JSON.stringify(m.oauthMetadata) : null,
+        oauthStatus: m.oauthStatus,
         isEnabled: m.isEnabled ? 1 : 0,
         status: m.status,
         lastError: m.lastError,
@@ -411,6 +425,12 @@ export class Database {
       env: r.env ? (JSON.parse(r.env as string) as Record<string, string>) : null,
       url: (r.url as string) ?? null,
       headers: r.headers ? (JSON.parse(r.headers as string) as Record<string, string>) : null,
+      oauthClientId: (r.oauth_client_id as string) ?? null,
+      oauthClientSecret: (r.oauth_client_secret as string) ?? null,
+      oauthMetadata: r.oauth_metadata
+        ? (JSON.parse(r.oauth_metadata as string) as MCPServer['oauthMetadata'])
+        : null,
+      oauthStatus: (r.oauth_status as MCPServer['oauthStatus']) ?? null,
       isEnabled: Number(r.is_enabled ?? 0) === 1,
       status: r.status as MCPServer['status'],
       lastError: (r.last_error as string) ?? null,

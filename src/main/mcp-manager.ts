@@ -13,6 +13,8 @@ import type {
 import { Database } from './database'
 import { discoverLocalMCPs } from './mcp-local-discovery'
 import { applyFolkMCPs } from './mcp-config-writer'
+import { deleteTokens, loadTokens, storeTokens } from './keychain'
+import { refreshAccessToken, signIn as runSignIn } from './oauth'
 
 export const MCP_TEMPLATES: Record<string, MCPTemplate> = {
   filesystem: {
@@ -99,6 +101,10 @@ export function templateToServer(
     env: overrides.env ?? null,
     url: overrides.url ?? null,
     headers: null,
+    oauthClientId: null,
+    oauthClientSecret: null,
+    oauthMetadata: null,
+    oauthStatus: null,
     isEnabled: true,
     status: 'stopped',
     lastError: null,
@@ -287,6 +293,87 @@ export class MCPManager {
 
   #syncToClaudeCode(): void {
     void this.syncToClaudeCode()
+  }
+
+  // ── OAuth ──────────────────────────────────────────────────────────────────
+
+  // Run the full OAuth sign-in flow for an HTTP server. Persists discovered
+  // metadata + client credentials on the server record; tokens go to keychain.
+  async signIn(id: string): Promise<{ ok: boolean; error?: string }> {
+    const server = this.db.listMCPs().find((m) => m.id === id)
+    if (!server) return { ok: false, error: 'Server not found' }
+    if (server.transport !== 'http' || !server.url) {
+      return { ok: false, error: 'OAuth only applies to HTTP servers' }
+    }
+    try {
+      const result = await runSignIn({
+        serverId: server.id,
+        serverUrl: server.url,
+        providedClientId: server.oauthClientId,
+        providedClientSecret: server.oauthClientSecret,
+        cachedMetadata: server.oauthMetadata
+      })
+      this.db.saveMCP({
+        ...server,
+        oauthMetadata: result.metadata,
+        oauthClientId: result.clientId,
+        oauthClientSecret: result.clientSecret,
+        oauthStatus: 'authorized'
+      })
+      void this.syncToClaudeCode()
+      return { ok: true }
+    } catch (err) {
+      this.db.saveMCP({ ...server, oauthStatus: 'error' })
+      return { ok: false, error: (err as Error).message }
+    }
+  }
+
+  // Sign out: drop tokens + reset status (keep metadata + clientId so the next
+  // sign-in skips re-discovery / re-registration).
+  async signOut(id: string): Promise<{ ok: boolean; error?: string }> {
+    const server = this.db.listMCPs().find((m) => m.id === id)
+    if (!server) return { ok: false, error: 'Server not found' }
+    await deleteTokens(server.id)
+    this.db.saveMCP({ ...server, oauthStatus: 'unauthorized' })
+    return { ok: true }
+  }
+
+  // Look up the currently-stored access token for a server, refreshing if
+  // it's expired or near-expiry. Returns null if there's no token at all
+  // (caller must trigger sign-in).
+  async getAccessToken(id: string): Promise<string | null> {
+    const server = this.db.listMCPs().find((m) => m.id === id)
+    if (!server) return null
+    const tokens = await loadTokens(server.id)
+    if (!tokens) return null
+
+    // Refresh if we're inside the 60-second buffer window.
+    const needsRefresh =
+      tokens.expiresAt != null && Date.now() > tokens.expiresAt - 60_000
+    if (!needsRefresh) return tokens.accessToken
+
+    if (!tokens.refreshToken || !server.oauthMetadata || !server.oauthClientId) {
+      // Can't refresh — surface as unauthorized so the UI prompts re-sign-in.
+      this.db.saveMCP({ ...server, oauthStatus: 'unauthorized' })
+      await deleteTokens(server.id)
+      return null
+    }
+    try {
+      const fresh = await refreshAccessToken({
+        metadata: server.oauthMetadata,
+        refreshToken: tokens.refreshToken,
+        clientId: server.oauthClientId,
+        clientSecret: server.oauthClientSecret
+      })
+      // Reuse the previous refresh token if the AS didn't rotate it.
+      if (!fresh.refreshToken) fresh.refreshToken = tokens.refreshToken
+      await storeTokens(server.id, fresh)
+      return fresh.accessToken
+    } catch (err) {
+      console.error('[mcp] token refresh failed:', err)
+      this.db.saveMCP({ ...server, oauthStatus: 'unauthorized' })
+      return null
+    }
   }
 
   async #getServer(id: string): Promise<MCPServer | null> {

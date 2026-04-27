@@ -48,6 +48,7 @@ export function MCPDetail({ id, isNew, onBack }: Props) {
   const [testing, setTesting] = useState(false)
   const [tools, setTools] = useState<ToolInfo[] | null>(null)
   const [reauthSignal, setReauthSignal] = useState(0)
+  const [signingIn, setSigningIn] = useState(false)
 
   useEffect(() => {
     setValues(valuesFromServer(existing))
@@ -113,6 +114,39 @@ export function MCPDetail({ id, isNew, onBack }: Props) {
     setValues((v) => ({ ...v, apiKey: '' }))
     setReauthSignal((n) => n + 1)
     toast({ kind: 'warn', text: 'Paste your new key, then Save.' })
+  }
+
+  const handleSignIn = async () => {
+    if (!existing) return
+    if (dirty) {
+      toast({ kind: 'warn', text: 'Save your changes first, then sign in.' })
+      return
+    }
+    setSigningIn(true)
+    try {
+      const res = await window.folk.mcp.signIn(existing.id)
+      if (res.ok) {
+        toast({ kind: 'ok', text: `Signed in to ${existing.name}` })
+        // Reload the server list so the form picks up the freshly stored
+        // metadata + clientId.
+        await useMCPStore.getState().load()
+      } else {
+        toast({ kind: 'err', text: res.error ?? 'Sign-in failed' })
+      }
+    } finally {
+      setSigningIn(false)
+    }
+  }
+
+  const handleSignOut = async () => {
+    if (!existing) return
+    const res = await window.folk.mcp.signOut(existing.id)
+    if (res.ok) {
+      toast({ kind: 'ok', text: `Signed out of ${existing.name}` })
+      await useMCPStore.getState().load()
+    } else {
+      toast({ kind: 'err', text: res.error ?? 'Sign-out failed' })
+    }
   }
 
   const canReauth =
@@ -267,6 +301,29 @@ export function MCPDetail({ id, isNew, onBack }: Props) {
         </section>
       )}
 
+      {/* OAuth — only for HTTP servers, only after first save */}
+      {!isNew && existing && !isLocal && existing.transport === 'http' && (
+        <section className="mcp-card">
+          <header className="mcp-card-hd">
+            <h2 className="mcp-card-h">Sign-in</h2>
+            <p className="mcp-card-sub">
+              {existing.oauthStatus === 'authorized'
+                ? 'Connected via OAuth. Tokens refresh automatically.'
+                : 'Sign in if this server uses OAuth. Skip if you provided an API key in Advanced settings.'}
+            </p>
+          </header>
+          <div className="mcp-card-bd">
+            <SignInRow
+              status={existing.oauthStatus}
+              signingIn={signingIn}
+              hasUrl={values.url.trim().length > 0}
+              onSignIn={() => void handleSignIn()}
+              onSignOut={() => void handleSignOut()}
+            />
+          </div>
+        </section>
+      )}
+
       {/* Tool permissions — only meaningful for existing servers */}
       {!isNew && existing && (
         <section className="mcp-card" style={{ marginTop: 20 }}>
@@ -298,6 +355,72 @@ export function MCPDetail({ id, isNew, onBack }: Props) {
           </BrowseSection>
         </>
       )}
+    </div>
+  )
+}
+
+// ── OAuth sign-in row ────────────────────────────────────────────────────────
+
+function SignInRow({
+  status,
+  signingIn,
+  hasUrl,
+  onSignIn,
+  onSignOut
+}: {
+  status: MCPServer['oauthStatus']
+  signingIn: boolean
+  hasUrl: boolean
+  onSignIn: () => void
+  onSignOut: () => void
+}) {
+  if (status === 'authorized') {
+    return (
+      <div className="oauth-row">
+        <div className="oauth-row-lhs">
+          <span className="dot dot-ok" />
+          <div>
+            <div className="oauth-row-title">Signed in</div>
+            <div className="oauth-row-sub">folk holds an active OAuth token in the macOS Keychain.</div>
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-plain btn-sm" onClick={onSignIn} disabled={signingIn}>
+            {signingIn ? <span className="spinner" /> : <Icon name="refresh" size={12} />}
+            Re-sign in
+          </button>
+          <button className="btn btn-plain btn-sm" onClick={onSignOut}>
+            <Icon name="x" size={12} />
+            Sign out
+          </button>
+        </div>
+      </div>
+    )
+  }
+  return (
+    <div className="oauth-row">
+      <div className="oauth-row-lhs">
+        <span className={'dot ' + (status === 'error' ? 'dot-err' : 'dot-idle')} />
+        <div>
+          <div className="oauth-row-title">
+            {status === 'error' ? 'Sign-in failed' : 'Not signed in'}
+          </div>
+          <div className="oauth-row-sub">
+            {status === 'error'
+              ? 'The last sign-in attempt failed. Try again or check the URL.'
+              : 'A browser window will open so you can authorize folk on the server.'}
+          </div>
+        </div>
+      </div>
+      <button
+        className="btn btn-primary btn-sm"
+        onClick={onSignIn}
+        disabled={signingIn || !hasUrl}
+        title={!hasUrl ? 'Set a server URL first' : undefined}
+      >
+        {signingIn ? <span className="spinner" /> : <Icon name="globe" size={12} />}
+        {signingIn ? 'Opening browser…' : 'Sign in with OAuth'}
+      </button>
     </div>
   )
 }

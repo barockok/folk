@@ -179,6 +179,8 @@ export function registerIpc(
     (_e, id: string, name: string, args?: Record<string, string>) =>
       mcp.getPrompt(id, name, args)
   )
+  ipcMain.handle('mcpServers:signIn', (_e, id: string) => mcp.signIn(id))
+  ipcMain.handle('mcpServers:signOut', (_e, id: string) => mcp.signOut(id))
 
   ipcMain.handle('profile:get', () => db.getProfile())
   ipcMain.handle('profile:save', (_e, p: Profile) => db.saveProfile(p))

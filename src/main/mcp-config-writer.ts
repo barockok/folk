@@ -66,6 +66,9 @@ function entryFromServer(s: MCPServer): RawMCPEntry | null {
     if (!s.url) return null
     const e: RawMCPEntry = { type: 'http', url: s.url }
     if (s.headers && Object.keys(s.headers).length > 0) e.headers = s.headers
+    // Note: we never write tokens or OAuth client secrets to ~/.claude/.mcp.json.
+    // Headers in the file should only carry stable configuration. Live access
+    // tokens are injected by agent-manager at session start, not persisted here.
     return e
   }
   return null

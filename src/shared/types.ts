@@ -67,6 +67,14 @@ export interface ModelConfig {
 
 export type MCPTransport = 'stdio' | 'http'
 
+export interface OAuthServerMetadata {
+  authorizationEndpoint: string
+  tokenEndpoint: string
+  registrationEndpoint?: string | null
+  scopesSupported?: string[]
+  resource?: string
+}
+
 export interface MCPServer {
   id: string
   name: string
@@ -77,6 +85,16 @@ export interface MCPServer {
   env: Record<string, string> | null
   url: string | null
   headers: Record<string, string> | null
+  // OAuth — only used for HTTP transport. Tokens themselves are NOT stored
+  // here; they live in the OS keychain keyed by the server id. These fields
+  // hold what's needed to *run* the OAuth flow.
+  oauthClientId: string | null
+  oauthClientSecret: string | null
+  // Cached server metadata so we don't re-discover on every refresh.
+  oauthMetadata: OAuthServerMetadata | null
+  // Snapshot of the last-known auth state so the UI can render Sign in /
+  // Signed in without round-tripping the keychain on every list().
+  oauthStatus: 'unauthorized' | 'authorized' | 'error' | null
   isEnabled: boolean
   status: 'running' | 'stopped' | 'error'
   lastError: string | null

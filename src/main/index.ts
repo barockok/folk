@@ -95,11 +95,11 @@ app.whenReady().then(() => {
   })
 
   db = new Database(join(app.getPath('userData'), 'folk.db'))
-  agentManager = new AgentManager(db)
   mcpManager = new MCPManager(
     db,
     join(app.getPath('userData'), 'folk-managed-mcps.json')
   )
+  agentManager = new AgentManager(db, (id) => mcpManager.getAccessToken(id))
   // Initial sync on launch so any existing folk-managed entries land in
   // ~/.claude/.mcp.json right away (handles the very first run after this
   // feature ships).
