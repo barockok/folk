@@ -96,7 +96,14 @@ app.whenReady().then(() => {
 
   db = new Database(join(app.getPath('userData'), 'folk.db'))
   agentManager = new AgentManager(db)
-  mcpManager = new MCPManager(db)
+  mcpManager = new MCPManager(
+    db,
+    join(app.getPath('userData'), 'folk-managed-mcps.json')
+  )
+  // Initial sync on launch so any existing folk-managed entries land in
+  // ~/.claude/.mcp.json right away (handles the very first run after this
+  // feature ships).
+  void mcpManager.syncToClaudeCode()
   registerIpc(db, agentManager, mcpManager)
 
   createWindow()

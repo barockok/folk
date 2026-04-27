@@ -12,6 +12,7 @@ import type {
 } from '@shared/types'
 import { Database } from './database'
 import { discoverLocalMCPs } from './mcp-local-discovery'
+import { applyFolkMCPs } from './mcp-config-writer'
 
 export const MCP_TEMPLATES: Record<string, MCPTemplate> = {
   filesystem: {
@@ -97,6 +98,7 @@ export function templateToServer(
       : (tpl.baseArgs ?? []).slice(),
     env: overrides.env ?? null,
     url: overrides.url ?? null,
+    headers: null,
     isEnabled: true,
     status: 'stopped',
     lastError: null,
@@ -238,7 +240,12 @@ export class MCPManager {
   // call so #getServer can resolve `local:*` ids without rescanning.
   #localCache: MCPServer[] = []
 
-  constructor(private db: Database) {}
+  // Sidecar path for the write-through bookkeeping. Lives in folk's userData
+  // dir, NOT under ~/.claude — the user's Claude Code dir stays clean.
+  constructor(
+    private db: Database,
+    private syncSidecarPath: string
+  ) {}
 
   async list(): Promise<MCPServer[]> {
     const folk = this.db.listMCPs()
@@ -255,6 +262,7 @@ export class MCPManager {
       throw new Error('Local MCP servers are read-only')
     }
     this.db.saveMCP(server)
+    void this.#syncToClaudeCode()
   }
 
   delete(id: string): void {
@@ -262,6 +270,23 @@ export class MCPManager {
       throw new Error('Local MCP servers are read-only')
     }
     this.db.deleteMCP(id)
+    void this.#syncToClaudeCode()
+  }
+
+  // Write folk's enabled MCPs into ~/.claude/.mcp.json so they're visible to
+  // the Claude Code CLI and any other surface that reads that file. Best
+  // effort — failures are logged but don't break the IPC return.
+  async syncToClaudeCode(): Promise<void> {
+    try {
+      const owned = this.db.listMCPs() // folk DB only — no local entries
+      await applyFolkMCPs({ sidecarPath: this.syncSidecarPath, servers: owned })
+    } catch (err) {
+      console.error('[mcp] write-through to ~/.claude/.mcp.json failed:', err)
+    }
+  }
+
+  #syncToClaudeCode(): void {
+    void this.syncToClaudeCode()
   }
 
   async #getServer(id: string): Promise<MCPServer | null> {

@@ -291,6 +291,12 @@ export class AgentManager extends EventEmitter {
           args: m.args ?? [],
           env: m.env ?? undefined
         }
+      } else if (m.transport === 'http' && m.url) {
+        mcpMap[m.name] = {
+          type: 'http',
+          url: m.url,
+          headers: m.headers ?? undefined
+        }
       }
     }
 

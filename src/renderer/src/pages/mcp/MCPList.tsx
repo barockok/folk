@@ -8,42 +8,48 @@ interface MCPListProps {
   onNew: () => void
 }
 
-function relativeTime(ms: number): string {
-  const diff = Date.now() - ms
-  const mins = Math.floor(diff / 60_000)
-  const hours = Math.floor(diff / 3_600_000)
-  const days = Math.floor(diff / 86_400_000)
-  if (mins < 1) return 'just now'
-  if (mins < 60) return `${mins}m ago`
-  if (hours < 24) return `${hours}h ago`
-  return `${days}d ago`
+// The source-path encodes scope: `user`, `project:<path>`, or `plugin:<name>`.
+// MCP IDs follow `local:<scope>:<name>` so we can pull a friendly label from
+// the id without re-parsing the path.
+function localScopeLabel(id: string): { label: string; tone: 'user' | 'project' | 'plugin' } {
+  const parts = id.split(':')
+  if (parts[1] === 'plugin' && parts[2]) return { label: parts[2], tone: 'plugin' }
+  if (parts[1] === 'project') return { label: 'Project', tone: 'project' }
+  return { label: 'User', tone: 'user' }
 }
 
-function StatusPill({ status }: { status: 'running' | 'stopped' | 'error' }) {
-  if (status === 'running')
-    return (
-      <span className="badge badge-ok">
-        <span className="dot dot-ok" />
-        Running
-      </span>
-    )
-  if (status === 'error')
-    return (
-      <span className="badge badge-err">
-        <span className="dot dot-err" />
-        Error
-      </span>
-    )
+function EnableToggle({
+  enabled,
+  disabled,
+  title,
+  onChange
+}: {
+  enabled: boolean
+  disabled?: boolean
+  title?: string
+  onChange: (next: boolean) => void
+}) {
   return (
-    <span className="badge">
-      <span className="dot dot-idle" />
-      Stopped
-    </span>
+    <button
+      type="button"
+      role="switch"
+      aria-checked={enabled}
+      aria-label={enabled ? 'Disable server' : 'Enable server'}
+      title={title}
+      disabled={disabled}
+      onClick={(e) => {
+        e.stopPropagation()
+        if (!disabled) onChange(!enabled)
+      }}
+      className={'toggle' + (enabled ? ' on' : '')}
+    >
+      <span className="toggle-thumb" />
+    </button>
   )
 }
 
 export function MCPList({ onOpen, onNew }: MCPListProps) {
-  const { servers, hydrated, load } = useMCPStore()
+  const { servers, hydrated, load, setEnabled } = useMCPStore()
 
   useEffect(() => {
     if (!hydrated) load()
@@ -70,12 +76,10 @@ export function MCPList({ onOpen, onNew }: MCPListProps) {
       <div className="list" style={{ ['--cols' as string]: '1fr' }}>
         <div
           className="list-head"
-          style={{ gridTemplateColumns: '1fr 100px 120px 120px' }}
+          style={{ gridTemplateColumns: '1fr 120px' }}
         >
           <div>Server</div>
-          <div>Tools</div>
-          <div>Added</div>
-          <div>Status</div>
+          <div>Enabled</div>
         </div>
 
         {hydrated && servers.length === 0 && (
@@ -92,7 +96,7 @@ export function MCPList({ onOpen, onNew }: MCPListProps) {
           <div
             key={s.id}
             className="list-row"
-            style={{ gridTemplateColumns: '1fr 100px 120px 120px' }}
+            style={{ gridTemplateColumns: '1fr 120px' }}
             role="button"
             tabIndex={0}
             onClick={() => onOpen(s.id)}
@@ -110,15 +114,20 @@ export function MCPList({ onOpen, onNew }: MCPListProps) {
               <div style={{ minWidth: 0 }}>
                 <div className="row-title">
                   <span className="trunc">{s.name}</span>
-                  {!s.isEnabled && <span className="badge">Off</span>}
-                  {s.source === 'local' && (
-                    <span
-                      className="badge badge-ac"
-                      title={s.sourcePath ? `from ${s.sourcePath}` : 'Claude Code config'}
-                    >
-                      Local
-                    </span>
-                  )}
+                  {s.source === 'local' && (() => {
+                    const sc = localScopeLabel(s.id)
+                    const cls =
+                      sc.tone === 'plugin'
+                        ? 'badge badge-magenta'
+                        : sc.tone === 'project'
+                          ? 'badge badge-ac'
+                          : 'badge'
+                    return (
+                      <span className={cls} title={s.sourcePath ? `from ${s.sourcePath}` : 'Claude Code config'}>
+                        {sc.label}
+                      </span>
+                    )
+                  })()}
                 </div>
                 <div className="row-desc trunc">
                   {s.source === 'local'
@@ -127,14 +136,19 @@ export function MCPList({ onOpen, onNew }: MCPListProps) {
                 </div>
               </div>
             </div>
-            <div className="tnum" style={{ fontSize: 13, color: 'var(--body)' }}>
-              {s.toolCount != null ? s.toolCount : '—'}
-            </div>
-            <div style={{ fontSize: 13, color: 'var(--body)' }}>
-              {relativeTime(s.createdAt)}
-            </div>
             <div>
-              <StatusPill status={s.status} />
+              <EnableToggle
+                enabled={s.isEnabled}
+                disabled={s.source === 'local'}
+                title={
+                  s.source === 'local'
+                    ? `Managed by Claude Code · edit ${s.sourcePath ?? '~/.claude/.mcp.json'} to change`
+                    : s.isEnabled
+                      ? 'Disable this server'
+                      : 'Enable this server'
+                }
+                onChange={(next) => void setEnabled(s.id, next)}
+              />
             </div>
           </div>
         ))}

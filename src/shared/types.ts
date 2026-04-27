@@ -76,6 +76,7 @@ export interface MCPServer {
   args: string[] | null
   env: Record<string, string> | null
   url: string | null
+  headers: Record<string, string> | null
   isEnabled: boolean
   status: 'running' | 'stopped' | 'error'
   lastError: string | null

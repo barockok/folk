@@ -175,7 +175,8 @@ export class Database {
       ['is_enabled', `ALTER TABLE mcp_servers ADD COLUMN is_enabled INTEGER NOT NULL DEFAULT 1`],
       ['status', `ALTER TABLE mcp_servers ADD COLUMN status TEXT NOT NULL DEFAULT 'stopped'`],
       ['last_error', `ALTER TABLE mcp_servers ADD COLUMN last_error TEXT`],
-      ['tool_count', `ALTER TABLE mcp_servers ADD COLUMN tool_count INTEGER`]
+      ['tool_count', `ALTER TABLE mcp_servers ADD COLUMN tool_count INTEGER`],
+      ['headers', `ALTER TABLE mcp_servers ADD COLUMN headers TEXT`]
     ]
     for (const [col, ddl] of mcpAdditions) {
       if (!mcpCols.has(col)) this.db.prepare(ddl).run()
@@ -367,13 +368,14 @@ export class Database {
   saveMCP(m: MCPServer): void {
     this.db
       .prepare(
-        `INSERT INTO mcp_servers (id, name, template, transport, command, args, env, url,
+        `INSERT INTO mcp_servers (id, name, template, transport, command, args, env, url, headers,
            is_enabled, status, last_error, tool_count, created_at)
-         VALUES (@id, @name, @template, @transport, @command, @args, @env, @url,
+         VALUES (@id, @name, @template, @transport, @command, @args, @env, @url, @headers,
            @isEnabled, @status, @lastError, @toolCount, @createdAt)
          ON CONFLICT(id) DO UPDATE SET
            name = excluded.name, template = excluded.template, transport = excluded.transport,
            command = excluded.command, args = excluded.args, env = excluded.env, url = excluded.url,
+           headers = excluded.headers,
            is_enabled = excluded.is_enabled, status = excluded.status,
            last_error = excluded.last_error, tool_count = excluded.tool_count`
       )
@@ -386,6 +388,7 @@ export class Database {
         args: m.args ? JSON.stringify(m.args) : null,
         env: m.env ? JSON.stringify(m.env) : null,
         url: m.url,
+        headers: m.headers ? JSON.stringify(m.headers) : null,
         isEnabled: m.isEnabled ? 1 : 0,
         status: m.status,
         lastError: m.lastError,
@@ -407,6 +410,7 @@ export class Database {
       args: r.args ? (JSON.parse(r.args as string) as string[]) : null,
       env: r.env ? (JSON.parse(r.env as string) as Record<string, string>) : null,
       url: (r.url as string) ?? null,
+      headers: r.headers ? (JSON.parse(r.headers as string) as Record<string, string>) : null,
       isEnabled: Number(r.is_enabled ?? 0) === 1,
       status: r.status as MCPServer['status'],
       lastError: (r.last_error as string) ?? null,

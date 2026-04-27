@@ -35,7 +35,7 @@ describe('MCPManager.testConnection', () => {
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), 'folk-mcp-'))
     db = new Database(join(dir, 'folk.db'))
-    mgr = new MCPManager(db)
+    mgr = new MCPManager(db, join(dir, 'folk-managed-mcps.json'))
   })
 
   afterEach(() => {
