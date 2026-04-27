@@ -4,6 +4,7 @@ import { HistoryRail } from './sessions/HistoryRail'
 import { Conversation } from './sessions/Conversation'
 import { Composer } from './sessions/Composer'
 import { TodoPanel } from './sessions/TodoPanel'
+import { SessionsEmpty } from './sessions/SessionsEmpty'
 import { SessionSetup } from '../onboarding/SessionSetup'
 import type { SessionConfig } from '@shared/types'
 
@@ -33,17 +34,22 @@ export function SessionsPage() {
             onLaunch={handleLaunch}
             onCancel={() => setNeedsSetup(false)}
           />
-        ) : (
+        ) : active ? (
           <>
             <div className="sess-body-wrap">
-              <Conversation key={active?.id ?? 'none'} session={active} />
+              <Conversation key={active.id} session={active} />
             </div>
             <Composer
               session={active}
-              onSend={(text, atts) => active && send(active.id, text, atts)}
-              onCancel={() => active && cancel(active.id)}
+              onSend={(text, atts) => send(active.id, text, atts)}
+              onCancel={() => cancel(active.id)}
             />
           </>
+        ) : (
+          <SessionsEmpty
+            hasSessions={sessions.length > 0}
+            onNew={() => setNeedsSetup(true)}
+          />
         )}
       </div>
       {!needsSetup && <TodoPanel session={active} />}
