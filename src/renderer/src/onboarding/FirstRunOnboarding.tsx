@@ -29,6 +29,8 @@ interface ProviderPreset {
   description: string
 }
 
+const CUSTOM_PROVIDER_ID = '__custom__'
+
 const PROVIDER_PRESETS: ProviderPreset[] = [
   {
     id: 'anthropic',
@@ -93,13 +95,14 @@ const AVATAR_COLORS = [
 // Main component
 // ---------------------------------------------------------------------------
 
-export function FirstRunOnboarding() {
-  // Defense-in-depth: bail early if already onboarded
-  if (localStorage.getItem('folk.onboarded') === '1') return null
+export function FirstRunOnboarding({ force = false }: { force?: boolean } = {}) {
+  // Defense-in-depth: bail early if already onboarded — unless forced (dev tweak)
+  if (!force && localStorage.getItem('folk.onboarded') === '1') return null
 
   const saveProfile = useProfileStore((s) => s.save)
   const saveProvider = useProvidersStore((s) => s.save)
   const toast = useUIStore((s) => s.toast)
+  const setForceOnboarding = useUIStore((s) => s.setForceOnboarding)
 
   const [step, setStep] = useState(0)
 
@@ -119,7 +122,21 @@ export function FirstRunOnboarding() {
   const [authMode, setAuthMode] = useState<ProviderAuthMode>('api-key')
   const [ccStatus, setCcStatus] = useState<ClaudeCodeAuthStatus | null>(null)
 
-  const preset = PROVIDER_PRESETS.find((p) => p.id === providerId)!
+  // Custom provider draft
+  const [customName, setCustomName] = useState('')
+  const [customBaseUrl, setCustomBaseUrl] = useState('')
+
+  const isCustom = providerId === CUSTOM_PROVIDER_ID
+  const preset: ProviderPreset = isCustom
+    ? {
+        id: CUSTOM_PROVIDER_ID,
+        name: customName.trim() || 'Custom provider',
+        brand: 'custom',
+        baseUrl: customBaseUrl.trim() || null,
+        keyLabel: 'API key',
+        description: 'Anthropic-compatible endpoint.'
+      }
+    : PROVIDER_PRESETS.find((p) => p.id === providerId)!
   const canUseClaudeCode = providerId === 'anthropic'
 
   // Reset auth mode + verification when provider changes away from Anthropic.
@@ -149,7 +166,12 @@ export function FirstRunOnboarding() {
   const canNext = () => {
     if (step === 1) return nickname.trim().length > 0
     if (step === 2) return !!providerId
-    if (step === 3) return verified
+    if (step === 3) {
+      if (isCustom) {
+        return verified && customName.trim().length > 0 && customBaseUrl.trim().length > 0
+      }
+      return verified
+    }
     return true
   }
 
@@ -163,6 +185,11 @@ export function FirstRunOnboarding() {
   }
 
   const handleSkip = async () => {
+    if (force) {
+      setForceOnboarding(false)
+      toast({ kind: 'info', text: 'Onboarding simulation closed (no data written)' })
+      return
+    }
     await persistProfile()
     localStorage.setItem('folk.onboarded', '1')
     toast({ kind: 'ok', text: 'Skipped — add a provider any time from Models & Providers' })
@@ -182,11 +209,16 @@ export function FirstRunOnboarding() {
   }
 
   const handleFinish = async () => {
+    if (force) {
+      setForceOnboarding(false)
+      toast({ kind: 'info', text: 'Onboarding simulation closed (no data written)' })
+      return
+    }
     await persistProfile()
     if (verified && preset) {
       const resolvedKey = preset.noAuth ? 'public' : authMode === 'claude-code' ? '' : apiKey
       let models: ModelConfig[] = []
-      if (authMode !== 'claude-code') {
+      if (!isCustom && authMode !== 'claude-code') {
         try {
           const res = await window.folk.providers.fetchModels({
             presetId: providerId,
@@ -199,7 +231,7 @@ export function FirstRunOnboarding() {
         }
       }
       const provider: ProviderConfig = {
-        id: providerId,
+        id: isCustom ? crypto.randomUUID() : providerId,
         name: preset.name,
         apiKey: resolvedKey,
         authMode,
@@ -241,6 +273,27 @@ export function FirstRunOnboarding() {
               </div>
             ))}
           </div>
+          {force && (
+            <button
+              type="button"
+              aria-label="Close onboarding simulation"
+              onClick={() => setForceOnboarding(false)}
+              style={{
+                marginLeft: 12,
+                background: 'transparent',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--r-sm)',
+                color: 'var(--fg-faint)',
+                padding: '4px 6px',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center'
+              }}
+              title="Close (simulated — no data persisted)"
+            >
+              <Icon name="x" size={12} />
+            </button>
+          )}
         </div>
 
         {/* Body */}
@@ -403,6 +456,18 @@ export function FirstRunOnboarding() {
                     <span className="ob-prov-sub">{p.description}</span>
                   </button>
                 ))}
+                <button
+                  key={CUSTOM_PROVIDER_ID}
+                  className={['ob-prov', isCustom ? 'on' : ''].filter(Boolean).join(' ')}
+                  onClick={() => setProviderId(CUSTOM_PROVIDER_ID)}
+                  onKeyDown={(e) =>
+                    (e.key === 'Enter' || e.key === ' ') && setProviderId(CUSTOM_PROVIDER_ID)
+                  }
+                >
+                  <ProviderLogo brand="custom" size={40} />
+                  <span className="ob-prov-name">Custom</span>
+                  <span className="ob-prov-sub">Anthropic-compatible endpoint.</span>
+                </button>
               </div>
 
               <div className="ob-note">
@@ -434,10 +499,42 @@ export function FirstRunOnboarding() {
                     <div className="sub" style={{ fontSize: 12 }}>
                       {preset.proxied
                         ? (preset.upstreamLabel ?? 'managed by folk')
-                        : (preset.baseUrl ?? 'api.anthropic.com')}
+                        : (preset.baseUrl ?? (isCustom ? 'https://…' : 'api.anthropic.com'))}
                     </div>
                   </div>
                 </div>
+
+                {isCustom && (
+                  <>
+                    <div className="field" style={{ marginTop: 12 }}>
+                      <label className="label">Provider name</label>
+                      <input
+                        className="input"
+                        type="text"
+                        placeholder="e.g. My Anthropic proxy"
+                        value={customName}
+                        onChange={(e) => {
+                          setCustomName(e.target.value)
+                          setVerified(false)
+                        }}
+                      />
+                    </div>
+                    <div className="field" style={{ marginTop: 8 }}>
+                      <label className="label">Base URL</label>
+                      <input
+                        className="input mono"
+                        type="text"
+                        placeholder="https://api.example.com/v1"
+                        value={customBaseUrl}
+                        onChange={(e) => {
+                          setCustomBaseUrl(e.target.value)
+                          setVerified(false)
+                        }}
+                      />
+                      <div className="hint">Anthropic-compatible endpoint. Models can be added later.</div>
+                    </div>
+                  </>
+                )}
 
                 {canUseClaudeCode && (
                   <div className="field" style={{ marginTop: 12 }}>
@@ -510,7 +607,11 @@ export function FirstRunOnboarding() {
                         <button
                           className="btn btn-primary"
                           onClick={handleTest}
-                          disabled={!apiKey.trim() || testing}
+                          disabled={
+                            !apiKey.trim() ||
+                            testing ||
+                            (isCustom && (!customName.trim() || !customBaseUrl.trim()))
+                          }
                         >
                           {testing ? (
                             <><span className="spinner" /> Verifying…</>

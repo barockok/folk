@@ -30,6 +30,7 @@ export default function App() {
   }, [])
 
   const onboarded = localStorage.getItem('folk.onboarded') === '1'
+  const forceOnboarding = useUIStore((s) => s.forceOnboarding)
 
   return (
     <>
@@ -42,7 +43,7 @@ export default function App() {
         {page === 'keybindings' && <KeybindingsPage />}
         {page === 'profile' && <ProfilePage />}
       </Shell>
-      {!onboarded && <FirstRunOnboarding />}
+      {(!onboarded || forceOnboarding) && <FirstRunOnboarding force={forceOnboarding} />}
     </>
   )
 }

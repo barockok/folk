@@ -1,4 +1,6 @@
+import { useEffect, useRef, useState } from 'react'
 import { Icon } from './icons'
+import { TweaksPanel } from './TweaksPanel'
 import { useUIStore } from '../stores/useUIStore'
 import { useSessionStore } from '../stores/useSessionStore'
 import type { PageKey } from '../stores/useUIStore'
@@ -17,10 +19,6 @@ const PAGE_LABELS: Record<PageKey, string> = {
 export function Topbar() {
   const page = useUIStore((s) => s.page)
   const openCmdk = useUIStore((s) => s.openCmdk)
-  const theme = useUIStore((s) => s.theme)
-  const setTheme = useUIStore((s) => s.setTheme)
-  const density = useUIStore((s) => s.density)
-  const setDensity = useUIStore((s) => s.setDensity)
   const collapsed = useUIStore((s) => s.sidebarCollapsed)
   const toggleSidebar = useUIStore((s) => s.toggleSidebar)
   const activeSessionTitle = useSessionStore((s) => {
@@ -28,6 +26,26 @@ export function Topbar() {
     const found = s.sessions.find((x) => x.id === s.activeId)
     return found?.title ?? null
   })
+
+  const [tweaksOpen, setTweaksOpen] = useState(false)
+  const tweaksWrapRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (!tweaksOpen) return
+    const onDown = (e: MouseEvent) => {
+      if (!tweaksWrapRef.current) return
+      if (!tweaksWrapRef.current.contains(e.target as Node)) setTweaksOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setTweaksOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [tweaksOpen])
 
   const crumbs: string[] = ['folk', PAGE_LABELS[page]]
   if (page === 'sessions' && activeSessionTitle) {
@@ -73,22 +91,23 @@ export function Topbar() {
       </div>
 
       <div className="tb-actions">
-        <button
-          className="btn btn-plain btn-icon"
-          onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
-          title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
-          aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
-        >
-          <Icon name={theme === 'light' ? 'moon' : 'sun'} size={14} />
-        </button>
-        <button
-          className="btn btn-plain btn-icon"
-          onClick={() => setDensity(density === 'compact' ? 'regular' : 'compact')}
-          title={`Density: ${density}`}
-          aria-label={`Toggle density (currently ${density})`}
-        >
-          <Icon name="density" size={14} />
-        </button>
+        <div className="tweaks-wrap" ref={tweaksWrapRef}>
+          <button
+            className="btn btn-plain btn-icon"
+            onClick={() => setTweaksOpen((v) => !v)}
+            title="Tweaks"
+            aria-label="Open tweaks"
+            aria-expanded={tweaksOpen}
+            aria-haspopup="true"
+          >
+            <Icon name="settings" size={14} />
+          </button>
+          {tweaksOpen && (
+            <div className="tweaks-popover" role="dialog" aria-label="Tweaks">
+              <TweaksPanel />
+            </div>
+          )}
+        </div>
       </div>
     </header>
   )

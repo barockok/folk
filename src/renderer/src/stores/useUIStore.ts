@@ -22,6 +22,7 @@ interface UIState {
   theme: 'light' | 'dark'
   density: 'compact' | 'regular'
   sidebarCollapsed: boolean
+  forceOnboarding: boolean
   setPage: (p: PageKey) => void
   openCmdk: () => void
   closeCmdk: () => void
@@ -30,6 +31,7 @@ interface UIState {
   setTheme: (t: 'light' | 'dark') => void
   setDensity: (d: 'compact' | 'regular') => void
   toggleSidebar: () => void
+  setForceOnboarding: (v: boolean) => void
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -39,6 +41,7 @@ export const useUIStore = create<UIState>((set) => ({
   theme: (localStorage.getItem('folk.theme') as 'light' | 'dark') || 'light',
   density: (localStorage.getItem('folk.density') as 'compact' | 'regular') || 'compact',
   sidebarCollapsed: localStorage.getItem('folk.sidebarCollapsed') === '1',
+  forceOnboarding: false,
   setPage: (p) => {
     localStorage.setItem('folk.lastTab', p)
     set({ page: p })
@@ -63,5 +66,6 @@ export const useUIStore = create<UIState>((set) => ({
       const v = !st.sidebarCollapsed
       localStorage.setItem('folk.sidebarCollapsed', v ? '1' : '0')
       return { sidebarCollapsed: v }
-    })
+    }),
+  setForceOnboarding: (v) => set({ forceOnboarding: v })
 }))
