@@ -75,3 +75,73 @@ export function Icon({ name, size = 16, ...rest }: { name: string; size?: number
   }
   return <svg {...p}>{paths[name] ?? null}</svg>
 }
+
+// Brand marks for provider tiles. Paths sourced from simple-icons (Anthropic,
+// OpenRouter) and opencode.ai favicon — embedded as nested SVGs so each can
+// keep its native viewBox.
+export function ProviderLogo({
+  brand,
+  size = 36
+}: {
+  brand: 'anthropic' | 'openrouter' | 'opencode' | 'custom'
+  size?: number
+}) {
+  const radius = Math.round(size * 0.22)
+  const swatch: Record<string, string> = {
+    anthropic: '#D97757',
+    openrouter: '#6467F2',
+    opencode: '#131010',
+    custom: '#475569'
+  }
+  // Anthropic — official wordmark "A" path (simple-icons/anthropic, viewBox 24)
+  const ANTHROPIC_PATH =
+    'M17.3041 3.541h-3.6718l6.696 16.918H24Zm-10.6082 0L0 20.459h3.7442l1.3693-3.5527h7.0052l1.3693 3.5528h3.7442L10.5363 3.5409Zm-.3712 10.2232 2.2914-5.9456 2.2914 5.9456Z'
+  // OpenRouter — official mark (simple-icons/openrouter, viewBox 24)
+  const OPENROUTER_PATH =
+    'M16.778 1.844v1.919q-.569-.026-1.138-.032-.708-.008-1.415.037c-1.93.126-4.023.728-6.149 2.237-2.911 2.066-2.731 1.95-4.14 2.75-.396.223-1.342.574-2.185.798-.841.225-1.753.333-1.751.333v4.229s.768.108 1.61.333c.842.224 1.789.575 2.185.799 1.41.798 1.228.683 4.14 2.75 2.126 1.509 4.22 2.11 6.148 2.236.88.058 1.716.041 2.555.005v1.918l7.222-4.168-7.222-4.17v2.176c-.86.038-1.611.065-2.278.021-1.364-.09-2.417-.357-3.979-1.465-2.244-1.593-2.866-2.027-3.68-2.508.889-.518 1.449-.906 3.822-2.59 1.56-1.109 2.614-1.377 3.978-1.466.667-.044 1.418-.017 2.278.02v2.176L24 6.014Z'
+
+  const glyph: Record<string, React.ReactNode> = {
+    anthropic: (
+      <svg x="14" y="14" width="24" height="24" viewBox="0 0 24 24">
+        <path d={ANTHROPIC_PATH} fill="#FFFFFF" />
+      </svg>
+    ),
+    openrouter: (
+      <svg x="14" y="14" width="24" height="24" viewBox="0 0 24 24">
+        <path d={OPENROUTER_PATH} fill="#FFFFFF" />
+      </svg>
+    ),
+    // OpenCode — favicon: outer "M" frame with inner gray rect (CRT-display motif)
+    opencode: (
+      <svg x="11" y="11" width="30" height="30" viewBox="0 0 512 512">
+        <path d="M320 224V352H192V224H320Z" fill="#5A5858" />
+        <path
+          fillRule="evenodd"
+          clipRule="evenodd"
+          d="M384 416H128V96H384V416ZM320 160H192V352H320V160Z"
+          fill="#FFFFFF"
+        />
+      </svg>
+    ),
+    custom: (
+      <g fill="#FFFFFF">
+        <circle cx={19} cy={26} r={2.5} />
+        <circle cx={26} cy={26} r={2.5} />
+        <circle cx={33} cy={26} r={2.5} />
+      </g>
+    )
+  }
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 52 52"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden
+      style={{ display: 'block', borderRadius: radius, flex: 'none' }}
+    >
+      <rect width="52" height="52" rx={Math.round(52 * 0.22)} fill={swatch[brand]} />
+      {glyph[brand] ?? null}
+    </svg>
+  )
+}

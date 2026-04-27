@@ -280,10 +280,34 @@ export class AgentManager extends EventEmitter {
     const provider = this.#resolveProvider(session.modelId)
 
     const envOverlay: Record<string, string | undefined> = { ...process.env }
+    // Auth env vars depend on the upstream's preferred header style:
+    //   - Anthropic / custom (default): x-api-key via ANTHROPIC_API_KEY
+    //   - OpenRouter / OpenCode: Bearer via ANTHROPIC_AUTH_TOKEN
+    // OpenCode also requires the x-opencode-client header injected via
+    // ANTHROPIC_CUSTOM_HEADERS; the free tier uses the literal token "public".
+    delete envOverlay.ANTHROPIC_API_KEY
+    delete envOverlay.ANTHROPIC_AUTH_TOKEN
     if (provider.authMode !== 'claude-code') {
-      envOverlay.ANTHROPIC_API_KEY = provider.apiKey
-    } else {
-      delete envOverlay.ANTHROPIC_API_KEY
+      const usesBearer =
+        provider.id === 'openrouter' ||
+        provider.id === 'opencode-free' ||
+        provider.id === 'opencode-paid'
+      const tokenForOpenCodeFree = provider.id === 'opencode-free' ? 'public' : provider.apiKey
+      if (usesBearer) {
+        envOverlay.ANTHROPIC_AUTH_TOKEN =
+          provider.id === 'opencode-free' ? tokenForOpenCodeFree : provider.apiKey
+      } else {
+        envOverlay.ANTHROPIC_API_KEY = provider.apiKey
+      }
+      if (provider.id === 'opencode-free' || provider.id === 'opencode-paid') {
+        const existing = envOverlay.ANTHROPIC_CUSTOM_HEADERS ?? ''
+        const ours = 'x-opencode-client: desktop'
+        envOverlay.ANTHROPIC_CUSTOM_HEADERS = existing
+          ? existing.includes('x-opencode-client')
+            ? existing
+            : `${existing}\n${ours}`
+          : ours
+      }
     }
     if (provider.baseUrl) envOverlay.ANTHROPIC_BASE_URL = provider.baseUrl
 

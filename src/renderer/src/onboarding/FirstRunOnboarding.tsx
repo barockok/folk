@@ -10,99 +10,58 @@ import type {
 import { useProfileStore } from '../stores/useProfileStore'
 import { useProvidersStore } from '../stores/useProvidersStore'
 import { useUIStore } from '../stores/useUIStore'
-import { Icon } from '../components/icons'
+import { Icon, ProviderLogo } from '../components/icons'
 
 // ---------------------------------------------------------------------------
-// Provider presets — verbatim from ModelPage.tsx (Task 30)
+// Provider presets — kept in sync with ModelPage.tsx
 // ---------------------------------------------------------------------------
 
 interface ProviderPreset {
   id: string
   name: string
-  logoClass: string
-  logoText: string
+  brand: 'anthropic' | 'openrouter' | 'opencode' | 'custom'
   baseUrl: string | null
   keyLabel: string
   keyPrefix?: string
-  models: Array<{ id: string; label: string }>
+  noAuth?: boolean
+  description: string
 }
 
 const PROVIDER_PRESETS: ProviderPreset[] = [
   {
     id: 'anthropic',
     name: 'Anthropic',
-    logoClass: 'lg-anthropic',
-    logoText: 'AN',
+    brand: 'anthropic',
     baseUrl: null,
     keyLabel: 'Anthropic API key',
     keyPrefix: 'sk-ant-',
-    models: [
-      { id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5' },
-      { id: 'claude-opus-4', label: 'Claude Opus 4' },
-      { id: 'claude-haiku-4-5', label: 'Claude Haiku 4.5' }
-    ]
+    description: 'Claude — Sonnet, Opus, Haiku.'
   },
   {
-    id: 'openai',
-    name: 'OpenAI',
-    logoClass: 'lg-openai',
-    logoText: 'OA',
-    baseUrl: 'https://api.openai.com/v1',
-    keyLabel: 'OpenAI API key',
-    keyPrefix: 'sk-',
-    models: [
-      { id: 'gpt-4o', label: 'GPT-4o' },
-      { id: 'gpt-4o-mini', label: 'GPT-4o mini' },
-      { id: 'o3-mini', label: 'o3-mini' }
-    ]
+    id: 'openrouter',
+    name: 'OpenRouter',
+    brand: 'openrouter',
+    baseUrl: 'https://openrouter.ai/api/v1',
+    keyLabel: 'OpenRouter API key',
+    keyPrefix: 'sk-or-',
+    description: 'Unified gateway, 200+ models.'
   },
   {
-    id: 'google',
-    name: 'Google',
-    logoClass: 'lg-google',
-    logoText: 'GG',
-    baseUrl: 'https://generativelanguage.googleapis.com',
-    keyLabel: 'Google AI Studio key',
-    models: [
-      { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
-      { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' }
-    ]
+    id: 'opencode-free',
+    name: 'OpenCode (Free)',
+    brand: 'opencode',
+    baseUrl: 'https://opencode.ai/zen',
+    keyLabel: 'No key required',
+    noAuth: true,
+    description: 'Public free tier — Bearer public.'
   },
   {
-    id: 'glm',
-    name: 'GLM (Zhipu)',
-    logoClass: 'lg-zhipu',
-    logoText: 'GL',
-    baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
-    keyLabel: 'Zhipu API key',
-    models: [
-      { id: 'glm-4.6', label: 'GLM-4.6' },
-      { id: 'glm-4-air', label: 'GLM-4-Air' }
-    ]
-  },
-  {
-    id: 'moonshot',
-    name: 'Moonshot',
-    logoClass: 'lg-moonshot',
-    logoText: 'KM',
-    baseUrl: 'https://api.moonshot.cn/v1',
-    keyLabel: 'Moonshot API key',
-    models: [
-      { id: 'kimi-k2', label: 'Kimi K2' },
-      { id: 'moonshot-v1-128k', label: 'Moonshot v1 128K' }
-    ]
-  },
-  {
-    id: 'qwen',
-    name: 'Qwen',
-    logoClass: 'lg-qwen',
-    logoText: 'QW',
-    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-    keyLabel: 'DashScope key',
-    models: [
-      { id: 'qwen-max', label: 'Qwen Max' },
-      { id: 'qwen-coder-plus', label: 'Qwen Coder Plus' }
-    ]
+    id: 'opencode-paid',
+    name: 'OpenCode (Paid)',
+    brand: 'opencode',
+    baseUrl: 'https://opencode.ai/zen',
+    keyLabel: 'OpenCode API key',
+    description: 'Paid tier — your token.'
   }
 ]
 
@@ -157,10 +116,11 @@ export function FirstRunOnboarding() {
   const preset = PROVIDER_PRESETS.find((p) => p.id === providerId)!
   const canUseClaudeCode = providerId === 'anthropic'
 
-  // Reset auth mode + verification when provider changes away from Anthropic
+  // Reset auth mode + verification when provider changes away from Anthropic.
+  // For noAuth providers (OpenCode Free) auto-verify since no key to validate.
   useEffect(() => {
     if (!canUseClaudeCode && authMode === 'claude-code') setAuthMode('api-key')
-    setVerified(false)
+    setVerified(!!preset?.noAuth)
   }, [providerId])
 
   // Poll Claude Code auth status when that mode is active
@@ -218,15 +178,24 @@ export function FirstRunOnboarding() {
   const handleFinish = async () => {
     await persistProfile()
     if (verified && preset) {
-      const models: ModelConfig[] = preset.models.map((m) => ({
-        id: m.id,
-        label: m.label,
-        enabled: true
-      }))
+      const resolvedKey = preset.noAuth ? 'public' : authMode === 'claude-code' ? '' : apiKey
+      let models: ModelConfig[] = []
+      if (authMode !== 'claude-code') {
+        try {
+          const res = await window.folk.providers.fetchModels({
+            presetId: providerId,
+            apiKey: resolvedKey,
+            baseUrl: preset.baseUrl ?? undefined
+          })
+          if (res.ok) models = res.models
+        } catch {
+          // ignore — user can fetch later
+        }
+      }
       const provider: ProviderConfig = {
-        id: providerId === 'anthropic' ? 'anthropic' : crypto.randomUUID(),
+        id: providerId,
         name: preset.name,
-        apiKey: authMode === 'claude-code' ? '' : apiKey,
+        apiKey: resolvedKey,
         authMode,
         baseUrl: preset.baseUrl,
         models,
@@ -423,14 +392,9 @@ export function FirstRunOnboarding() {
                     onClick={() => setProviderId(p.id)}
                     onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setProviderId(p.id)}
                   >
-                    <span
-                      className={`prov-logo-lg ${p.logoClass}`}
-                      style={{ width: 40, height: 40, fontSize: 14 }}
-                    >
-                      {p.logoText}
-                    </span>
+                    <ProviderLogo brand={p.brand} size={40} />
                     <span className="ob-prov-name">{p.name}</span>
-                    <span className="ob-prov-sub">{p.models.length} models</span>
+                    <span className="ob-prov-sub">{p.description}</span>
                   </button>
                 ))}
               </div>
@@ -456,12 +420,7 @@ export function FirstRunOnboarding() {
 
               <div className="ob-key-panel">
                 <div className="ob-key-hd">
-                  <span
-                    className={`prov-logo-lg ${preset.logoClass}`}
-                    style={{ width: 32, height: 32, fontSize: 12 }}
-                  >
-                    {preset.logoText}
-                  </span>
+                  <ProviderLogo brand={preset.brand} size={32} />
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--heading)' }}>
                       {preset.name}
@@ -504,7 +463,23 @@ export function FirstRunOnboarding() {
                   </div>
                 )}
 
-                {authMode === 'api-key' ? (
+                {preset.noAuth ? (
+                  <div className="ob-key-actions" style={{ marginTop: 12 }}>
+                    <div className="ob-verified">
+                      <div className="ob-verified-ic">
+                        <Icon name="check" size={14} />
+                      </div>
+                      <div>
+                        <div style={{ fontWeight: 500, color: 'var(--heading)', fontSize: 13 }}>
+                          No key required
+                        </div>
+                        <div className="sub" style={{ fontSize: 12 }}>
+                          Uses <code className="mono">Bearer public</code> against opencode.ai/zen.
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : authMode === 'api-key' ? (
                   <>
                     <div className="field" style={{ marginTop: 12 }}>
                       <label className="label">{preset.keyLabel}</label>
@@ -546,7 +521,7 @@ export function FirstRunOnboarding() {
                               Connected to {preset.name}
                             </div>
                             <div className="sub" style={{ fontSize: 12 }}>
-                              {preset.models.length} models ready to use.
+                              Models will be fetched on finish.
                             </div>
                           </div>
                         </div>

@@ -2,6 +2,7 @@ import type {
   Session,
   SessionConfig,
   ProviderConfig,
+  ModelConfig,
   MCPServer,
   MCPTemplate,
   Profile,
@@ -69,6 +70,11 @@ export interface FolkAPI {
     save: (p: ProviderConfig) => Promise<void>
     delete: (id: string) => Promise<void>
     test: (id: string) => Promise<{ ok: boolean; error?: string }>
+    fetchModels: (input: {
+      presetId: string
+      apiKey?: string
+      baseUrl?: string
+    }) => Promise<{ ok: boolean; models: ModelConfig[]; error?: string }>
   }
   mcp: {
     list: () => Promise<MCPServer[]>

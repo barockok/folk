@@ -45,7 +45,8 @@ const folk: FolkAPI = {
     list: () => ipcRenderer.invoke('providers:list'),
     save: (p) => ipcRenderer.invoke('providers:save', p),
     delete: (id) => ipcRenderer.invoke('providers:delete', id),
-    test: (id) => ipcRenderer.invoke('providers:test', id)
+    test: (id) => ipcRenderer.invoke('providers:test', id),
+    fetchModels: (input) => ipcRenderer.invoke('providers:fetchModels', input)
   },
   mcp: {
     list: () => ipcRenderer.invoke('mcpServers:list'),

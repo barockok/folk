@@ -20,6 +20,7 @@ import {
 import type {
   SessionConfig,
   ProviderConfig,
+  ModelConfig,
   MCPServer,
   Profile,
   Attachment,
@@ -28,6 +29,78 @@ import type {
 } from '@shared/types'
 
 const execFileP = promisify(execFile)
+
+interface FetchModelsInput {
+  presetId: string
+  apiKey?: string
+  baseUrl?: string
+}
+
+interface RawModelEntry {
+  id?: string
+  name?: string
+  display_name?: string
+  context_length?: number
+  context_window?: number
+  pricing?: { prompt?: string; completion?: string }
+}
+
+function toModelConfig(m: RawModelEntry, fallbackId: string): ModelConfig {
+  const id = String(m.id ?? fallbackId)
+  const label = String(m.display_name ?? m.name ?? id)
+  const cw =
+    typeof m.context_length === 'number'
+      ? m.context_length
+      : typeof m.context_window === 'number'
+        ? m.context_window
+        : undefined
+  return { id, label, enabled: true, contextWindow: cw }
+}
+
+async function fetchModelsForPreset(input: FetchModelsInput): Promise<ModelConfig[]> {
+  const { presetId, apiKey, baseUrl } = input
+  if (presetId === 'anthropic') {
+    const url = (baseUrl?.replace(/\/+$/, '') ?? 'https://api.anthropic.com') + '/v1/models'
+    if (!apiKey) throw new Error('Anthropic API key required')
+    const res = await fetch(url, {
+      headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' }
+    })
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`)
+    const json = (await res.json()) as { data?: RawModelEntry[] }
+    return (json.data ?? []).map((m) => toModelConfig(m, m.id ?? ''))
+  }
+
+  if (presetId === 'openrouter') {
+    const url = 'https://openrouter.ai/api/v1/models'
+    const headers: Record<string, string> = { 'HTTP-Referer': 'https://folk.local' }
+    if (apiKey) headers.Authorization = `Bearer ${apiKey}`
+    const res = await fetch(url, { headers })
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`)
+    const json = (await res.json()) as { data?: RawModelEntry[] }
+    return (json.data ?? []).map((m) => toModelConfig(m, m.id ?? ''))
+  }
+
+  if (presetId === 'opencode-free' || presetId === 'opencode-paid') {
+    const url = 'https://opencode.ai/zen/v1/models'
+    const token = presetId === 'opencode-free' ? 'public' : (apiKey ?? '')
+    const res = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'x-opencode-client': 'desktop'
+      }
+    })
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`)
+    const json = (await res.json()) as { data?: RawModelEntry[]; models?: RawModelEntry[] }
+    const raw = json.data ?? json.models ?? []
+    const filtered =
+      presetId === 'opencode-free'
+        ? raw.filter((m) => typeof m.id === 'string' && m.id.endsWith('-free'))
+        : raw.filter((m) => !(typeof m.id === 'string' && m.id.endsWith('-free')))
+    return filtered.map((m) => toModelConfig(m, m.id ?? ''))
+  }
+
+  throw new Error(`unsupported preset: ${presetId}`)
+}
 
 async function detectClaudeCodeAuth(): Promise<ClaudeCodeAuthStatus> {
   // macOS: credentials stored in the login Keychain under service
@@ -147,6 +220,21 @@ export function registerIpc(
       return { ok: false, error: (err as Error).message }
     }
   })
+
+  ipcMain.handle(
+    'providers:fetchModels',
+    async (
+      _e,
+      input: { presetId: string; apiKey?: string; baseUrl?: string }
+    ) => {
+      try {
+        const models = await fetchModelsForPreset(input)
+        return { ok: true, models }
+      } catch (err) {
+        return { ok: false, error: (err as Error).message, models: [] as ModelConfig[] }
+      }
+    }
+  )
 
   ipcMain.handle('auth:claudeCodeStatus', () => detectClaudeCodeAuth())
 

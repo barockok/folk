@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import type { ProviderConfig, ProviderAuthMode, ModelConfig, ClaudeCodeAuthStatus } from '@shared/types'
 import { useProvidersStore } from '../stores/useProvidersStore'
 import { useUIStore } from '../stores/useUIStore'
-import { Icon } from '../components/icons'
+import { Icon, ProviderLogo } from '../components/icons'
 
 function ClaudeCodeStatusField() {
   const status = useClaudeCodeAuth(true)
@@ -97,96 +97,65 @@ function AddModelForm({ onAdd }: { onAdd: (id: string, label: string) => void })
 // Preset data (verbatim from spec)
 // ---------------------------------------------------------------------------
 
-interface ProviderPreset {
+export interface ProviderPreset {
   id: string
   name: string
-  logoClass: string
-  logoText: string
+  brand: 'anthropic' | 'openrouter' | 'opencode' | 'custom'
   baseUrl: string | null
   keyLabel: string
+  noAuth?: boolean
+  fetchable: boolean
+  description: string
   models: Array<{ id: string; label: string }>
 }
 
-const PROVIDER_PRESETS: ProviderPreset[] = [
+export const PROVIDER_PRESETS: ProviderPreset[] = [
   {
     id: 'anthropic',
     name: 'Anthropic',
-    logoClass: 'lg-anthropic',
-    logoText: 'AN',
+    brand: 'anthropic',
     baseUrl: null,
     keyLabel: 'Anthropic API key',
-    models: [
-      { id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5' },
-      { id: 'claude-opus-4', label: 'Claude Opus 4' },
-      { id: 'claude-haiku-4-5', label: 'Claude Haiku 4.5' }
-    ]
+    fetchable: true,
+    description: 'Native Claude models. Models fetched from /v1/models.',
+    models: []
   },
   {
-    id: 'openai',
-    name: 'OpenAI',
-    logoClass: 'lg-openai',
-    logoText: 'OA',
-    baseUrl: 'https://api.openai.com/v1',
-    keyLabel: 'OpenAI API key',
-    models: [
-      { id: 'gpt-4o', label: 'GPT-4o' },
-      { id: 'gpt-4o-mini', label: 'GPT-4o mini' },
-      { id: 'o3-mini', label: 'o3-mini' }
-    ]
+    id: 'openrouter',
+    name: 'OpenRouter',
+    brand: 'openrouter',
+    baseUrl: 'https://openrouter.ai/api/v1',
+    keyLabel: 'OpenRouter API key',
+    fetchable: true,
+    description: 'Unified gateway to 200+ models. Bearer auth.',
+    models: []
   },
   {
-    id: 'google',
-    name: 'Google',
-    logoClass: 'lg-google',
-    logoText: 'GG',
-    baseUrl: 'https://generativelanguage.googleapis.com',
-    keyLabel: 'Google AI Studio key',
-    models: [
-      { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
-      { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' }
-    ]
+    id: 'opencode-free',
+    name: 'OpenCode (Free)',
+    brand: 'opencode',
+    baseUrl: 'https://opencode.ai/zen',
+    keyLabel: 'No key required',
+    noAuth: true,
+    fetchable: true,
+    description: 'Public free tier. Bearer public, models ending with -free.',
+    models: []
   },
   {
-    id: 'glm',
-    name: 'GLM (Zhipu)',
-    logoClass: 'lg-zhipu',
-    logoText: 'GL',
-    baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
-    keyLabel: 'Zhipu API key',
-    models: [
-      { id: 'glm-4.6', label: 'GLM-4.6' },
-      { id: 'glm-4-air', label: 'GLM-4-Air' }
-    ]
-  },
-  {
-    id: 'moonshot',
-    name: 'Moonshot',
-    logoClass: 'lg-moonshot',
-    logoText: 'KM',
-    baseUrl: 'https://api.moonshot.cn/v1',
-    keyLabel: 'Moonshot API key',
-    models: [
-      { id: 'kimi-k2', label: 'Kimi K2' },
-      { id: 'moonshot-v1-128k', label: 'Moonshot v1 128K' }
-    ]
-  },
-  {
-    id: 'qwen',
-    name: 'Qwen',
-    logoClass: 'lg-qwen',
-    logoText: 'QW',
-    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-    keyLabel: 'DashScope key',
-    models: [
-      { id: 'qwen-max', label: 'Qwen Max' },
-      { id: 'qwen-coder-plus', label: 'Qwen Coder Plus' }
-    ]
+    id: 'opencode-paid',
+    name: 'OpenCode (Paid)',
+    brand: 'opencode',
+    baseUrl: 'https://opencode.ai/zen',
+    keyLabel: 'OpenCode API key',
+    fetchable: true,
+    description: 'Paid tier. Bearer key from opencode.ai.',
+    models: []
   }
 ]
 
-const CUSTOM_PRESET_ID = '__custom__'
+export const CUSTOM_PRESET_ID = '__custom__'
 
-function presetFor(id: string): ProviderPreset | undefined {
+export function presetFor(id: string): ProviderPreset | undefined {
   return PROVIDER_PRESETS.find((p) => p.id === id)
 }
 
@@ -235,7 +204,7 @@ function AddProviderModal({ usedIds, onAdd, onClose }: AddProviderModalProps) {
     const newProvider: ProviderConfig = {
       id: selectedId === CUSTOM_PRESET_ID ? crypto.randomUUID() : selectedId || crypto.randomUUID(),
       name: resolvedName,
-      apiKey: authMode === 'claude-code' ? '' : apiKey.trim(),
+      apiKey: authMode === 'claude-code' ? '' : preset?.noAuth ? 'public' : apiKey.trim(),
       authMode: selectedId === 'anthropic' ? authMode : 'api-key',
       baseUrl: baseUrl.trim() || null,
       models: resolvedModels,
@@ -247,7 +216,8 @@ function AddProviderModal({ usedIds, onAdd, onClose }: AddProviderModalProps) {
     onAdd(newProvider)
   }
 
-  const needsKey = !(selectedId === 'anthropic' && authMode === 'claude-code')
+  const needsKey =
+    !(selectedId === 'anthropic' && authMode === 'claude-code') && !preset?.noAuth
   const canAdd =
     selectedId.length > 0 &&
     (selectedId !== CUSTOM_PRESET_ID || name.trim().length > 0) &&
@@ -282,15 +252,13 @@ function AddProviderModal({ usedIds, onAdd, onClose }: AddProviderModalProps) {
                 onClick={() => handlePresetChange(p.id)}
                 style={{ flexDirection: 'row', alignItems: 'center', gap: 14, textAlign: 'left', padding: 14 }}
               >
-                <span className={'prov-logo-lg ' + p.logoClass} style={{ width: 36, height: 36, fontSize: 13 }}>
-                  {p.logoText}
-                </span>
+                <ProviderLogo brand={p.brand} size={36} />
                 <span style={{ flex: 1, minWidth: 0 }}>
                   <span className="name" style={{ fontSize: 14 }}>
                     {p.name}
                   </span>
                   <span className="desc" style={{ fontSize: 12, marginTop: 0 }}>
-                    {p.models.length} models · {p.baseUrl ?? 'Anthropic endpoint'}
+                    {p.description}
                   </span>
                 </span>
                 {selectedId === p.id && <Icon name="check" size={14} />}
@@ -302,15 +270,13 @@ function AddProviderModal({ usedIds, onAdd, onClose }: AddProviderModalProps) {
               onClick={() => handlePresetChange(CUSTOM_PRESET_ID)}
               style={{ flexDirection: 'row', alignItems: 'center', gap: 14, textAlign: 'left', padding: 14 }}
             >
-              <span className="prov-logo-lg" style={{ width: 36, height: 36, fontSize: 13, background: 'var(--bg-sub)' }}>
-                +
-              </span>
+              <ProviderLogo brand="custom" size={36} />
               <span style={{ flex: 1, minWidth: 0 }}>
                 <span className="name" style={{ fontSize: 14 }}>
-                  Custom endpoint
+                  Custom URL
                 </span>
                 <span className="desc" style={{ fontSize: 12, marginTop: 0 }}>
-                  Any OpenAI-compatible API
+                  Any Anthropic-compatible endpoint
                 </span>
               </span>
               {selectedId === CUSTOM_PRESET_ID && <Icon name="check" size={14} />}
@@ -373,11 +339,17 @@ function AddProviderModal({ usedIds, onAdd, onClose }: AddProviderModalProps) {
                 </div>
               )}
 
-              {needsKey ? (
+              {preset?.noAuth ? (
                 <div className="field">
-                  <label className="label">
-                    {preset?.keyLabel ?? 'API key'}
-                  </label>
+                  <label className="label">Authentication</label>
+                  <div className="hint">
+                    No key required. Uses <code className="mono">Bearer public</code> against{' '}
+                    <code className="mono">opencode.ai/zen</code>.
+                  </div>
+                </div>
+              ) : needsKey ? (
+                <div className="field">
+                  <label className="label">{preset?.keyLabel ?? 'API key'}</label>
                   <input
                     className="input mono"
                     type="password"
@@ -434,6 +406,7 @@ export function ModelPage() {
   const [showAdd, setShowAdd] = useState(false)
   const [reveal, setReveal] = useState(false)
   const [testing, setTesting] = useState(false)
+  const [fetchingModels, setFetchingModels] = useState(false)
 
   // Draft edits for the active provider
   const [draft, setDraft] = useState<ProviderConfig | null>(null)
@@ -496,6 +469,36 @@ export function ModelPage() {
     }
   }
 
+  const handleFetchModels = async () => {
+    if (!draft || !active) return
+    const def = presetFor(active.id)
+    if (!def?.fetchable) return
+    setFetchingModels(true)
+    try {
+      const res = await window.folk.providers.fetchModels({
+        presetId: active.id,
+        apiKey: def.noAuth ? 'public' : draft.apiKey,
+        baseUrl: draft.baseUrl ?? def.baseUrl ?? undefined
+      })
+      if (!res.ok) {
+        toast({ kind: 'err', text: res.error ?? 'Fetch failed' })
+        return
+      }
+      // Merge: keep enabled flag for models the user already had.
+      const prev = new Map(draft.models.map((m) => [m.id, m]))
+      const merged: ModelConfig[] = res.models.map((m) => {
+        const existing = prev.get(m.id)
+        return existing ? { ...m, enabled: existing.enabled } : m
+      })
+      setDraft({ ...draft, models: merged })
+      toast({ kind: 'ok', text: `Fetched ${merged.length} models` })
+    } catch (err) {
+      toast({ kind: 'err', text: (err as Error).message })
+    } finally {
+      setFetchingModels(false)
+    }
+  }
+
   const handleRemove = async () => {
     if (!active) return
     if (!window.confirm(`Remove ${active.name}? All model settings will be lost.`)) return
@@ -509,10 +512,26 @@ export function ModelPage() {
 
   const handleAddProvider = async (p: ProviderConfig) => {
     try {
-      await save(p)
-      setActiveId(p.id)
+      const def = presetFor(p.id)
+      let provider = p
+      if (def?.fetchable && (def.noAuth || p.apiKey)) {
+        try {
+          const res = await window.folk.providers.fetchModels({
+            presetId: p.id,
+            apiKey: def.noAuth ? 'public' : p.apiKey,
+            baseUrl: p.baseUrl ?? def.baseUrl ?? undefined
+          })
+          if (res.ok && res.models.length > 0) {
+            provider = { ...p, models: res.models }
+          }
+        } catch {
+          // non-fatal — user can fetch later
+        }
+      }
+      await save(provider)
+      setActiveId(provider.id)
       setShowAdd(false)
-      toast({ kind: 'ok', text: `${p.name} added` })
+      toast({ kind: 'ok', text: `${provider.name} added` })
     } catch (err) {
       toast({ kind: 'err', text: `Add failed: ${(err as Error).message}` })
     }
@@ -593,9 +612,7 @@ export function ModelPage() {
                 className={'prov-tab' + (activeId === p.id ? ' on' : '')}
                 onClick={() => setActiveId(p.id)}
               >
-                <span className={'prov-logo ' + (def?.logoClass ?? '')}>
-                  {def?.logoText ?? p.name.slice(0, 2).toUpperCase()}
-                </span>
+                <ProviderLogo brand={def?.brand ?? 'custom'} size={18} />
                 <span>{def?.name ?? p.name}</span>
                 <span className="count">{enabledCount}</span>
               </button>
@@ -632,9 +649,7 @@ export function ModelPage() {
         <>
           {/* Provider header */}
           <div className="prov-head">
-            <div className={'prov-logo-lg ' + (preset?.logoClass ?? '')}>
-              {preset?.logoText ?? active.name.slice(0, 2).toUpperCase()}
-            </div>
+            <ProviderLogo brand={preset?.brand ?? 'custom'} size={44} />
             <div className="prov-info">
               <div className="prov-name">{preset?.name ?? active.name}</div>
               <div className="prov-sub">{active.baseUrl ?? 'Anthropic default endpoint'}</div>
@@ -704,6 +719,14 @@ export function ModelPage() {
 
             {draft.authMode === 'claude-code' ? (
               <ClaudeCodeStatusField />
+            ) : preset?.noAuth ? (
+              <div className="field">
+                <label className="label">Authentication</label>
+                <div className="hint">
+                  No key required. Uses <code className="mono">Bearer public</code> against{' '}
+                  <code className="mono">opencode.ai/zen</code>.
+                </div>
+              </div>
             ) : (
               <div className="field">
                 <label className="label">{preset?.keyLabel ?? 'API key'}</label>
@@ -745,12 +768,28 @@ export function ModelPage() {
 
           {/* Models section */}
           <div className="section" style={{ marginTop: 16 }}>
-            <div className="section-head">
-              <h2 className="h2">Models</h2>
+            <div className="section-head" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <h2 className="h2" style={{ flex: 1 }}>
+                Models
+              </h2>
               {draft.authMode !== 'claude-code' && (
-                <span className="sub" style={{ fontSize: 13 }}>
-                  {draft.models.filter((m) => m.enabled).length} of {draft.models.length} enabled
-                </span>
+                <>
+                  <span className="sub" style={{ fontSize: 13 }}>
+                    {draft.models.filter((m) => m.enabled).length} of {draft.models.length} enabled
+                  </span>
+                  {preset?.fetchable && (
+                    <button
+                      className="btn btn-sm btn-plain"
+                      onClick={handleFetchModels}
+                      disabled={fetchingModels}
+                      title="Fetch model list from upstream"
+                      type="button"
+                    >
+                      <Icon name="refresh" size={12} />{' '}
+                      {fetchingModels ? 'Fetching…' : 'Fetch models'}
+                    </button>
+                  )}
+                </>
               )}
             </div>
 
