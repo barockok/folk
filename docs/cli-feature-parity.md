@@ -335,6 +335,61 @@ Worktree integration would let folk run multiple sessions on isolated branches o
 
 ---
 
+## 18. Shortlist — 2026-04-27
+
+The MCP arc landed this session: connector-style detail page, real
+discovery (user files + `~/.claude.json` top-level + plugin caches),
+write-through to `~/.claude/.mcp.json` so folk-managed servers also
+appear in Claude Code CLI, HTTP runtime passthrough in `agent-manager`,
+and full OAuth 2.1 + PKCE (Dynamic Client Registration, fixed loopback
+port `33418`, macOS Keychain token persistence, refresh-on-near-expiry,
+RFC 8414 path-prefixed metadata discovery for servers like Composio).
+Beyond Claude Code CLI parity, but in line with Claude Desktop.
+
+Updated priorities going forward:
+
+1. **Mid-session OAuth re-auth UX** — § 6. SDK `init` already surfaces
+   `needs-auth` and we emit a lifecycle notice. Next: attach a one-tap
+   "Re-sign in" affordance to that notice, then call
+   `Query.setMcpServers()` to inject the fresh token without restarting
+   the session. Avoids the current "open MCP page → sign in → start
+   new session" trip.
+
+2. **Folk HTTP MCP probe** — § 6. `Test connect` is stdio-only because
+   `connectStdioMCP` is the lone connector. Either skip cleanly with
+   "HTTP probing not implemented yet" instead of silent failure, or
+   build a minimal HTTP MCP client for `tools/list` /
+   `resources/list` / `prompts/list` inspection.
+
+3. **Tool permissions tri-state** — Claude Desktop's
+   Always / Ask / Never per tool, per server. Distinct from § 4's
+   session-wide `permissionMode`; needs a per-tool enforcement layer
+   on top of `canUseTool`.
+
+4. **Hooks config UI** — top of the 2026-04-26 re-audit, still
+   untouched. Read/write `~/.claude/settings.json` `hooks` block. § 12.
+
+5. **Worktree + git integration** — § 14. Branch chip on session
+   header, EnterWorktree action, diff against base.
+
+**Secondary** (smaller, isolated):
+- WebFetch / WebSearch wrappers (§ 17.5)
+- `/memory` editor — CLAUDE.md viewer/editor, currently pass-through
+- Agent dispatch + `.claude/agents/` discovery (§ 5)
+- Fast mode toggle, model fallback chain (§ 16)
+- BashOutput tail / Monitor panel (§ 15)
+- Linux/Windows token storage — keychain helper currently falls back to
+  in-memory (tokens lost on restart)
+
+**Done since 2026-04-26:**
+- MCP page rebuild (discovery, detail page, write-through, HTTP runtime)
+- OAuth 2.1 + PKCE end-to-end with Composio-compatible discovery
+- Skills tile grid with plugin scope tabs and plugin-bundled discovery
+- Plugins refresh button + per-marketplace update
+- Sessions empty state with timeline-rail decoration
+
+---
+
 ## Out of scope (folk will never have these)
 
 - Terminal-only commands (`/vim`, `/terminal-setup`, `/ide`, `/migrate-installer`, `/doctor`, `/upgrade`, `/bug`, `/feedback`, `/install-github-app`)
