@@ -44,7 +44,7 @@ async function safeStat(p: string): Promise<{ isDirectory(): boolean; isFile(): 
 async function readSkillEntry(
   parent: string,
   entryName: string,
-  scope: 'user' | 'project'
+  scope: 'user' | 'project' | 'plugin'
 ): Promise<DiscoveredSkill | null> {
   const full = join(parent, entryName)
   const st = await safeStat(full)
@@ -95,6 +95,22 @@ export async function discoverSkills(workingDir: string | null): Promise<Discove
     for (const entry of await listDir(projDir)) {
       const skill = await readSkillEntry(projDir, entry, 'project')
       if (skill) out.push(skill)
+    }
+  }
+  // Plugin-bundled skills: each installed plugin may ship `skills/*` (a SKILL.md
+  // in a subdir, or a flat .md). Namespace by plugin name so two plugins can
+  // ship same-named skills.
+  const plugins = await discoverPlugins()
+  for (const p of plugins) {
+    const skillDir = join(p.installPath, 'skills')
+    for (const entry of await listDir(skillDir)) {
+      const skill = await readSkillEntry(skillDir, entry, 'plugin')
+      if (skill) {
+        skill.plugin = p.name
+        skill.id = `plugin:${p.name}:${skill.id.replace(/^plugin:/, '')}`
+        skill.name = `${p.name}:${skill.name}`
+        out.push(skill)
+      }
     }
   }
   return out

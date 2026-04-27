@@ -43,7 +43,7 @@ export function SkillsPage() {
           <div className="eyebrow" style={{ marginBottom: 8 }}>Agent</div>
           <h1 className="h1">Skills</h1>
           <div className="sub">
-            Loaded from <code>~/.claude/skills</code>{activeWd ? <> and <code>{activeWd}/.claude/skills</code></> : null}.
+            Loaded from <code>~/.claude/skills</code>{activeWd ? <>, <code>{activeWd}/.claude/skills</code></> : null}, and <code>skills/</code> in installed plugins.
           </div>
         </div>
       </div>
@@ -73,6 +73,8 @@ export function SkillsPage() {
                 {s.name}
                 {s.scope === 'project' ? (
                   <span className="badge badge-ac">Project</span>
+                ) : s.scope === 'plugin' ? (
+                  <span className="badge badge-magenta">{s.plugin ?? 'Plugin'}</span>
                 ) : (
                   <span className="badge">User</span>
                 )}

@@ -272,8 +272,10 @@ export interface DiscoveredSkill {
   id: string
   name: string
   description: string
-  scope: 'user' | 'project'
+  scope: 'user' | 'project' | 'plugin'
   path: string
+  // For plugin-scoped skills, the plugin name (used in scope badges).
+  plugin?: string
 }
 
 export interface DiscoveredCommand {
