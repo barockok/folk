@@ -270,7 +270,7 @@ export class AgentManager extends EventEmitter {
     return { iterable: iterable(), push, close }
   }
 
-  #ensureLive(session: Session): LiveSession {
+  async #ensureLive(session: Session): Promise<LiveSession> {
     const existing = this.#live.get(session.id)
     if (existing) {
       existing.lastUsedAt = Date.now()
@@ -853,7 +853,7 @@ export class AgentManager extends EventEmitter {
       if (lruId) void this.#teardown(lruId, 'lru')
     }
 
-    const live = this.#ensureLive(session)
+    const live = await this.#ensureLive(session)
     live.lastUsedAt = Date.now()
 
     if (live.idleTimer) {
