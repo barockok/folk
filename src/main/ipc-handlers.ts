@@ -14,7 +14,8 @@ import {
   listMarketplaceCatalog,
   listMarketplaces,
   removeMarketplace,
-  uninstallPlugin
+  uninstallPlugin,
+  updateMarketplace
 } from './marketplace-manager'
 import type {
   SessionConfig,
@@ -206,6 +207,7 @@ export function registerIpc(
     addMarketplaceFromDirectory(path)
   )
   ipcMain.handle('marketplaces:remove', (_e, name: string) => removeMarketplace(name))
+  ipcMain.handle('marketplaces:update', (_e, name: string) => updateMarketplace(name))
   ipcMain.handle(
     'plugins:uninstall',
     (

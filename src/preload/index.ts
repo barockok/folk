@@ -79,7 +79,8 @@ const folk: FolkAPI = {
     catalog: () => ipcRenderer.invoke('marketplaces:catalog'),
     addGithub: (input) => ipcRenderer.invoke('marketplaces:addGithub', input),
     addDirectory: (path) => ipcRenderer.invoke('marketplaces:addDirectory', path),
-    remove: (name) => ipcRenderer.invoke('marketplaces:remove', name)
+    remove: (name) => ipcRenderer.invoke('marketplaces:remove', name),
+    update: (name) => ipcRenderer.invoke('marketplaces:update', name)
   },
   plugins: {
     uninstall: (target) => ipcRenderer.invoke('plugins:uninstall', target)

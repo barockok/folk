@@ -119,6 +119,7 @@ export interface FolkAPI {
     addGithub: (input: string) => Promise<{ ok: boolean; name?: string; error?: string }>
     addDirectory: (path: string) => Promise<{ ok: boolean; name?: string; error?: string }>
     remove: (name: string) => Promise<{ ok: boolean; error?: string }>
+    update: (name: string) => Promise<{ ok: boolean; pluginCount?: number; error?: string }>
   }
   plugins: {
     uninstall: (target: {

@@ -235,6 +235,41 @@ export async function addMarketplaceFromDirectory(path: string): Promise<AddResu
   return { ok: true, name }
 }
 
+export interface UpdateResult {
+  ok: boolean
+  pluginCount?: number
+  error?: string
+}
+
+// Refresh a registered marketplace from its source. For github sources we
+// `git pull --ff-only` the cached clone; for directory sources nothing is
+// fetched (the directory is the source of truth) but we re-read the manifest
+// and bump lastUpdated. Any source's pluginCount is recomputed via the
+// catalog reader on the next list call.
+export async function updateMarketplace(name: string): Promise<UpdateResult> {
+  const known = (await readJsonSafe<KnownMarketplacesFile>(KNOWN_MARKETPLACES)) ?? {}
+  const entry = known[name]
+  if (!entry) return { ok: false, error: 'Marketplace not found' }
+  if (entry.source.source === 'github') {
+    if (!(await pathExists(entry.installLocation))) {
+      return { ok: false, error: `Clone missing: ${entry.installLocation}` }
+    }
+    try {
+      await execFileP('git', ['-C', entry.installLocation, 'pull', '--ff-only'])
+    } catch (err) {
+      return { ok: false, error: `git pull failed: ${(err as Error).message}` }
+    }
+  }
+  const manifest = await readManifest(entry.installLocation)
+  if (!manifest) {
+    return { ok: false, error: 'Source no longer has .claude-plugin/marketplace.json' }
+  }
+  entry.lastUpdated = new Date().toISOString()
+  known[name] = entry
+  await writeKnown(known)
+  return { ok: true, pluginCount: manifest.plugins?.length ?? 0 }
+}
+
 export async function removeMarketplace(name: string): Promise<{ ok: boolean; error?: string }> {
   const known = (await readJsonSafe<KnownMarketplacesFile>(KNOWN_MARKETPLACES)) ?? {}
   const entry = known[name]

@@ -406,12 +406,16 @@ function MarketplacesTab({
   loading,
   onRemove,
   removing,
+  onUpdate,
+  updating,
   onAdd
 }: {
   marketplaces: MarketplaceSummary[]
   loading: boolean
   onRemove: (name: string) => void
   removing: Record<string, boolean>
+  onUpdate: (name: string) => void
+  updating: Record<string, boolean>
   onAdd: () => void
 }) {
   if (loading) return <div className="sub">Loading…</div>
@@ -448,15 +452,30 @@ function MarketplacesTab({
               </span>
             </div>
           </div>
-          <button
-            className="btn btn-sm btn-plain"
-            onClick={() => onRemove(m.name)}
-            disabled={!!removing[m.name]}
-            title="Remove marketplace"
-          >
-            {removing[m.name] ? <span className="spinner" /> : <Icon name="trash" size={12} />}
-            Remove
-          </button>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button
+              className="btn btn-sm btn-plain"
+              onClick={() => onUpdate(m.name)}
+              disabled={!!updating[m.name] || m.source.source === 'directory'}
+              title={
+                m.source.source === 'directory'
+                  ? 'Directory sources are read in place — nothing to fetch'
+                  : 'Pull latest from source'
+              }
+            >
+              {updating[m.name] ? <span className="spinner" /> : <Icon name="refresh" size={12} />}
+              Update
+            </button>
+            <button
+              className="btn btn-sm btn-plain"
+              onClick={() => onRemove(m.name)}
+              disabled={!!removing[m.name]}
+              title="Remove marketplace"
+            >
+              {removing[m.name] ? <span className="spinner" /> : <Icon name="trash" size={12} />}
+              Remove
+            </button>
+          </div>
         </div>
       ))}
     </div>
@@ -476,6 +495,8 @@ export function PluginsPage() {
   const [uninstallBusy, setUninstallBusy] = useState<Record<string, boolean>>({})
   const [installBusy, setInstallBusy] = useState<Record<string, boolean>>({})
   const [removeBusy, setRemoveBusy] = useState<Record<string, boolean>>({})
+  const [updateBusy, setUpdateBusy] = useState<Record<string, boolean>>({})
+  const [refreshing, setRefreshing] = useState(false)
 
   const refresh = useCallback(async () => {
     setLoading(true)
@@ -534,6 +555,30 @@ export function PluginsPage() {
     }, 300)
   }
 
+  const updateMk = async (name: string) => {
+    setUpdateBusy((b) => ({ ...b, [name]: true }))
+    const res = await window.folk.marketplaces.update(name)
+    setUpdateBusy((b) => {
+      const next = { ...b }
+      delete next[name]
+      return next
+    })
+    if (res.ok) {
+      const count = res.pluginCount ?? 0
+      toast({ kind: 'ok', text: `Updated ${name} — ${count} plugin${count === 1 ? '' : 's'}` })
+      void refresh()
+    } else {
+      toast({ kind: 'err', text: res.error ?? 'Update failed' })
+    }
+  }
+
+  const refreshAll = async () => {
+    setRefreshing(true)
+    await refresh()
+    setRefreshing(false)
+    toast({ kind: 'ok', text: 'Plugins reloaded from disk' })
+  }
+
   const removeMarketplace = async (name: string) => {
     if (!window.confirm(`Remove marketplace "${name}"? This unregisters it; cloned folders are deleted, directory sources are left in place.`)) {
       return
@@ -569,9 +614,20 @@ export function PluginsPage() {
             Browse, install, and manage plugins from <code>~/.claude/plugins/</code>.
           </div>
         </div>
-        <button className="btn btn-primary" onClick={() => setAddOpen(true)}>
-          <Icon name="plus" size={13} /> Add marketplace
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            className="btn btn-plain"
+            onClick={() => void refreshAll()}
+            disabled={refreshing || loading}
+            title="Re-scan installed_plugins.json and registered marketplaces"
+          >
+            {refreshing ? <span className="spinner" /> : <Icon name="refresh" size={13} />}
+            Refresh
+          </button>
+          <button className="btn btn-primary" onClick={() => setAddOpen(true)}>
+            <Icon name="plus" size={13} /> Add marketplace
+          </button>
+        </div>
       </div>
 
       <div className="mk-kind-tabs">
@@ -611,6 +667,8 @@ export function PluginsPage() {
             loading={loading}
             onRemove={removeMarketplace}
             removing={removeBusy}
+            onUpdate={updateMk}
+            updating={updateBusy}
             onAdd={() => setAddOpen(true)}
           />
         )}
