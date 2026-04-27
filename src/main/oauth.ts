@@ -68,6 +68,36 @@ export async function probeForOAuth(serverUrl: string): Promise<string | null> {
   return match[1]
 }
 
+// Build the candidate well-known URLs for an authorization server's metadata.
+// Per RFC 8414 §3.1, when the issuer identifier has a path, the well-known
+// suffix is inserted between origin and path:
+//   issuer https://h/p1/p2  →  https://h/.well-known/oauth-authorization-server/p1/p2
+// Many implementations (incorrectly but commonly) put it at the end, so we
+// also try that. Finally, OpenID Connect Discovery is a frequent fallback.
+function buildMetadataCandidates(authServerUrl: string): string[] {
+  // If the URL already points at a .well-known doc, just use it.
+  if (authServerUrl.includes('/.well-known/')) return [authServerUrl]
+
+  let url: URL
+  try {
+    url = new URL(authServerUrl)
+  } catch {
+    return []
+  }
+  const origin = url.origin
+  const path = url.pathname.replace(/\/$/, '')
+  const candidates: string[] = []
+
+  // RFC 8414 path-prefixed (the right way).
+  candidates.push(`${origin}/.well-known/oauth-authorization-server${path}`)
+  // Path-suffixed (wrong but common in older implementations).
+  candidates.push(`${origin}${path}/.well-known/oauth-authorization-server`)
+  // OpenID Connect Discovery — same shape covers what we need.
+  candidates.push(`${origin}/.well-known/openid-configuration${path}`)
+  candidates.push(`${origin}${path}/.well-known/openid-configuration`)
+  return candidates
+}
+
 // Best-effort discovery: fetch the resource metadata, find the authorization
 // server, fetch its metadata, normalise into our shared shape.
 export async function discoverMetadata(
@@ -76,29 +106,41 @@ export async function discoverMetadata(
   let resourceMeta: ProtectedResourceMetadata
   try {
     const r = await fetch(metadataUrl)
-    if (!r.ok) return null
+    if (!r.ok) {
+      console.warn(`[oauth] resource metadata fetch failed: ${metadataUrl} → ${r.status}`)
+      return null
+    }
     resourceMeta = (await r.json()) as ProtectedResourceMetadata
-  } catch {
+  } catch (err) {
+    console.warn(`[oauth] resource metadata fetch threw: ${(err as Error).message}`)
     return null
   }
   const authServerUrl = resourceMeta.authorization_servers?.[0]
-  if (!authServerUrl) return null
-
-  // Conventional .well-known path if the URL doesn't already include one.
-  const asMetaUrl = authServerUrl.includes('/.well-known/')
-    ? authServerUrl
-    : authServerUrl.replace(/\/$/, '') + '/.well-known/oauth-authorization-server'
-
-  let asMeta: AuthServerMetadata
-  try {
-    const r = await fetch(asMetaUrl)
-    if (!r.ok) return null
-    asMeta = (await r.json()) as AuthServerMetadata
-  } catch {
+  if (!authServerUrl) {
+    console.warn(`[oauth] no authorization_servers in resource metadata`)
     return null
   }
 
-  if (!asMeta.authorization_endpoint || !asMeta.token_endpoint) return null
+  let asMeta: AuthServerMetadata | null = null
+  for (const candidate of buildMetadataCandidates(authServerUrl)) {
+    try {
+      const r = await fetch(candidate)
+      if (!r.ok) continue
+      asMeta = (await r.json()) as AuthServerMetadata
+      break
+    } catch {
+      // try next candidate
+    }
+  }
+
+  if (!asMeta) {
+    console.warn(`[oauth] could not find authorization server metadata for ${authServerUrl}`)
+    return null
+  }
+  if (!asMeta.authorization_endpoint || !asMeta.token_endpoint) {
+    console.warn(`[oauth] AS metadata missing required endpoints`)
+    return null
+  }
 
   return {
     authorizationEndpoint: asMeta.authorization_endpoint,
@@ -378,16 +420,24 @@ export async function signIn(opts: {
   providedClientSecret: string | null
   cachedMetadata: OAuthServerMetadata | null
 }): Promise<SignInResult> {
+  console.log(`[oauth] sign-in starting for ${opts.serverUrl}`)
   let metadata = opts.cachedMetadata
   if (!metadata) {
     const metaUrl = await probeForOAuth(opts.serverUrl)
     if (!metaUrl) {
-      throw new Error('This server does not advertise OAuth (no 401 with resource_metadata).')
+      throw new Error(
+        `This server doesn't advertise OAuth. Folk expected a 401 with a "WWW-Authenticate: Bearer resource_metadata=…" header from ${opts.serverUrl} but didn't get one. If the server uses a static API key, paste it under Advanced settings instead.`
+      )
     }
+    console.log(`[oauth] resource metadata at ${metaUrl}`)
     metadata = await discoverMetadata(metaUrl)
     if (!metadata) {
-      throw new Error('Could not fetch OAuth metadata from the server.')
+      throw new Error(
+        `Discovered the OAuth resource metadata but couldn't fetch the authorization server's metadata. See the main-process log for details.`
+      )
     }
+    console.log(`[oauth] auth endpoint: ${metadata.authorizationEndpoint}`)
+    console.log(`[oauth] token endpoint: ${metadata.tokenEndpoint}`)
   }
 
   let clientId = opts.providedClientId ?? ''
@@ -399,16 +449,20 @@ export async function signIn(opts: {
   const initialRedirectUri = `http://127.0.0.1:${CALLBACK_PORT_PRIMARY}${CALLBACK_PATH}`
 
   if (!clientId) {
+    console.log(`[oauth] no clientId — running Dynamic Client Registration`)
     const reg = await dynamicallyRegister(metadata, initialRedirectUri)
     clientId = reg.clientId
     clientSecret = reg.clientSecret ?? null
+    console.log(`[oauth] registered as client ${clientId}`)
   }
 
+  console.log(`[oauth] opening browser for authorization`)
   const auth = await runAuthorizationFlow({
     metadata,
     clientId,
     scopes: metadata.scopesSupported
   })
+  console.log(`[oauth] received authorization code, exchanging for tokens`)
 
   const tokens = await exchangeCode({
     metadata,
