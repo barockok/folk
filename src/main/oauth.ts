@@ -197,19 +197,22 @@ interface LoopbackHandle {
 }
 
 async function startLoopbackServer(expectedState: string): Promise<LoopbackHandle> {
-  // Try the conventional port first so users who pre-register a redirect URI
-  // can use the standard one. Fall back to an OS-assigned port (only useful
-  // if the auth server allows DCR or wildcard loopback redirects).
-  const ports = [CALLBACK_PORT_PRIMARY, 0]
-  let lastErr: Error | null = null
-  for (const requestedPort of ports) {
-    try {
-      return await tryStartLoopback(requestedPort, expectedState)
-    } catch (err) {
-      lastErr = err as Error
+  // We must use the fixed port: the redirect URI registered with the auth
+  // server (either dynamically or pre-configured by the user) is bound to
+  // this port. Falling back to an ephemeral port would produce a redirect
+  // URI mismatch.
+  try {
+    return await tryStartLoopback(CALLBACK_PORT_PRIMARY, expectedState)
+  } catch (err) {
+    const e = err as NodeJS.ErrnoException
+    if (e.code === 'EADDRINUSE') {
+      throw new Error(
+        `Port ${CALLBACK_PORT_PRIMARY} is in use, so folk can't catch the OAuth redirect. ` +
+        `Close whatever's using it (often a previous OAuth flow that didn't clean up) and try again.`
+      )
     }
+    throw err
   }
-  throw lastErr ?? new Error('Failed to start OAuth loopback server')
 }
 
 function tryStartLoopback(

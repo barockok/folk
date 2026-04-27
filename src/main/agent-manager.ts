@@ -1106,14 +1106,48 @@ export class AgentManager extends EventEmitter {
         return
       }
       case 'init': {
-        const x = r as { tools?: string[]; mcp_servers?: { name: string }[]; model?: string }
+        const x = r as {
+          tools?: string[]
+          mcp_servers?: { name: string; status?: string }[]
+          model?: string
+        }
         const tools = (x.tools ?? []).length
-        const mcps = (x.mcp_servers ?? []).length
+        const servers = x.mcp_servers ?? []
         this.emit('notice', {
           sessionId,
           kind: 'lifecycle',
-          text: `Session ready · model ${x.model ?? '?'} · ${tools} tools · ${mcps} MCP server(s)`
+          text: `Session ready · model ${x.model ?? '?'} · ${tools} tools · ${servers.length} MCP server(s)`
         })
+        // The SDK reports per-server status in init. Surface any MCPs that
+        // need re-authentication so users aren't left wondering why a tool
+        // disappeared mid-session.
+        const needsAuth = servers
+          .filter((s) => s.status === 'needs-auth')
+          .map((s) => s.name)
+        if (needsAuth.length > 0) {
+          // Mark our own DB entry as unauthorized so the MCP page reflects it.
+          for (const name of needsAuth) {
+            const match = this.db.listMCPs().find((m) => m.name === name)
+            if (match) {
+              this.db.saveMCP({ ...match, oauthStatus: 'unauthorized' })
+            }
+          }
+          this.emit('notice', {
+            sessionId,
+            kind: 'lifecycle',
+            text: `Re-sign-in needed: ${needsAuth.join(', ')} — open MCP Servers and sign in again to keep using these tools.`
+          })
+        }
+        const failed = servers
+          .filter((s) => s.status === 'failed')
+          .map((s) => s.name)
+        if (failed.length > 0) {
+          this.emit('notice', {
+            sessionId,
+            kind: 'lifecycle',
+            text: `MCP server${failed.length === 1 ? '' : 's'} failed to start: ${failed.join(', ')}`
+          })
+        }
         return
       }
       case 'status': {

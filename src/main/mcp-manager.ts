@@ -246,6 +246,10 @@ export class MCPManager {
   // call so #getServer can resolve `local:*` ids without rescanning.
   #localCache: MCPServer[] = []
 
+  // Server id currently running through the OAuth flow, if any. Only one at
+  // a time — the loopback callback server binds a fixed port.
+  #signInInFlight: string | null = null
+
   // Sidecar path for the write-through bookkeeping. Lives in folk's userData
   // dir, NOT under ~/.claude — the user's Claude Code dir stays clean.
   constructor(
@@ -305,6 +309,14 @@ export class MCPManager {
     if (server.transport !== 'http' || !server.url) {
       return { ok: false, error: 'OAuth only applies to HTTP servers' }
     }
+    if (this.#signInInFlight) {
+      const other = this.db.listMCPs().find((m) => m.id === this.#signInInFlight)
+      return {
+        ok: false,
+        error: `Another sign-in is in progress${other ? ` (${other.name})` : ''}. Finish or cancel that one first.`
+      }
+    }
+    this.#signInInFlight = id
     try {
       const result = await runSignIn({
         serverId: server.id,
@@ -325,6 +337,8 @@ export class MCPManager {
     } catch (err) {
       this.db.saveMCP({ ...server, oauthStatus: 'error' })
       return { ok: false, error: (err as Error).message }
+    } finally {
+      this.#signInInFlight = null
     }
   }
 
