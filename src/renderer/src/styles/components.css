@@ -2671,6 +2671,12 @@
 }
 .composer-send:hover { background: #4527e3 !important; }
 .composer-send:disabled { opacity: 0.5; cursor: not-allowed; }
+.composer-stop {
+  background: var(--err) !important;
+  border-color: var(--err) !important;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.composer-stop:hover { background: #c81e54 !important; }
 
 /* Wizard / Brainstorm card */
 .wiz {

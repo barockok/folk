@@ -9,6 +9,7 @@ import {
   type SlashContext
 } from '../../slash-commands'
 import type { Attachment, DiscoveredCommand, PermissionMode, Session } from '@shared/types'
+import { Icon } from '../../components/icons'
 
 const PERMISSION_LABELS: Record<PermissionMode, { label: string; hint: string }> = {
   default: { label: 'Ask', hint: 'Prompt before risky tools' },
@@ -786,23 +787,29 @@ export function Composer({ session, onSend, onCancel }: ComposerProps) {
           </button>
 
           <div className="hint" style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--fg-faint)', fontFamily: 'var(--ff-mono)', display: 'flex', alignItems: 'center', gap: 6 }}>
-            {isRunning ? (
-              <button className="btn btn-plain" onClick={onCancel} type="button" style={{ fontSize: 12 }}>
-                Cancel
-              </button>
-            ) : (
-              <span>⌘↵</span>
-            )}
+            {!isRunning && <span>⌘↵</span>}
           </div>
 
-          <button
-            className="btn composer-send"
-            onClick={handleSend}
-            disabled={disabled || !text.trim() || isRunning || !hasProvider}
-            type="button"
-          >
-            Send
-          </button>
+          {isRunning ? (
+            <button
+              className="btn composer-send composer-stop"
+              onClick={onCancel}
+              type="button"
+              title="Stop generating"
+              aria-label="Stop generating"
+            >
+              <Icon name="pause" size={12} /> Stop
+            </button>
+          ) : (
+            <button
+              className="btn composer-send"
+              onClick={handleSend}
+              disabled={disabled || !text.trim() || !hasProvider}
+              type="button"
+            >
+              Send
+            </button>
+          )}
         </div>
       </div>
     </div>

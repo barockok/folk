@@ -14,7 +14,7 @@ import type {
 import { randomUUID } from 'node:crypto'
 import { Database } from './database'
 import { FOLK_PRESENTATION_PROMPT } from './system-prompt'
-import { getOpencodeProxyPort } from './opencode-proxy/state'
+import { waitForProxyPort } from './opencode-proxy/state'
 import type {
   Session,
   SessionConfig,
@@ -295,10 +295,11 @@ export class AgentManager extends EventEmitter {
       const isOpencode = provider.id === 'opencode-free' || provider.id === 'opencode-paid'
       const usesBearer = provider.id === 'openrouter' || isOpencode
       if (isOpencode) {
-        const port = getOpencodeProxyPort()
+        const port = await waitForProxyPort(5000)
         if (port == null) {
           throw new Error(
-            'OpenCode proxy not ready — try again in a moment or restart the app.'
+            'OpenCode bridge proxy is not running. Check the log at ' +
+              "`<userData>/folk-opencode-proxy.log` or restart the app."
           )
         }
         baseUrlOverride = `http://127.0.0.1:${port}`

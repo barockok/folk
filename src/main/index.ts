@@ -31,12 +31,39 @@ import { registerIpc } from './ipc-handlers'
 import { wireStreaming } from './ipc-streaming'
 import { startProxy, ProxyHandle } from './opencode-proxy/server'
 import { setProxyHandle } from './opencode-proxy/state'
+import { initLogger } from './opencode-proxy/logger'
 
 let db: Database
 let agentManager: AgentManager
 let mcpManager: MCPManager
 let mainWindow: BrowserWindow | null = null
 let opencodeProxy: ProxyHandle | null = null
+let proxyShuttingDown = false
+let proxyRestartAttempts = 0
+const PROXY_MAX_RESTARTS = 3
+
+async function bootProxyWithRetry(): Promise<void> {
+  while (proxyRestartAttempts < PROXY_MAX_RESTARTS && !proxyShuttingDown) {
+    try {
+      const handle = await startProxy()
+      opencodeProxy = handle
+      setProxyHandle(handle)
+      proxyRestartAttempts = 0
+      return
+    } catch (err) {
+      proxyRestartAttempts += 1
+      console.error(
+        `[opencode-proxy] start failed (attempt ${proxyRestartAttempts}/${PROXY_MAX_RESTARTS}):`,
+        (err as Error).message
+      )
+      if (proxyRestartAttempts >= PROXY_MAX_RESTARTS) {
+        console.error('[opencode-proxy] giving up — OpenCode providers will be unavailable')
+        return
+      }
+      await new Promise((r) => setTimeout(r, 1000 * proxyRestartAttempts))
+    }
+  }
+}
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -100,14 +127,8 @@ app.whenReady().then(() => {
   // Boot the OpenCode bridge proxy. It's used as ANTHROPIC_BASE_URL for the
   // opencode-* presets so Claude Code's Messages requests can be translated to
   // OpenCode's OpenAI-format /chat/completions route. Loopback only.
-  void startProxy()
-    .then((handle) => {
-      opencodeProxy = handle
-      setProxyHandle(handle)
-    })
-    .catch((err) => {
-      console.error('[opencode-proxy] failed to start:', err)
-    })
+  initLogger(join(app.getPath('userData'), 'folk-opencode-proxy.log'))
+  void bootProxyWithRetry()
 
   db = new Database(join(app.getPath('userData'), 'folk.db'))
   mcpManager = new MCPManager(
@@ -133,8 +154,25 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
 
-app.on('before-quit', () => {
+app.on('before-quit', (e) => {
+  // Block quit briefly so the proxy can drain in-flight requests cleanly.
+  if (opencodeProxy && !proxyShuttingDown) {
+    proxyShuttingDown = true
+    e.preventDefault()
+    void (async () => {
+      try {
+        await opencodeProxy?.close()
+      } catch (err) {
+        console.error('[opencode-proxy] close error:', (err as Error).message)
+      }
+      opencodeProxy = null
+      setProxyHandle(null)
+      agentManager?.dispose()
+      db?.close()
+      app.exit(0)
+    })()
+    return
+  }
   agentManager?.dispose()
   db?.close()
-  void opencodeProxy?.close()
 })

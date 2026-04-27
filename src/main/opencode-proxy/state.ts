@@ -17,3 +17,16 @@ export function getOpencodeProxyPort(): number | null {
 export function getOpencodeProxyHandle(): ProxyHandle | null {
   return current
 }
+
+// Poll for the proxy to come up. Returns the port once ready, or null after
+// the timeout. Callers should treat null as "proxy unavailable, surface a
+// friendly error to the user".
+export async function waitForProxyPort(timeoutMs: number): Promise<number | null> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    const port = getOpencodeProxyPort()
+    if (port != null) return port
+    await new Promise((r) => setTimeout(r, 100))
+  }
+  return getOpencodeProxyPort()
+}
