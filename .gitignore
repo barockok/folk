@@ -8,3 +8,8 @@ dist
 test-results
 playwright-report
 tests/e2e/playwright-report
+
+# Code-signing artifacts — never commit
+*.p12
+*.cer
+*.mobileprovision
