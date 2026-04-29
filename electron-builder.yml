@@ -20,11 +20,12 @@ mac:
   category: public.app-category.developer-tools
   hardenedRuntime: true
   gatekeeperAssess: false
-  # Signing identity: when CSC_LINK + CSC_KEY_PASSWORD are present (CI),
-  # electron-builder imports the .p12 into a temp keychain and auto-picks
-  # the Developer ID Application identity. Setting `identity: null` would
-  # force ad-hoc signing and break notarization, so leave it unset.
-  # Locally without CSC_LINK, electron-builder skips signing automatically.
+  # Signing identity prefix — electron-builder matches any identity in the
+  # imported keychain whose name starts with this string. Forcing
+  # "Developer ID Application" prevents accidental fallback to an "Apple
+  # Development" cert (which would sign successfully but fail notarization
+  # because dev certs aren't trusted by Gatekeeper for distribution).
+  identity: Developer ID Application
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
   # Built-in notarization (electron-builder >= 24). Reads credentials from env:
