@@ -53,10 +53,6 @@ function mapSessionMessages(
   const out: PersistedMessage[] = []
   // callId → reference to the tool block that the SDK tool_result should patch
   const callIndex = new Map<string, PersistedToolCall>()
-  // Assistant message ids we've already folded in. With
-  // includePartialMessages on, the SDK can write a partial AND a snapshot
-  // entry for the same logical message — replay should treat them as one.
-  const seenAssistantIds = new Set<string>()
 
   for (const entry of raw) {
     const m = entry.message as
@@ -68,9 +64,6 @@ function mapSessionMessages(
       (entry as { parent_tool_use_id?: string | null }).parent_tool_use_id ?? null
 
     if (entry.type === 'assistant') {
-      const msgId = (m?.id as string | undefined) ?? null
-      if (msgId && seenAssistantIds.has(msgId)) continue
-      if (msgId) seenAssistantIds.add(msgId)
       const blocks: MessageBlock[] = []
       if (Array.isArray(content)) {
         for (const blk of content) {
