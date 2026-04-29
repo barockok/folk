@@ -152,6 +152,25 @@ export function TweaksPanel() {
         </button>
       </div>
 
+      {/* Check for updates */}
+      <div className="tweaks-row">
+        <button
+          className="btn btn-plain"
+          style={{ fontSize: 12, width: '100%', justifyContent: 'flex-start', gap: 6 }}
+          onClick={async () => {
+            const res = await window.folk.updater.check()
+            if (!res.ok) {
+              toast({ kind: 'err', text: res.error ?? 'Update check failed' })
+            } else if (!res.version) {
+              toast({ kind: 'info', text: 'You are up to date' })
+            }
+          }}
+        >
+          <Icon name="refresh" size={13} />
+          Check for updates
+        </button>
+      </div>
+
       {/* Replay onboarding */}
       <div className="tweaks-row">
         <button

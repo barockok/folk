@@ -71,6 +71,43 @@ const folk: FolkAPI = {
   dialog: {
     openFolder: (defaultPath) => ipcRenderer.invoke('dialog:openFolder', defaultPath)
   },
+  shell: {
+    openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url)
+  },
+  updater: {
+    check: () => ipcRenderer.invoke('updater:check'),
+    quitAndInstall: () => ipcRenderer.invoke('updater:quitAndInstall'),
+    onChecking: (fn) => {
+      const h = () => fn()
+      ipcRenderer.on('updater:checking', h)
+      return () => ipcRenderer.off('updater:checking', h)
+    },
+    onAvailable: (fn) => {
+      const h = (_e, p) => fn(p)
+      ipcRenderer.on('updater:available', h)
+      return () => ipcRenderer.off('updater:available', h)
+    },
+    onNotAvailable: (fn) => {
+      const h = (_e, p) => fn(p)
+      ipcRenderer.on('updater:notAvailable', h)
+      return () => ipcRenderer.off('updater:notAvailable', h)
+    },
+    onProgress: (fn) => {
+      const h = (_e, p) => fn(p)
+      ipcRenderer.on('updater:progress', h)
+      return () => ipcRenderer.off('updater:progress', h)
+    },
+    onDownloaded: (fn) => {
+      const h = (_e, p) => fn(p)
+      ipcRenderer.on('updater:downloaded', h)
+      return () => ipcRenderer.off('updater:downloaded', h)
+    },
+    onError: (fn) => {
+      const h = (_e, p) => fn(p)
+      ipcRenderer.on('updater:error', h)
+      return () => ipcRenderer.off('updater:error', h)
+    }
+  },
   discover: {
     skills: (workingDir) => ipcRenderer.invoke('discover:skills', workingDir),
     commands: (workingDir) => ipcRenderer.invoke('discover:commands', workingDir),

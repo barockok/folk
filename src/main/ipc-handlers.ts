@@ -1,4 +1,4 @@
-import { BrowserWindow, dialog, ipcMain, type OpenDialogOptions } from 'electron'
+import { BrowserWindow, dialog, ipcMain, shell, type OpenDialogOptions } from 'electron'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { access, readFile } from 'node:fs/promises'
@@ -237,6 +237,13 @@ export function registerIpc(
   )
 
   ipcMain.handle('auth:claudeCodeStatus', () => detectClaudeCodeAuth())
+
+  ipcMain.handle('shell:openExternal', async (_e, url: string) => {
+    if (typeof url !== 'string') return { ok: false }
+    if (!/^https?:\/\//i.test(url) && !url.startsWith('mailto:')) return { ok: false }
+    await shell.openExternal(url)
+    return { ok: true }
+  })
 
   ipcMain.handle('dialog:openFolder', async (_e, defaultPath?: string) => {
     const parent = BrowserWindow.getFocusedWindow() ?? undefined

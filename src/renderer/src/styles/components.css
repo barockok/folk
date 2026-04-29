@@ -3546,3 +3546,69 @@
 }
 .tweaks-toggle[data-on="1"] { background: var(--stripe-purple); border-color: var(--stripe-purple); }
 .tweaks-toggle[data-on="1"] i { transform: translateX(14px); background: #fff; }
+
+/* Update banner — top-of-app status strip */
+.update-banner {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-bottom: var(--hair) solid var(--border);
+  background: linear-gradient(180deg, rgba(124, 58, 237, 0.08), rgba(124, 58, 237, 0.04));
+  color: var(--heading);
+  font-size: 12.5px;
+  z-index: 30;
+}
+.update-banner--ready {
+  background: linear-gradient(180deg, rgba(5, 150, 105, 0.10), rgba(5, 150, 105, 0.04));
+}
+.update-banner-body {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+.update-banner-bar {
+  flex: 1;
+  max-width: 200px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--bg-sub);
+  overflow: hidden;
+}
+.update-banner-bar-fill {
+  height: 100%;
+  background: var(--stripe-purple);
+  transition: width 0.2s ease;
+}
+.update-banner-pct {
+  font-family: var(--ff-mono);
+  font-size: 11px;
+  color: var(--fg-faint);
+  min-width: 36px;
+  text-align: right;
+}
+.update-banner-close {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--fg-faint);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: var(--r-sm);
+  display: inline-grid;
+  place-items: center;
+}
+.update-banner-close:hover {
+  background: var(--bg-sub);
+  color: var(--heading);
+}
+.update-banner-err {
+  position: absolute;
+  bottom: -22px;
+  left: 14px;
+  font-size: 11px;
+  color: var(--err);
+}

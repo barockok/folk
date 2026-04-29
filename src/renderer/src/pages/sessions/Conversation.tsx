@@ -25,6 +25,25 @@ const MD_COMPONENTS: Components = {
   img: ({ src, alt, ...props }) => {
     const safe = rewriteImgSrc(typeof src === 'string' ? src : undefined)
     return <img src={safe} alt={alt} {...props} />
+  },
+  a: ({ href, children, ...props }) => {
+    const url = typeof href === 'string' ? href : ''
+    const isExternal = /^https?:\/\//i.test(url) || url.startsWith('mailto:')
+    return (
+      <a
+        href={url}
+        target={isExternal ? '_blank' : undefined}
+        rel={isExternal ? 'noopener noreferrer' : undefined}
+        onClick={(e) => {
+          if (!isExternal) return
+          e.preventDefault()
+          void window.folk.shell.openExternal(url)
+        }}
+        {...props}
+      >
+        {children}
+      </a>
+    )
   }
 }
 

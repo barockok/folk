@@ -115,6 +115,19 @@ export interface FolkAPI {
   dialog: {
     openFolder: (defaultPath?: string) => Promise<string | null>
   }
+  shell: {
+    openExternal: (url: string) => Promise<{ ok: boolean }>
+  }
+  updater: {
+    check: () => Promise<{ ok: boolean; version?: string | null; error?: string }>
+    quitAndInstall: () => Promise<{ ok: boolean }>
+    onChecking: (fn: () => void) => () => void
+    onAvailable: (fn: (e: { version: string; releaseDate?: string; releaseNotes: string | null }) => void) => () => void
+    onNotAvailable: (fn: (e: { version: string }) => void) => () => void
+    onProgress: (fn: (e: { percent: number; bytesPerSecond: number; transferred: number; total: number }) => void) => () => void
+    onDownloaded: (fn: (e: { version: string }) => void) => () => void
+    onError: (fn: (e: { message: string }) => void) => () => void
+  }
   discover: {
     skills: (workingDir?: string) => Promise<DiscoveredSkill[]>
     commands: (workingDir?: string) => Promise<DiscoveredCommand[]>

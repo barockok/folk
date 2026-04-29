@@ -1,6 +1,8 @@
 import { useEffect } from 'react'
 import { Shell } from './components/Shell'
+import { UpdateBanner } from './components/UpdateBanner'
 import { useAgent } from './hooks/useAgent'
+import { useUpdater } from './hooks/useUpdater'
 import { useUIStore } from './stores/useUIStore'
 import { useProfileStore } from './stores/useProfileStore'
 import { useProvidersStore } from './stores/useProvidersStore'
@@ -16,6 +18,7 @@ import { ProfilePage } from './pages/ProfilePage'
 
 export default function App() {
   useAgent()
+  useUpdater()
   const { page, theme, density } = useUIStore()
 
   useEffect(() => {
@@ -34,6 +37,7 @@ export default function App() {
 
   return (
     <>
+      <UpdateBanner />
       <Shell>
         {page === 'sessions' && <SessionsPage />}
         {page === 'mcp' && <MCPPage />}

@@ -32,6 +32,7 @@ import { wireStreaming } from './ipc-streaming'
 import { startProxy, ProxyHandle } from './opencode-proxy/server'
 import { setProxyHandle } from './opencode-proxy/state'
 import { initLogger } from './opencode-proxy/logger'
+import { setupAutoUpdater, teardownAutoUpdater } from './updater'
 
 let db: Database
 let agentManager: AgentManager
@@ -93,6 +94,28 @@ function createWindow(): void {
     return { action: 'deny' }
   })
 
+  // A plain <a href="https://…"> click in the renderer would otherwise
+  // navigate the BrowserWindow itself — replacing the React app with the
+  // remote page and destroying any in-memory session state. Block external
+  // navigation and route to the OS default browser instead. Allow only the
+  // app's own dev URL / file:// boot URL.
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    const current = mainWindow!.webContents.getURL()
+    try {
+      const target = new URL(url)
+      const here = current ? new URL(current) : null
+      const sameOrigin = here && target.origin === here.origin
+      const isAppFile = target.protocol === 'file:' && target.pathname.endsWith('/index.html')
+      if (sameOrigin || isAppFile) return
+    } catch {
+      // fall through to deny
+    }
+    event.preventDefault()
+    if (/^https?:/i.test(url) || url.startsWith('mailto:')) {
+      shell.openExternal(url)
+    }
+  })
+
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
@@ -143,7 +166,10 @@ app.whenReady().then(() => {
   registerIpc(db, agentManager, mcpManager)
 
   createWindow()
-  if (mainWindow) wireStreaming(agentManager, mainWindow)
+  if (mainWindow) {
+    wireStreaming(agentManager, mainWindow)
+    if (!is.dev) setupAutoUpdater(mainWindow)
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
@@ -155,6 +181,7 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', (e) => {
+  teardownAutoUpdater()
   // Block quit briefly so the proxy can drain in-flight requests cleanly.
   if (opencodeProxy && !proxyShuttingDown) {
     proxyShuttingDown = true
