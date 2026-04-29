@@ -9,6 +9,7 @@ interface HistoryRailProps {
   onDelete: (id: string) => Promise<void>
   onRename: (id: string, title: string) => Promise<void>
   onNew: () => void
+  onConfigureNew?: () => void
 }
 
 type Group = 'Today' | 'Yesterday' | 'This week' | 'Earlier'
@@ -136,7 +137,8 @@ export function HistoryRail({
   onPick,
   onDelete,
   onRename,
-  onNew
+  onNew,
+  onConfigureNew
 }: HistoryRailProps) {
   const [query, setQuery] = useState('')
   const [pendingId, setPendingId] = useState<string | null>(null)
@@ -190,15 +192,29 @@ export function HistoryRail({
     <div className="sess-rail">
       <div className="sess-rail-hd">
         <h3>Sessions</h3>
-        <button
-          className="btn btn-primary"
-          onClick={onNew}
-          type="button"
-          style={{ fontSize: 12, padding: '4px 10px' }}
-          title="New session (⌘N)"
-        >
-          + New
-        </button>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          <button
+            className="btn btn-primary"
+            onClick={onNew}
+            type="button"
+            style={{ fontSize: 12, padding: '4px 10px' }}
+            title="New session (⌘N) — uses saved defaults if set"
+          >
+            + New
+          </button>
+          {onConfigureNew && (
+            <button
+              className="btn btn-plain"
+              onClick={onConfigureNew}
+              type="button"
+              style={{ fontSize: 12, padding: '4px 8px' }}
+              title="Configure a new session — opens setup dialog"
+              aria-label="Configure new session"
+            >
+              <Icon name="settings" size={13} />
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="sess-search">

@@ -6,6 +6,7 @@ import { Composer } from './sessions/Composer'
 import { TodoPanel } from './sessions/TodoPanel'
 import { SessionsEmpty } from './sessions/SessionsEmpty'
 import { SessionSetup } from '../onboarding/SessionSetup'
+import { loadDefaultSessionConfig } from '../lib/defaultSessionConfig'
 import type { SessionConfig } from '@shared/types'
 
 export function SessionsPage() {
@@ -18,6 +19,29 @@ export function SessionsPage() {
     setNeedsSetup(false)
   }
 
+  async function handleNew() {
+    const def = loadDefaultSessionConfig()
+    if (def && def.modelId && def.workingDir) {
+      await create({
+        modelId: def.modelId,
+        workingDir: def.workingDir,
+        flags: def.flags,
+        permissionMode: def.permissionMode,
+        incognito: def.incognito,
+        enabledMcpIds: def.enabledMcpIds ?? null
+      })
+      setNeedsSetup(false)
+      return
+    }
+    setActive(null)
+    setNeedsSetup(true)
+  }
+
+  function handleConfigureNew() {
+    setActive(null)
+    setNeedsSetup(true)
+  }
+
   return (
     <div className="sess-wrap">
       <HistoryRail
@@ -26,7 +50,8 @@ export function SessionsPage() {
         onPick={(id) => { setActive(id); setNeedsSetup(false) }}
         onDelete={del}
         onRename={async (id, title) => { await rename(id, title) }}
-        onNew={() => { setActive(null); setNeedsSetup(true) }}
+        onNew={handleNew}
+        onConfigureNew={handleConfigureNew}
       />
       <div className="sess-main">
         {needsSetup ? (
@@ -48,7 +73,7 @@ export function SessionsPage() {
         ) : (
           <SessionsEmpty
             hasSessions={sessions.length > 0}
-            onNew={() => setNeedsSetup(true)}
+            onNew={handleNew}
           />
         )}
       </div>

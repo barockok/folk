@@ -781,11 +781,6 @@ export function Composer({ session, onSend, onCancel }: ComposerProps) {
             </select>
           )}
 
-          {/* Brainstorm — placeholder */}
-          <button className="btn btn-plain" disabled title="Coming soon" type="button">
-            Brainstorm
-          </button>
-
           <div className="hint" style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--fg-faint)', fontFamily: 'var(--ff-mono)', display: 'flex', alignItems: 'center', gap: 6 }}>
             {!isRunning && <span>⌘↵</span>}
           </div>

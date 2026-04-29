@@ -3,7 +3,13 @@ import { useState, useMemo } from 'react'
 import type { SessionConfig } from '@shared/types'
 import { useProviders } from '../hooks/useProviders'
 import { useMCPStore } from '../stores/useMCPStore'
+import { useUIStore } from '../stores/useUIStore'
 import { Icon } from '../components/icons'
+import {
+  loadDefaultSessionConfig,
+  saveDefaultSessionConfig,
+  clearDefaultSessionConfig
+} from '../lib/defaultSessionConfig'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -100,6 +106,7 @@ function PermCard({ mode, selected, onSelect }: PermCardProps) {
 export function SessionSetup({ onLaunch, onCancel }: SessionSetupProps) {
   const { enabledModels } = useProviders()
   const mcpServers = useMCPStore((s) => s.servers)
+  const toast = useUIStore((s) => s.toast)
   // Servers eligible for the picker — globally-enabled, owned by folk (skip
   // read-only locals which the SDK loads from its own discovery anyway).
   const eligibleMcps = useMemo(
@@ -107,19 +114,27 @@ export function SessionSetup({ onLaunch, onCancel }: SessionSetupProps) {
     [mcpServers]
   )
 
-  // --- form state ---
-  const [folder, setFolder] = useState('')
+  const savedDefault = useMemo(() => loadDefaultSessionConfig(), [])
+  const hasSavedDefault = savedDefault != null
+
+  // --- form state, hydrated from saved defaults if present ---
+  const [folder, setFolder] = useState(savedDefault?.workingDir ?? '')
   const [selectedModelId, setSelectedModelId] = useState<string>(
-    enabledModels[0]?.id ?? ''
+    savedDefault?.modelId ?? enabledModels[0]?.id ?? ''
   )
   const [advOpen, setAdvOpen] = useState(false)
-  const [permMode, setPermMode] = useState<PermMode>('ask')
+  const [permMode, setPermMode] = useState<PermMode>(
+    savedDefault?.permissionMode === 'bypassPermissions' ? 'skip' : 'ask'
+  )
   const [yoloAck, setYoloAck] = useState(false)
-  const [incognito, setIncognito] = useState(false)
+  const [incognito, setIncognito] = useState(savedDefault?.incognito ?? false)
   // null = inherit (all globally-enabled MCPs); array = explicit allowlist.
-  const [mcpAllow, setMcpAllow] = useState<string[] | null>(null)
-  const [extraFlags, setExtraFlags] = useState('')
+  const [mcpAllow, setMcpAllow] = useState<string[] | null>(
+    savedDefault?.enabledMcpIds ?? null
+  )
+  const [extraFlags, setExtraFlags] = useState(savedDefault?.flags ?? '')
   const [launching, setLaunching] = useState(false)
+  const [saveAsDefault, setSaveAsDefault] = useState(false)
 
   const isYolo = permMode === 'skip'
 
@@ -160,17 +175,35 @@ export function SessionSetup({ onLaunch, onCancel }: SessionSetupProps) {
       const flags: string[] = []
       if (extraFlags.trim()) flags.push(extraFlags.trim())
 
-      await onLaunch({
+      const launchConfig: SessionConfig = {
         modelId: selectedModelId,
         workingDir: folder.trim(),
         flags: flags.length ? flags.join(' ') : undefined,
         permissionMode: permMode === 'skip' ? 'bypassPermissions' : 'default',
         incognito,
         enabledMcpIds: mcpAllow
-      })
+      }
+      if (saveAsDefault) {
+        saveDefaultSessionConfig({
+          modelId: launchConfig.modelId,
+          workingDir: launchConfig.workingDir,
+          flags: launchConfig.flags,
+          permissionMode: launchConfig.permissionMode,
+          incognito: launchConfig.incognito,
+          enabledMcpIds: launchConfig.enabledMcpIds
+        })
+        toast({ kind: 'ok', text: 'Saved as default for new sessions' })
+      }
+      await onLaunch(launchConfig)
     } finally {
       setLaunching(false)
     }
+  }
+
+  function handleClearDefault() {
+    clearDefaultSessionConfig()
+    setSaveAsDefault(false)
+    toast({ kind: 'info', text: 'Default session config cleared' })
   }
 
   return (
@@ -530,7 +563,38 @@ export function SessionSetup({ onLaunch, onCancel }: SessionSetupProps) {
           >
             Cancel
           </button>
-          <div style={{ flex: 1 }} />
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 12, justifyContent: 'center' }}>
+            <label
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                fontSize: 12,
+                color: 'var(--body)',
+                cursor: 'pointer',
+                userSelect: 'none'
+              }}
+              title="Persist these settings so future new sessions launch with them automatically."
+            >
+              <input
+                type="checkbox"
+                checked={saveAsDefault}
+                onChange={(e) => setSaveAsDefault(e.target.checked)}
+              />
+              Save as default for new sessions
+            </label>
+            {hasSavedDefault && (
+              <button
+                type="button"
+                className="btn btn-plain"
+                onClick={handleClearDefault}
+                style={{ fontSize: 11, padding: '2px 6px' }}
+                title="Forget the saved default — next new session will reopen this dialog."
+              >
+                Clear default
+              </button>
+            )}
+          </div>
           <button
             type="button"
             className={`btn${isYolo ? ' btn-danger-solid' : ' btn-primary'}`}
