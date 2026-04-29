@@ -20,9 +20,9 @@ mac:
   category: public.app-category.developer-tools
   hardenedRuntime: true
   gatekeeperAssess: false
-  # CSC_LINK (base64 P12) + CSC_KEY_PASSWORD env let electron-builder pick the
-  # signing identity automatically. Set in CI; falls back to ad-hoc/null in dev.
-  identity: null
+  # No `identity` key — electron-builder auto-detects the Developer ID
+  # Application identity from CSC_LINK + CSC_KEY_PASSWORD env in CI.
+  # For unsigned local dev builds, set CSC_IDENTITY_AUTO_DISCOVERY=false.
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
   # Built-in notarization (electron-builder >= 24). Reads credentials from env:
