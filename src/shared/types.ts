@@ -25,6 +25,13 @@ export interface Session {
   // once. First turn passes `sessionId`, subsequent turns pass `resume`.
   claudeStarted: boolean
   permissionMode: PermissionMode
+  // Incognito sessions skip loading any user/project/plugin skills into the
+  // system prompt — passes `skills: []` to the SDK at session start.
+  incognito: boolean
+  // Per-session MCP allowlist by server id. null = use every globally-enabled
+  // MCP (legacy behavior). Empty array = no MCPs. Non-empty = only the listed
+  // ids are passed to the SDK (still intersected with isEnabled).
+  enabledMcpIds: string[] | null
   createdAt: number
   updatedAt: number
 }
@@ -36,6 +43,8 @@ export interface SessionConfig {
   goal?: string
   flags?: string
   permissionMode?: PermissionMode
+  incognito?: boolean
+  enabledMcpIds?: string[] | null
 }
 
 export type ProviderAuthMode = 'api-key' | 'claude-code'

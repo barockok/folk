@@ -335,7 +335,11 @@ export class AgentManager extends EventEmitter {
     if (baseUrlOverride) envOverlay.ANTHROPIC_BASE_URL = baseUrlOverride
 
     const mcpMap: Record<string, McpServerConfig> = {}
-    for (const m of this.db.listMCPs().filter((x) => x.isEnabled)) {
+    const allowList = session.enabledMcpIds
+    const allowSet = allowList ? new Set(allowList) : null
+    for (const m of this.db
+      .listMCPs()
+      .filter((x) => x.isEnabled && (!allowSet || allowSet.has(x.id)))) {
       if (m.transport === 'stdio' && m.command) {
         mcpMap[m.name] = {
           type: 'stdio',
@@ -388,6 +392,9 @@ export class AgentManager extends EventEmitter {
           preset: 'claude_code',
           append: FOLK_PRESENTATION_PROMPT
         },
+        // Incognito: pass empty skills allowlist so the SDK loads no skills
+        // from user/project/plugin sources into the session system prompt.
+        ...(session.incognito ? { skills: [] as string[] } : {}),
         extraArgs: this.#parseExtraArgs(session.flags),
         permissionMode: session.permissionMode ?? 'default',
         // SDK refuses bypassPermissions without this acknowledgement flag.

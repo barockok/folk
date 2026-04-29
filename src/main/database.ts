@@ -54,6 +54,8 @@ CREATE TABLE IF NOT EXISTS sessions (
   flags TEXT,
   status TEXT NOT NULL DEFAULT 'idle',
   claude_started INTEGER NOT NULL DEFAULT 0,
+  incognito INTEGER NOT NULL DEFAULT 0,
+  enabled_mcp_ids TEXT,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
@@ -160,6 +162,16 @@ export class Database {
         )
         .run()
     }
+    if (!sessCols.some((c) => c.name === 'incognito')) {
+      this.db
+        .prepare(`ALTER TABLE sessions ADD COLUMN incognito INTEGER NOT NULL DEFAULT 0`)
+        .run()
+    }
+    if (!sessCols.some((c) => c.name === 'enabled_mcp_ids')) {
+      this.db
+        .prepare(`ALTER TABLE sessions ADD COLUMN enabled_mcp_ids TEXT`)
+        .run()
+    }
     const mcpCols = new Set(
       (this.db.prepare(`PRAGMA table_info(mcp_servers)`).all() as Array<{ name: string }>).map(
         (c) => c.name
@@ -251,15 +263,22 @@ export class Database {
       status: 'idle',
       claudeStarted: false,
       permissionMode: config.permissionMode ?? 'default',
+      incognito: config.incognito ?? false,
+      enabledMcpIds: config.enabledMcpIds ?? null,
       createdAt: now,
       updatedAt: now
     }
     this.db
       .prepare(
-        `INSERT INTO sessions (id, title, model_id, working_dir, goal, flags, status, claude_started, permission_mode, created_at, updated_at)
-         VALUES (@id, @title, @modelId, @workingDir, @goal, @flags, @status, @claudeStarted, @permissionMode, @createdAt, @updatedAt)`
+        `INSERT INTO sessions (id, title, model_id, working_dir, goal, flags, status, claude_started, permission_mode, incognito, enabled_mcp_ids, created_at, updated_at)
+         VALUES (@id, @title, @modelId, @workingDir, @goal, @flags, @status, @claudeStarted, @permissionMode, @incognito, @enabledMcpIds, @createdAt, @updatedAt)`
       )
-      .run({ ...row, claudeStarted: row.claudeStarted ? 1 : 0 })
+      .run({
+        ...row,
+        claudeStarted: row.claudeStarted ? 1 : 0,
+        incognito: row.incognito ? 1 : 0,
+        enabledMcpIds: row.enabledMcpIds ? JSON.stringify(row.enabledMcpIds) : null
+      })
     return row
   }
 
@@ -291,9 +310,15 @@ export class Database {
       .prepare(
         `UPDATE sessions SET title = @title, model_id = @modelId, working_dir = @workingDir,
          goal = @goal, flags = @flags, status = @status, claude_started = @claudeStarted,
-         permission_mode = @permissionMode, updated_at = @updatedAt WHERE id = @id`
+         permission_mode = @permissionMode, incognito = @incognito,
+         enabled_mcp_ids = @enabledMcpIds, updated_at = @updatedAt WHERE id = @id`
       )
-      .run({ ...merged, claudeStarted: merged.claudeStarted ? 1 : 0 })
+      .run({
+        ...merged,
+        claudeStarted: merged.claudeStarted ? 1 : 0,
+        incognito: merged.incognito ? 1 : 0,
+        enabledMcpIds: merged.enabledMcpIds ? JSON.stringify(merged.enabledMcpIds) : null
+      })
   }
 
   deleteSession(id: string): void {
@@ -481,6 +506,17 @@ export class Database {
     status: (row.status as Session['status']) ?? 'idle',
     claudeStarted: Number(row.claude_started ?? 0) === 1,
     permissionMode: ((row.permission_mode as string) ?? 'default') as Session['permissionMode'],
+    incognito: Number(row.incognito ?? 0) === 1,
+    enabledMcpIds: (() => {
+      const v = row.enabled_mcp_ids
+      if (typeof v !== 'string' || !v) return null
+      try {
+        const parsed = JSON.parse(v)
+        return Array.isArray(parsed) ? (parsed as string[]) : null
+      } catch {
+        return null
+      }
+    })(),
     createdAt: Number(row.created_at ?? 0),
     updatedAt: Number(row.updated_at ?? 0)
   })

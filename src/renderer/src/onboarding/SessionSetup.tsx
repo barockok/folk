@@ -2,6 +2,7 @@
 import { useState, useMemo } from 'react'
 import type { SessionConfig } from '@shared/types'
 import { useProviders } from '../hooks/useProviders'
+import { useMCPStore } from '../stores/useMCPStore'
 import { Icon } from '../components/icons'
 
 // ---------------------------------------------------------------------------
@@ -98,6 +99,13 @@ function PermCard({ mode, selected, onSelect }: PermCardProps) {
 
 export function SessionSetup({ onLaunch, onCancel }: SessionSetupProps) {
   const { enabledModels } = useProviders()
+  const mcpServers = useMCPStore((s) => s.servers)
+  // Servers eligible for the picker — globally-enabled, owned by folk (skip
+  // read-only locals which the SDK loads from its own discovery anyway).
+  const eligibleMcps = useMemo(
+    () => mcpServers.filter((s) => s.isEnabled && s.source !== 'local'),
+    [mcpServers]
+  )
 
   // --- form state ---
   const [folder, setFolder] = useState('')
@@ -107,6 +115,9 @@ export function SessionSetup({ onLaunch, onCancel }: SessionSetupProps) {
   const [advOpen, setAdvOpen] = useState(false)
   const [permMode, setPermMode] = useState<PermMode>('ask')
   const [yoloAck, setYoloAck] = useState(false)
+  const [incognito, setIncognito] = useState(false)
+  // null = inherit (all globally-enabled MCPs); array = explicit allowlist.
+  const [mcpAllow, setMcpAllow] = useState<string[] | null>(null)
   const [extraFlags, setExtraFlags] = useState('')
   const [launching, setLaunching] = useState(false)
 
@@ -123,9 +134,11 @@ export function SessionSetup({ onLaunch, onCancel }: SessionSetupProps) {
     const parts: string[] = []
     if (permMode === 'skip') parts.push('skip-permissions on')
     else parts.push('permissions enabled')
+    if (incognito) parts.push('incognito')
+    if (mcpAllow) parts.push(`${mcpAllow.length}/${eligibleMcps.length} MCPs`)
     if (extraFlags.trim()) parts.push('custom flags')
     return parts.join(' · ')
-  }, [permMode, extraFlags])
+  }, [permMode, incognito, mcpAllow, eligibleMcps.length, extraFlags])
 
   // Command preview
   const cmdPreview = useMemo(
@@ -151,7 +164,9 @@ export function SessionSetup({ onLaunch, onCancel }: SessionSetupProps) {
         modelId: selectedModelId,
         workingDir: folder.trim(),
         flags: flags.length ? flags.join(' ') : undefined,
-        permissionMode: permMode === 'skip' ? 'bypassPermissions' : 'default'
+        permissionMode: permMode === 'skip' ? 'bypassPermissions' : 'default',
+        incognito,
+        enabledMcpIds: mcpAllow
       })
     } finally {
       setLaunching(false)
@@ -294,6 +309,14 @@ export function SessionSetup({ onLaunch, onCancel }: SessionSetupProps) {
                     skip-permissions
                   </span>
                 )}
+                {incognito && (
+                  <span className="ss-adv-pill">incognito</span>
+                )}
+                {mcpAllow && (
+                  <span className="ss-adv-pill">
+                    MCPs {mcpAllow.length}/{eligibleMcps.length}
+                  </span>
+                )}
                 {extraFlags.trim() && (
                   <span className="ss-adv-pill">+flags</span>
                 )}
@@ -341,6 +364,115 @@ export function SessionSetup({ onLaunch, onCancel }: SessionSetupProps) {
                       />
                       I understand the risks and accept full responsibility
                     </label>
+                  </div>
+                )}
+
+                {/* Incognito */}
+                <div className="ss-opt-group">
+                  <div className="ss-opt-head">
+                    <div className="ss-opt-label">Incognito</div>
+                  </div>
+                  <label
+                    className={`ss-perm${incognito ? ' on' : ''}`}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <div className="ss-perm-ic safe">
+                      <Icon name="shield" size={14} />
+                    </div>
+                    <div className="ss-perm-body">
+                      <div className="ss-perm-title">Skip skills</div>
+                      <div className="ss-perm-sub">
+                        Don't load any skills from <code className="mono">~/.claude/skills</code>,
+                        the project, or installed plugins. Useful for clean-room sessions.
+                      </div>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={incognito}
+                      onChange={(e) => setIncognito(e.target.checked)}
+                      style={{ marginLeft: 'auto' }}
+                    />
+                  </label>
+                </div>
+
+                {/* MCP servers */}
+                {eligibleMcps.length > 0 && (
+                  <div className="ss-opt-group">
+                    <div className="ss-opt-head">
+                      <div className="ss-opt-label">MCP servers</div>
+                      <div style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
+                        <button
+                          type="button"
+                          className="btn btn-plain"
+                          onClick={() => setMcpAllow(null)}
+                        >
+                          All (default)
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-plain"
+                          onClick={() => setMcpAllow([])}
+                        >
+                          None
+                        </button>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {eligibleMcps.map((srv) => {
+                        const inherited = mcpAllow === null
+                        const checked = inherited || mcpAllow!.includes(srv.id)
+                        return (
+                          <label
+                            key={srv.id}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 8,
+                              padding: '6px 8px',
+                              border: '1px solid var(--border)',
+                              borderRadius: 'var(--r-sm)',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(e) => {
+                                const next = inherited
+                                  ? eligibleMcps.map((m) => m.id)
+                                  : [...mcpAllow!]
+                                if (e.target.checked) {
+                                  if (!next.includes(srv.id)) next.push(srv.id)
+                                } else {
+                                  const i = next.indexOf(srv.id)
+                                  if (i >= 0) next.splice(i, 1)
+                                }
+                                setMcpAllow(next)
+                              }}
+                            />
+                            <span style={{ fontFamily: 'var(--ff-mono)', fontSize: 12 }}>
+                              {srv.name}
+                            </span>
+                            <span
+                              style={{
+                                fontSize: 11,
+                                color: 'var(--fg-faint)',
+                                marginLeft: 'auto'
+                              }}
+                            >
+                              {srv.transport}
+                            </span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                    <div
+                      style={{ fontSize: 11, color: 'var(--fg-faint)', marginTop: 6 }}
+                    >
+                      {mcpAllow === null
+                        ? 'Inherits all globally-enabled MCPs.'
+                        : `Restricts this session to ${mcpAllow.length} of ${eligibleMcps.length} MCPs.`}
+                    </div>
                   </div>
                 )}
 
