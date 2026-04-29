@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Required so the Claude Agent SDK can spawn the bundled cli.js node helper
+       under hardened runtime. JIT also covers V8 + better-sqlite3 init paths. -->
+  <key>com.apple.security.cs.allow-jit</key>
+  <true/>
+  <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+  <true/>
+  <key>com.apple.security.cs.allow-dyld-environment-variables</key>
+  <true/>
+  <!-- Lets electron-vite-loaded JS execute. Without this, hardened runtime
+       blocks the V8 code cache that the renderer + agent process rely on. -->
+  <key>com.apple.security.cs.disable-library-validation</key>
+  <true/>
+  <!-- Required for outbound HTTPS to model providers, GitHub releases, MCP. -->
+  <key>com.apple.security.network.client</key>
+  <true/>
+  <!-- Required for the embedded OpenCode bridge proxy on loopback. -->
+  <key>com.apple.security.network.server</key>
+  <true/>
+  <!-- File access — user picks a working folder via the system dialog. -->
+  <key>com.apple.security.files.user-selected.read-write</key>
+  <true/>
+</dict>
+</plist>

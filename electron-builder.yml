@@ -13,10 +13,22 @@ mac:
       arch:
         - arm64
         - x64
+    - target: zip
+      arch:
+        - arm64
+        - x64
   category: public.app-category.developer-tools
-  hardenedRuntime: false
+  hardenedRuntime: true
   gatekeeperAssess: false
+  # CSC_LINK (base64 P12) + CSC_KEY_PASSWORD env let electron-builder pick the
+  # signing identity automatically. Set in CI; falls back to ad-hoc/null in dev.
   identity: null
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  # Built-in notarization (electron-builder >= 24). Reads credentials from env:
+  # APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID — provided by CI.
+  # Set to false locally to skip the (~10min) notarization round-trip.
+  notarize: true
 dmg:
   contents:
     - x: 130
@@ -25,3 +37,8 @@ dmg:
       y: 220
       type: link
       path: /Applications
+publish:
+  provider: github
+  owner: barockok
+  repo: folk
+  releaseType: release

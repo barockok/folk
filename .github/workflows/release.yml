@@ -1,0 +1,72 @@
+name: release
+
+# Triggers:
+#  - push of a vX.Y.Z tag → build, sign, notarize, publish to GitHub Release
+#  - manual dispatch  → same flow, useful for re-runs
+#
+# Required repo secrets (Settings → Secrets and variables → Actions):
+#   APPLE_ID                   Apple Developer account email
+#   APPLE_APP_SPECIFIC_PASSWORD app-specific password (appleid.apple.com)
+#   APPLE_TEAM_ID              10-char team id (developer.apple.com/account)
+#   CSC_LINK                   base64 of "Developer ID Application" .p12
+#                              (`base64 -i cert.p12 | pbcopy`)
+#   CSC_KEY_PASSWORD           password for the .p12
+#
+# GH_TOKEN is the workflow-provided GITHUB_TOKEN — sufficient for
+# publishing to the same repo's Releases.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release-mac:
+    runs-on: macos-14
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Rebuild native modules for Electron
+        run: npx @electron/rebuild -w better-sqlite3
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Build, sign, notarize, publish
+        env:
+          # Code signing — electron-builder picks these up automatically.
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          # Notarization — electron-builder's built-in notarize reads these.
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # GitHub Release publish.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run release:mac
+
+      - name: Upload artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-mac
+          path: |
+            dist/*.dmg
+            dist/*.zip
+            dist/latest-mac.yml
+          if-no-files-found: ignore
