@@ -1,7 +1,8 @@
 import { EventEmitter } from 'node:events'
-import { promises as fs } from 'node:fs'
+import { promises as fs, existsSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { app } from 'electron'
 import { query, AbortError, getSessionMessages } from '@anthropic-ai/claude-agent-sdk'
 import type {
   ElicitationRequest as SDKElicitationRequest,
@@ -156,6 +157,17 @@ function mapSessionMessages(
   }
 
   return out
+}
+
+// In a packaged app, the SDK's require.resolve runs in an ESM context where
+// Electron's asar path patching may not redirect to app.asar.unpacked.
+// Bypass it entirely by resolving the binary ourselves via process.resourcesPath.
+function resolveClaudeBinary(): string | undefined {
+  if (!app.isPackaged) return undefined
+  const ext = process.platform === 'win32' ? '.exe' : ''
+  const pkg = `@anthropic-ai/claude-agent-sdk-${process.platform}-${process.arch}`
+  const unpacked = join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', pkg, `claude${ext}`)
+  return existsSync(unpacked) ? unpacked : undefined
 }
 
 function deriveTitle(text: string): string {
@@ -427,6 +439,7 @@ export class AgentManager extends EventEmitter {
     const q = query({
       prompt: iterable,
       options: {
+        pathToClaudeCodeExecutable: resolveClaudeBinary(),
         cwd: session.workingDir,
         model: session.modelId,
         env: envOverlay,
