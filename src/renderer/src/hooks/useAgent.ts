@@ -33,7 +33,7 @@ export function useAgent(): void {
       window.folk.agent.onPromptSuggestion((e) => addPromptSuggestion(e)),
       window.folk.agent.onError((e) => {
         setError(e)
-        toast({ kind: 'err', text: e.message })
+        if (e.code !== 'cancelled') toast({ kind: 'err', text: e.message })
       })
     ]
     return () => offs.forEach((o) => o())

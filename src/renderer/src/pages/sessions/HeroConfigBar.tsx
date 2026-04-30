@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 import { Icon } from '../../components/icons'
-import { useMCPStore } from '../../stores/useMCPStore'
 import type { Session } from '@shared/types'
 
 
@@ -15,22 +14,7 @@ interface Props {
 // it survives the eventual `sessions:create` IPC on first send.
 export function HeroConfigBar({ session, onPatch }: Props) {
   const [advOpen, setAdvOpen] = useState(false)
-  const [mcpOpen, setMcpOpen] = useState(false)
-  const mcpServers = useMCPStore((s) => s.servers)
-  const eligibleMcps = mcpServers.filter((s) => s.isEnabled)
-  const mcpRef = useRef<HTMLDivElement>(null)
   const advRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!mcpOpen) return
-    const handler = (e: MouseEvent) => {
-      if (mcpRef.current && !mcpRef.current.contains(e.target as Node)) {
-        setMcpOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [mcpOpen])
 
   useEffect(() => {
     if (!advOpen) return
@@ -48,31 +32,9 @@ export function HeroConfigBar({ session, onPatch }: Props) {
     if (picked) onPatch({ workingDir: picked })
   }
 
-  function toggleMcp(id: string) {
-    const current = session.enabledMcpIds
-    // null sentinel = inherit (all globally-enabled MCPs). Switching to an
-    // explicit allowlist initializes from current selection.
-    const base = current ?? eligibleMcps.map((s) => s.id)
-    const next = base.includes(id) ? base.filter((x) => x !== id) : [...base, id]
-    onPatch({ enabledMcpIds: next })
-  }
-
-  function setMcpAll() {
-    onPatch({ enabledMcpIds: null })
-  }
-  function setMcpNone() {
-    onPatch({ enabledMcpIds: [] })
-  }
-
   const folderName = session.workingDir
     ? session.workingDir.split('/').filter(Boolean).pop() ?? session.workingDir
     : 'Pick folder'
-  const mcpLabel =
-    session.enabledMcpIds === null
-      ? `MCP · all (${eligibleMcps.length})`
-      : session.enabledMcpIds.length === 0
-        ? 'MCP · none'
-        : `MCP · ${session.enabledMcpIds.length}`
 
   return (
     <div className="hero-cfg">
@@ -96,48 +58,6 @@ export function HeroConfigBar({ session, onPatch }: Props) {
           <Icon name="eyeOff" size={13} />
           <span className="hero-chip-label">{session.incognito ? 'Incognito on' : 'Incognito'}</span>
         </button>
-
-        {eligibleMcps.length > 0 && (
-          <div ref={mcpRef} style={{ position: 'relative' }}>
-            <button
-              type="button"
-              className="hero-chip"
-              onClick={() => setMcpOpen((o) => !o)}
-            >
-              <Icon name="server" size={13} />
-              <span className="hero-chip-label">{mcpLabel}</span>
-            </button>
-            {mcpOpen && (
-              <div className="hero-mcp-pop">
-                <div className="hero-mcp-head">
-                  <button type="button" className="btn btn-plain" onClick={setMcpAll}>
-                    All (default)
-                  </button>
-                  <button type="button" className="btn btn-plain" onClick={setMcpNone}>
-                    None
-                  </button>
-                </div>
-                <div className="hero-mcp-list">
-                  {eligibleMcps.map((s) => {
-                    const checked =
-                      session.enabledMcpIds === null ||
-                      session.enabledMcpIds.includes(s.id)
-                    return (
-                      <label key={s.id} className="hero-mcp-row">
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => toggleMcp(s.id)}
-                        />
-                        <span>{s.name}</span>
-                      </label>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
 
         <div ref={advRef} style={{ position: 'relative' }}>
           <button

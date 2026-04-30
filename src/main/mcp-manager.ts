@@ -250,12 +250,30 @@ export class MCPManager {
   // a time — the loopback callback server binds a fixed port.
   #signInInFlight: string | null = null
 
+  // When true, syncs are deferred — the bundled Claude Code CLI watches
+  // ~/.claude/.mcp.json and rewriting it mid-stream aborts in-flight turns.
+  #isBusy: () => boolean = () => false
+  #pendingSync = false
+
   // Sidecar path for the write-through bookkeeping. Lives in folk's userData
   // dir, NOT under ~/.claude — the user's Claude Code dir stays clean.
   constructor(
     private db: Database,
     private syncSidecarPath: string
   ) {}
+
+  setBusyCheck(fn: () => boolean): void {
+    this.#isBusy = fn
+  }
+
+  // Called by AgentManager when the last live session tears down. Flushes
+  // any sync that was deferred while the SDK had a live stream.
+  flushDeferredSync(): void {
+    if (this.#pendingSync) {
+      this.#pendingSync = false
+      void this.syncToClaudeCode()
+    }
+  }
 
   async list(): Promise<MCPServer[]> {
     const folk = this.db.listMCPs()
@@ -296,6 +314,10 @@ export class MCPManager {
   }
 
   #syncToClaudeCode(): void {
+    if (this.#isBusy()) {
+      this.#pendingSync = true
+      return
+    }
     void this.syncToClaudeCode()
   }
 

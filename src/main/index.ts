@@ -197,6 +197,8 @@ app.whenReady().then(() => {
     join(app.getPath('userData'), 'folk-managed-mcps.json')
   )
   agentManager = new AgentManager(db, (id) => mcpManager.getAccessToken(id))
+  mcpManager.setBusyCheck(() => agentManager.hasLiveSessions())
+  agentManager.setOnAllIdle(() => mcpManager.flushDeferredSync())
   registerIpc(db, agentManager, mcpManager)
 
   if (mainWindow) {

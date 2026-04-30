@@ -112,15 +112,20 @@ const MessageItem = memo(function MessageItem({
     !(b.kind === 'tool' && b.call.tool === 'TodoWrite')
   const isMeaningful = (b: MessageBlock): boolean =>
     !(b.kind === 'text' && b.text.trim().length === 0)
-  const lastBlockIdx = m.blocks.length - 1
-  const visibleBlocks = m.blocks.filter((b, idx) => {
+  // Thinking blocks no longer render inline. They live in a hover popover on
+  // the assistant avatar (see `thinkingText` below) and a transient streaming
+  // bubble while the model is mid-thought.
+  const visibleBlocks = m.blocks.filter((b) => {
     if (!stripTodos(b) || !isMeaningful(b)) return false
-    if (b.kind === 'thinking') {
-      return isLast && idx === lastBlockIdx
-    }
+    if (b.kind === 'thinking') return false
     return true
   })
   const lastBlock = m.blocks[m.blocks.length - 1]
+  // Thinking is ephemeral. Only expose it (live bubble + hover popover) while
+  // it is still the *trailing* block of the message — once any non-thinking
+  // block arrives after it, the thought is considered superseded and hidden.
+  const thinkingText =
+    lastBlock?.kind === 'thinking' ? lastBlock.text.trim() : ''
   const hasLiveThinking = isStreamingThought && lastBlock?.kind === 'thinking'
   const hasRunningTool = m.blocks.some((b) => b.kind === 'tool' && b.call.output === undefined)
   const showProgress =
@@ -149,14 +154,6 @@ const MessageItem = memo(function MessageItem({
     }
   }
 
-  let lastThinkingIdx = -1
-  for (let k = visibleBlocks.length - 1; k >= 0; k--) {
-    if (visibleBlocks[k].kind === 'thinking') {
-      lastThinkingIdx = k
-      break
-    }
-  }
-
   return (
     <article
       className={`msg msg-${m.role}${continuation ? ' continuation' : ''}`}
@@ -166,9 +163,28 @@ const MessageItem = memo(function MessageItem({
         <div className="msg-rail" aria-hidden="true">
           <span className="msg-rail-dot" />
         </div>
+      ) : m.role === 'assistant' && thinkingText ? (
+        <div
+          className={`msg-avatar assist has-thinking${hasLiveThinking ? ' thinking-live' : ''}`}
+          tabIndex={0}
+          aria-label="Show reasoning"
+        >
+          F
+          <div className="msg-thinking-pop" role="tooltip">
+            <div className="msg-thinking-pop-hd">
+              {hasLiveThinking ? 'Thinking…' : 'Thought'}
+            </div>
+            <div className="msg-thinking-pop-body">{thinkingText}</div>
+          </div>
+        </div>
       ) : (
         <div className={`msg-avatar ${m.role === 'user' ? 'user' : 'assist'}`}>
           {m.role === 'user' ? 'Y' : 'F'}
+        </div>
+      )}
+      {hasLiveThinking && !thinkingText && (
+        <div className="msg-thinking-bubble" aria-hidden="true">
+          <span className="dots"><span /><span /><span /></span>
         </div>
       )}
       <div className="msg-content">
@@ -180,48 +196,22 @@ const MessageItem = memo(function MessageItem({
         )}
         {entries.map((e) => {
           if (e.type === 'group') {
+            const groupIds = new Set<string>()
+            for (const c of e.calls) collectCallIds(c, groupIds)
+            const groupPerms = pendingPerms.filter(
+              (pr) => groupIds.has(pr.toolUseID) && pr.toolName !== 'AskUserQuestion'
+            )
             return (
               <div key={`${m.id}-grp-${e.idx}`} className="msg-tools">
                 <ToolGroup calls={e.calls} />
+                {groupPerms.map((pr) => (
+                  <PermissionPrompt key={pr.requestId} req={pr} />
+                ))}
               </div>
             )
           }
           const b = e.b
           const key = `${m.id}-${e.idx}`
-          if (b.kind === 'thinking') {
-            const isLiveThinking =
-              isLast &&
-              isStreaming &&
-              e.idx === lastThinkingIdx &&
-              lastThinkingIdx === visibleBlocks.length - 1
-            return (
-              <details
-                key={key}
-                className={`msg-thinking${isLiveThinking ? ' live' : ''}`}
-                open={isLiveThinking}
-              >
-                <summary>
-                  {isLiveThinking ? (
-                    <span className="dots">
-                      <span /><span /><span />
-                    </span>
-                  ) : (
-                    <span className="msg-thinking-bullet" aria-hidden="true">·</span>
-                  )}
-                  <span className="msg-thinking-label">
-                    {isLiveThinking ? 'Thinking' : 'Thought'}
-                  </span>
-                  {isLiveThinking && lifecycleTicker && (
-                    <span className="msg-thinking-ticker" title={lifecycleTicker}>
-                      {lifecycleTicker}
-                    </span>
-                  )}
-                  <span className="chev">▸</span>
-                </summary>
-                <div className="msg-thinking-body">{b.text}</div>
-              </details>
-            )
-          }
           if (b.kind === 'tool') {
             const matchingPerms =
               b.call.tool === 'AskUserQuestion'
@@ -269,7 +259,9 @@ const MessageItem = memo(function MessageItem({
             )}
           </div>
         )}
-        {m.error && <div className="msg-error">{m.error.message}</div>}
+        {m.error && m.error.code !== 'cancelled' && (
+          <div className="msg-error">{m.error.message}</div>
+        )}
       </div>
     </article>
   )
@@ -573,7 +565,8 @@ export function Conversation({ session }: { session: Session | null }) {
     const onlyEcho =
       visibleBlocks.length > 0 &&
       visibleBlocks.every((b) => b.kind === 'text' && isInternalEcho(b.text))
-    const renderable = !onlyEcho && (visibleBlocks.length > 0 || showProgress || !!m.error)
+    const visibleError = m.error && m.error.code !== 'cancelled' ? m.error : null
+    const renderable = !onlyEcho && (visibleBlocks.length > 0 || showProgress || !!visibleError)
     return { m, isLast, visibleBlocks, showProgress, renderable }
   })
   const visible = prepared.filter((p) => p.renderable)

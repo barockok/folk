@@ -11,6 +11,7 @@ import {
 } from '../../slash-commands'
 import type { Attachment, DiscoveredCommand, PermissionMode, Session } from '@shared/types'
 import { Icon } from '../../components/icons'
+import { MCPPicker } from './MCPPicker'
 
 const PERMISSION_LABELS: Record<PermissionMode, { label: string; hint: string }> = {
   default: { label: 'Ask', hint: 'Prompt before risky tools' },
@@ -63,14 +64,12 @@ export function Composer({ session, onSend, onCancel, onConfigureNew, onDraftPat
   const [text, setText] = useState('')
   const [modelPopOpen, setModelPopOpen] = useState(false)
   const [permPopOpen, setPermPopOpen] = useState(false)
-  const [mcpPopOpen, setMcpPopOpen] = useState(false)
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [isDragging, setIsDragging] = useState(false)
   const [slashIndex, setSlashIndex] = useState(0)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const popRef = useRef<HTMLDivElement>(null)
   const permPopRef = useRef<HTMLDivElement>(null)
-  const mcpPopRef = useRef<HTMLDivElement>(null)
   const dragCounterRef = useRef(0)
   const { enabledModels } = useProviders()
   const mcpServers = useMCPStore((s) => s.servers)
@@ -355,17 +354,6 @@ export function Composer({ session, onSend, onCancel, onConfigureNew, onDraftPat
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [permPopOpen])
-
-  useEffect(() => {
-    if (!mcpPopOpen) return
-    const handler = (e: MouseEvent) => {
-      if (mcpPopRef.current && !mcpPopRef.current.contains(e.target as Node)) {
-        setMcpPopOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [mcpPopOpen])
 
   // Drag-and-drop handlers
   const handleDragEnter = useCallback((e: React.DragEvent) => {
@@ -862,80 +850,28 @@ export function Composer({ session, onSend, onCancel, onConfigureNew, onDraftPat
             </div>
           )}
 
-          {/* MCP chip — only for persisted sessions that have explicit MCP selection */}
-          {session && !isDraftSession && eligibleMcps.length > 0 && (
-            <div style={{ position: 'relative' }} ref={mcpPopRef}>
-              <button
-                className="btn btn-plain"
-                style={{ fontSize: 12, fontFamily: 'var(--ff-mono)', gap: 4 }}
-                onClick={() => setMcpPopOpen((o) => !o)}
-                title="Change MCP servers for this session"
-                type="button"
-              >
-                MCP {session.enabledMcpIds === null
-                  ? `· all (${eligibleMcps.length})`
-                  : session.enabledMcpIds.length === 0
-                    ? '· none'
-                    : `· ${session.enabledMcpIds.length}`} ⌄
-              </button>
-              {mcpPopOpen && (
-                <div className="model-pop">
-                  <div className="model-pop-hd">MCP servers</div>
-                  <div className="model-pop-list">
-                    <button
-                      className={`model-pop-item ${session.enabledMcpIds === null ? 'on' : ''}`}
-                      type="button"
-                      onClick={async () => {
-                        setMcpPopOpen(false)
-                        if (session.enabledMcpIds === null) return
-                        const updated = await window.folk.sessions.setEnabledMcpIds(session.id, null)
-                        useSessionStore.getState().upsertSession(updated)
-                        toast({ kind: 'ok', text: 'MCP: all (session restarted)' })
-                      }}
-                    >
-                      <div className="m-main">
-                        <div className="m-disp">All (default)</div>
-                        <div className="m-id">Use all globally-enabled MCP servers</div>
-                      </div>
-                      {session.enabledMcpIds === null && (
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                          <polyline points="20 6 9 17 4 12" />
-                        </svg>
-                      )}
-                    </button>
-                    {eligibleMcps.map((s) => {
-                      const checked = session.enabledMcpIds === null || session.enabledMcpIds.includes(s.id)
-                      return (
-                        <button
-                          key={s.id}
-                          className={`model-pop-item ${checked && session.enabledMcpIds !== null ? 'on' : ''}`}
-                          type="button"
-                          onClick={async () => {
-                            const base = session.enabledMcpIds ?? eligibleMcps.map((m) => m.id)
-                            const next = base.includes(s.id)
-                              ? base.filter((x) => x !== s.id)
-                              : [...base, s.id]
-                            const updated = await window.folk.sessions.setEnabledMcpIds(session.id, next)
-                            useSessionStore.getState().upsertSession(updated)
-                            toast({ kind: 'ok', text: `MCP updated (session restarted)` })
-                          }}
-                        >
-                          <div className="m-main">
-                            <div className="m-disp">{s.name}{s.source === 'local' ? ' ↗' : ''}</div>
-                            <div className="m-id">{s.transport} · {s.source === 'local' ? 'Claude Code' : 'folk'}</div>
-                          </div>
-                          {checked && session.enabledMcpIds !== null && (
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                              <polyline points="20 6 9 17 4 12" />
-                            </svg>
-                          )}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
+          {session && (
+            <MCPPicker
+              enabledMcpIds={session.enabledMcpIds}
+              eligibleMcps={eligibleMcps}
+              onChange={async (next) => {
+                if (isDraftSession) {
+                  onDraftPatch?.({ enabledMcpIds: next })
+                  return
+                }
+                const updated = await window.folk.sessions.setEnabledMcpIds(session.id, next)
+                useSessionStore.getState().upsertSession(updated)
+                toast({
+                  kind: 'ok',
+                  text:
+                    next === null
+                      ? 'MCP: all (session restarted)'
+                      : next.length === 0
+                        ? 'MCP: none (session restarted)'
+                        : 'MCP updated (session restarted)'
+                })
+              }}
+            />
           )}
 
           {onConfigureNew && (

@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events'
 import { promises as fs, existsSync } from 'node:fs'
-import { homedir, tmpdir } from 'node:os'
+import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { app } from 'electron'
 import { query, AbortError, getSessionMessages } from '@anthropic-ai/claude-agent-sdk'
@@ -221,7 +221,6 @@ interface LiveSession {
   turnError: ((e: Error) => void) | null
   streamedMessages: Set<string>
   lastUsedAt: number
-  tempConfigDir?: string
 }
 
 interface PendingPermission {
@@ -259,6 +258,11 @@ export class AgentManager extends EventEmitter {
   // De-duplicate concurrent loads for the same session (e.g. renderer's
   // hydrate effect racing with main's prewarm pass).
   #pendingLoads = new Map<string, Promise<PersistedMessage[]>>()
+  // Optional: invoked whenever live session count drops to zero. Used by
+  // MCPManager to flush deferred ~/.claude/.mcp.json writes that were held
+  // back while the SDK had a live stream (the bundled CLI watches that file
+  // and aborts in-flight turns when it changes).
+  #onIdle?: () => void
   constructor(
     private db: Database,
     // Optional: when provided, agent-manager will refresh OAuth tokens for
@@ -308,52 +312,6 @@ export class AgentManager extends EventEmitter {
     return { iterable: iterable(), push, close }
   }
 
-  // Build a per-session CLAUDE_CONFIG_DIR that has a filtered .mcp.json so
-  // the SDK child process only starts the local MCPs the user selected.
-  // Returns null when enabledMcpIds is null (inherit all global MCPs).
-  // Symlinks every other ~/.claude/ entry so transcripts, skills, and plugins
-  // resolve normally despite the config dir being a temp path.
-  async #buildMcpConfigDir(session: Session): Promise<string | null> {
-    if (session.enabledMcpIds === null) return null
-
-    const claudeDir = join(homedir(), '.claude')
-    const tempDir = join(tmpdir(), `folk-mcp-${session.id}`)
-    await fs.mkdir(tempDir, { recursive: true })
-
-    // Build filtered .mcp.json from discovered local MCPs
-    const allowSet = new Set(session.enabledMcpIds)
-    const localMcps = await discoverLocalMCPs()
-    const mcpServers: Record<string, unknown> = {}
-    for (const m of localMcps) {
-      if (!allowSet.has(m.id)) continue
-      const entry: Record<string, unknown> = {}
-      if (m.transport === 'http' && m.url) {
-        entry.type = 'http'
-        entry.url = m.url
-      } else if (m.command) {
-        entry.command = m.command
-        if (m.args?.length) entry.args = m.args
-      }
-      if (m.env && Object.keys(m.env).length > 0) entry.env = m.env
-      mcpServers[m.name] = entry
-    }
-    await fs.writeFile(join(tempDir, '.mcp.json'), JSON.stringify({ mcpServers }, null, 2))
-
-    // Symlink all other ~/.claude/ entries so transcripts/skills/plugins resolve normally
-    try {
-      const entries = await fs.readdir(claudeDir)
-      await Promise.all(
-        entries
-          .filter((e) => e !== '.mcp.json' && e !== 'mcp_servers.json')
-          .map((e) => fs.symlink(join(claudeDir, e), join(tempDir, e)).catch(() => {}))
-      )
-    } catch {
-      // ~/.claude/ unreadable — not fatal, continue without symlinks
-    }
-
-    return tempDir
-  }
-
   async #ensureLive(session: Session, skillPrompts?: string[]): Promise<LiveSession> {
     const existing = this.#live.get(session.id)
     if (existing) {
@@ -396,12 +354,10 @@ export class AgentManager extends EventEmitter {
     }
     if (baseUrlOverride) envOverlay.ANTHROPIC_BASE_URL = baseUrlOverride
 
-    const tempConfigDir = await this.#buildMcpConfigDir(session)
-    if (tempConfigDir) envOverlay.CLAUDE_CONFIG_DIR = tempConfigDir
-
     const mcpMap: Record<string, McpServerConfig> = {}
     const allowList = session.enabledMcpIds
     const allowSet = allowList ? new Set(allowList) : null
+    // folk-managed (DB) MCPs.
     for (const m of this.db
       .listMCPs()
       .filter((x) => x.isEnabled && (!allowSet || allowSet.has(x.id)))) {
@@ -428,6 +384,36 @@ export class AgentManager extends EventEmitter {
         }
       }
     }
+    // Locally-discovered MCPs (read from ~/.claude/.mcp.json + project files).
+    // We pass them explicitly so strictMcpConfig can lock the CLI to the union
+    // of folk-DB + locally-discovered, filtered by the per-session allowlist —
+    // otherwise unselected entries leak in via on-disk discovery.
+    try {
+      const local = await discoverLocalMCPs()
+      for (const m of local.filter(
+        (x) => x.isEnabled && (!allowSet || allowSet.has(x.id))
+      )) {
+        if (mcpMap[m.name]) continue
+        if (m.transport === 'stdio' && m.command) {
+          mcpMap[m.name] = {
+            type: 'stdio',
+            command: m.command,
+            args: m.args ?? [],
+            env: m.env ?? undefined
+          }
+        } else if (m.transport === 'http' && m.url) {
+          mcpMap[m.name] = {
+            type: 'http',
+            url: m.url,
+            headers:
+              m.headers && Object.keys(m.headers).length > 0 ? m.headers : undefined
+          }
+        }
+      }
+    } catch {
+      // discovery failures shouldn't block session start — proceed without
+      // any local MCPs (CLI strict mode means none will be loaded).
+    }
 
     const continuity = session.claudeStarted
       ? { resume: session.id }
@@ -453,6 +439,10 @@ export class AgentManager extends EventEmitter {
         model: session.modelId,
         env: envOverlay,
         mcpServers: mcpMap,
+        // Lock the CLI to only the mcpServers we pass. Without this the
+        // bundled CLI also discovers ~/.claude/.mcp.json + project .mcp.json,
+        // which leaks unselected entries through the per-session allowlist.
+        strictMcpConfig: true,
         abortController: abort,
         includePartialMessages: true,
         stderr: (data: string) => {
@@ -468,9 +458,23 @@ export class AgentManager extends EventEmitter {
         systemPrompt: {
           type: 'preset',
           preset: 'claude_code',
-          append: skillPrompts?.length
-            ? FOLK_PRESENTATION_PROMPT + '\n\n' + skillPrompts.join('\n\n')
-            : FOLK_PRESENTATION_PROMPT
+          append: (() => {
+            const parts = [FOLK_PRESENTATION_PROMPT]
+            if (allowSet) {
+              const active = Object.keys(mcpMap).sort()
+              parts.push(
+                `MCP override active for this session. Folk has restricted the MCP servers available to you. ` +
+                  `Ignore any servers listed in ~/.claude/.mcp.json or other on-disk config — those are NOT loaded for this session, ` +
+                  `even though the file may exist on the filesystem. ` +
+                  (active.length > 0
+                    ? `Servers actually available: ${active.map((n) => '`' + n + '`').join(', ')}.`
+                    : `No MCP servers are available in this session.`) +
+                  ` Do not mention this restriction to the user unless they ask why a particular server is missing.`
+              )
+            }
+            if (skillPrompts?.length) parts.push(...skillPrompts)
+            return parts.join('\n\n')
+          })()
         },
         // Incognito: pass empty skills allowlist so the SDK loads no skills
         // from user/project/plugin sources into the session system prompt.
@@ -587,8 +591,7 @@ export class AgentManager extends EventEmitter {
       turnDone: null,
       turnError: null,
       streamedMessages: new Set(),
-      lastUsedAt: Date.now(),
-      tempConfigDir: tempConfigDir ?? undefined
+      lastUsedAt: Date.now()
     }
 
     live.pump = (async () => {
@@ -606,9 +609,6 @@ export class AgentManager extends EventEmitter {
       } finally {
         if (live.idleTimer) clearTimeout(live.idleTimer)
         this.#live.delete(session.id)
-        if (live.tempConfigDir) {
-          void fs.rm(live.tempConfigDir, { recursive: true, force: true }).catch(() => {})
-        }
       }
     })()
 
@@ -670,6 +670,21 @@ export class AgentManager extends EventEmitter {
       if (winner === 'timeout') live.abort.abort()
     }
     await live.pump.catch(() => {})
+    if (this.#live.size === 0 && this.#onIdle) {
+      try {
+        this.#onIdle()
+      } catch (err) {
+        console.error('[agent-manager] onIdle handler threw:', err)
+      }
+    }
+  }
+
+  hasLiveSessions(): boolean {
+    return this.#live.size > 0
+  }
+
+  setOnAllIdle(fn: () => void): void {
+    this.#onIdle = fn
   }
 
   async createSession(config: SessionConfig): Promise<Session> {
@@ -1032,8 +1047,20 @@ export class AgentManager extends EventEmitter {
       // to clear, retry once.
       const lockTaken = /is already in use/i.test(msg)
       const exit1 = /exited with code 1/i.test(msg)
-      if (!(lockTaken || exit1)) throw err
+      // If we tried to resume but the CLI can't find the transcript (e.g.
+      // a prior turn was killed mid-flight by an MCP edit / restart and
+      // never finalized the jsonl, or the file was wiped), retry as a fresh
+      // init by clearing claudeStarted so #ensureLive uses sessionId mode.
+      const resumeMissing =
+        session.claudeStarted &&
+        /no conversation|session.*not found|conversation.*not found|could not find session|invalid session/i.test(
+          msg
+        )
+      if (!(lockTaken || exit1 || resumeMissing)) throw err
       if (this.#live.has(sessionId)) await this.#teardown(sessionId, 'cancel')
+      if (resumeMissing) {
+        this.db.updateSession(sessionId, { claudeStarted: false })
+      }
       await new Promise((r) => setTimeout(r, 600))
       const refreshed = this.db.getSession(sessionId)
       if (!refreshed) throw err
