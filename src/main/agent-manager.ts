@@ -436,10 +436,19 @@ export class AgentManager extends EventEmitter {
     const abort = new AbortController()
     const { iterable, push, close } = this.#createPromptIterable()
 
+    const claudeBin = resolveClaudeBinary()
+    // Emit a diagnostic notice so the conversation timeline shows binary
+    // resolution state in production — helps debug packaged-app failures.
+    this.emit('notice', {
+      sessionId: session.id,
+      kind: 'lifecycle',
+      text: `[diag] packaged=${app.isPackaged} bin=${claudeBin ?? '(sdk-resolve)'} exists=${claudeBin ? existsSync(claudeBin) : 'n/a'}`
+    })
+
     const q = query({
       prompt: iterable,
       options: {
-        pathToClaudeCodeExecutable: resolveClaudeBinary(),
+        pathToClaudeCodeExecutable: claudeBin,
         cwd: session.workingDir,
         model: session.modelId,
         env: envOverlay,
@@ -451,7 +460,10 @@ export class AgentManager extends EventEmitter {
           // "process exited with code 1" stop being opaque. Trim trailing
           // newlines so each chunk is one log line.
           const t = data.replace(/\s+$/, '')
-          if (t) console.error(`[claude-cli ${session.id}] ${t}`)
+          if (t) {
+            console.error(`[claude-cli ${session.id}] ${t}`)
+            this.emit('notice', { sessionId: session.id, kind: 'lifecycle', text: `[stderr] ${t}` })
+          }
         },
         systemPrompt: {
           type: 'preset',
