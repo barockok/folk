@@ -118,6 +118,9 @@ export interface FolkAPI {
   shell: {
     openExternal: (url: string) => Promise<{ ok: boolean }>
   }
+  app: {
+    reportTheme: (theme: 'light' | 'dark') => void
+  }
   updater: {
     check: () => Promise<{ ok: boolean; version?: string | null; error?: string }>
     quitAndInstall: () => Promise<{ ok: boolean }>

@@ -3,8 +3,47 @@
   <head>
     <meta charset="UTF-8" />
     <title>folk</title>
+    <script>
+      // Apply persisted theme attribute synchronously so the splash + early
+      // CSS pick up the right colors before React mounts. Otherwise prod
+      // launches show the light-theme bg even when the user has dark on.
+      (function () {
+        try {
+          var t = localStorage.getItem('folk.theme')
+          if (t === 'dark' || t === 'light') {
+            document.documentElement.setAttribute('data-theme', t)
+          }
+          var d = localStorage.getItem('folk.density')
+          if (d === 'compact' || d === 'regular') {
+            document.documentElement.setAttribute('data-density', d)
+          }
+        } catch (e) {}
+      })()
+    </script>
+    <style>
+      html, body { margin: 0; padding: 0; height: 100%; background: #ffffff; }
+      [data-theme="dark"], [data-theme="dark"] body { background: #0a0f1e; }
+      #folk-splash {
+        position: fixed; inset: 0; display: flex; align-items: center;
+        justify-content: center; z-index: 99999;
+        background: inherit;
+        opacity: 1; transition: opacity 180ms ease;
+        pointer-events: none;
+      }
+      #folk-splash.hide { opacity: 0; }
+      #folk-splash .dot {
+        width: 8px; height: 8px; border-radius: 50%;
+        background: #533afd;
+        animation: folk-pulse 1.1s ease-in-out infinite;
+      }
+      @keyframes folk-pulse {
+        0%, 100% { opacity: 0.25; transform: scale(0.85); }
+        50% { opacity: 1; transform: scale(1); }
+      }
+    </style>
   </head>
   <body>
+    <div id="folk-splash"><div class="dot"></div></div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

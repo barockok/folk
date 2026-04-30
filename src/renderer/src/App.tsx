@@ -24,6 +24,7 @@ export default function App() {
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
     document.documentElement.setAttribute('data-density', density)
+    try { window.folk?.app?.reportTheme(theme) } catch { /* preload not ready */ }
   }, [theme, density])
 
   useEffect(() => {

@@ -1,6 +1,30 @@
-import { app, BrowserWindow, net, protocol, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, nativeTheme, net, protocol, shell } from 'electron'
 import { join } from 'node:path'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
+
+// Cache the last-known theme so the next launch can paint the BrowserWindow
+// in the correct color before the renderer JS bundle has loaded. Without this
+// cold prod launches flash white — the renderer is the source of truth for
+// theme but it can't communicate that to main before its first paint.
+function themeCachePath(): string {
+  return join(app.getPath('userData'), 'folk-theme.cache')
+}
+function readPersistedTheme(): 'light' | 'dark' | null {
+  try {
+    const v = readFileSync(themeCachePath(), 'utf8').trim()
+    return v === 'dark' ? 'dark' : v === 'light' ? 'light' : null
+  } catch {
+    return null
+  }
+}
+function writePersistedTheme(t: 'light' | 'dark'): void {
+  try {
+    writeFileSync(themeCachePath(), t, 'utf8')
+  } catch {
+    /* best-effort cache; loss only re-introduces the flash on the next boot */
+  }
+}
 
 // Register the custom scheme BEFORE app.whenReady so the renderer treats it
 // as privileged (secure context, fetch-capable, streamable).
@@ -67,12 +91,21 @@ async function bootProxyWithRetry(): Promise<void> {
 }
 
 function createWindow(): void {
+  // Pick an initial backgroundColor that matches the renderer's tokens for the
+  // user's theme. Without this the window paints white before the first React
+  // frame, producing a visible flash on launch (especially noticeable in prod
+  // where bundle parse + mount takes longer than dev).
+  const lastTheme = readPersistedTheme()
+  const isDark = lastTheme ? lastTheme === 'dark' : nativeTheme.shouldUseDarkColors
+  const initialBg = isDark ? '#0a0f1e' : '#ffffff'
+
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 820,
     minWidth: 960,
     minHeight: 640,
     show: false,
+    backgroundColor: initialBg,
     titleBarStyle: 'hiddenInset',
     // Nudge the macOS traffic-light triplet down so it vertically aligns
     // with the in-app topbar content (sidebar toggle + breadcrumb).
@@ -147,11 +180,16 @@ app.whenReady().then(() => {
     }
   })
 
-  // Boot the OpenCode bridge proxy. It's used as ANTHROPIC_BASE_URL for the
-  // opencode-* presets so Claude Code's Messages requests can be translated to
-  // OpenCode's OpenAI-format /chat/completions route. Loopback only.
-  initLogger(join(app.getPath('userData'), 'folk-opencode-proxy.log'))
-  void bootProxyWithRetry()
+  // Renderer reports its applied theme so we can paint the window in the
+  // matching color on the next cold launch.
+  ipcMain.on('app:theme', (_e, t: unknown) => {
+    if (t === 'light' || t === 'dark') writePersistedTheme(t)
+  })
+
+  // Open the window FIRST so the renderer starts loading HTML+JS in parallel
+  // with the rest of main-process init. The renderer doesn't issue IPC until
+  // its first useEffect, by which time DB/IPC are registered below.
+  createWindow()
 
   db = new Database(join(app.getPath('userData'), 'folk.db'))
   mcpManager = new MCPManager(
@@ -159,17 +197,25 @@ app.whenReady().then(() => {
     join(app.getPath('userData'), 'folk-managed-mcps.json')
   )
   agentManager = new AgentManager(db, (id) => mcpManager.getAccessToken(id))
-  // Initial sync on launch so any existing folk-managed entries land in
-  // ~/.claude/.mcp.json right away (handles the very first run after this
-  // feature ships).
-  void mcpManager.syncToClaudeCode()
   registerIpc(db, agentManager, mcpManager)
 
-  createWindow()
   if (mainWindow) {
     wireStreaming(agentManager, mainWindow)
-    if (!is.dev) setupAutoUpdater(mainWindow)
   }
+
+  // Defer everything non-critical to first paint: proxy boot (port bind +
+  // retries), MCP→ClaudeCode sync, and the auto-updater. Running these inline
+  // delayed window creation visibly in prod.
+  setImmediate(() => {
+    initLogger(join(app.getPath('userData'), 'folk-opencode-proxy.log'))
+    void bootProxyWithRetry()
+    void mcpManager.syncToClaudeCode()
+    if (mainWindow && !is.dev) setupAutoUpdater(mainWindow)
+    // Parse the most recent transcripts into AgentManager's LRU so the
+    // renderer's first sidebar click hits memory instead of a 1-30MB JSONL
+    // parse. Best-effort, errors swallowed inside.
+    void agentManager.prewarmRecentSessions(5)
+  })
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

@@ -54,6 +54,9 @@ export const useUIStore = create<UIState>((set) => ({
   setTheme: (t) => {
     localStorage.setItem('folk.theme', t)
     document.documentElement.setAttribute('data-theme', t)
+    // Inform main so the next cold launch can paint the BrowserWindow in the
+    // matching color before the renderer is ready.
+    try { window.folk?.app?.reportTheme(t) } catch { /* preload not ready */ }
     set({ theme: t })
   },
   setDensity: (d) => {

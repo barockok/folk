@@ -236,6 +236,15 @@ export class AgentManager extends EventEmitter {
   #pendingPermissions = new Map<string, PendingPermission>()
   #pendingAsks = new Map<string, PendingAsk>()
   #pendingElicitations = new Map<string, PendingElicitation>()
+  // LRU cache of parsed transcripts. Keyed by sessionId, insertion-ordered so
+  // the oldest entry is evicted when the cap is reached. The on-disk JSONL
+  // can be ~30MB for long sessions and parsing it on every switch was the
+  // dominant cost behind "first session switch is slow" in prod.
+  #messageCache = new Map<string, PersistedMessage[]>()
+  #messageCacheCap = 12
+  // De-duplicate concurrent loads for the same session (e.g. renderer's
+  // hydrate effect racing with main's prewarm pass).
+  #pendingLoads = new Map<string, Promise<PersistedMessage[]>>()
   constructor(
     private db: Database,
     // Optional: when provided, agent-manager will refresh OAuth tokens for
@@ -597,6 +606,23 @@ export class AgentManager extends EventEmitter {
   // (~/.claude/projects/<encoded-cwd>/<sessionId>.jsonl). Returns [] for
   // sessions that have never been started — those have no transcript yet.
   async loadMessages(sessionId: string): Promise<PersistedMessage[]> {
+    const cached = this.#messageCache.get(sessionId)
+    if (cached) {
+      // LRU touch: re-insert so this entry is freshest.
+      this.#messageCache.delete(sessionId)
+      this.#messageCache.set(sessionId, cached)
+      return cached
+    }
+    const inflight = this.#pendingLoads.get(sessionId)
+    if (inflight) return inflight
+    const p = this.#loadMessagesUncached(sessionId).finally(() => {
+      this.#pendingLoads.delete(sessionId)
+    })
+    this.#pendingLoads.set(sessionId, p)
+    return p
+  }
+
+  async #loadMessagesUncached(sessionId: string): Promise<PersistedMessage[]> {
     const session = this.db.getSession(sessionId)
     if (!session || !session.claudeStarted) return []
     let raw: Awaited<ReturnType<typeof getSessionMessages>>
@@ -605,7 +631,44 @@ export class AgentManager extends EventEmitter {
     } catch {
       return []
     }
-    return mapSessionMessages(raw)
+    const mapped = mapSessionMessages(raw)
+    this.#cachePut(sessionId, mapped)
+    return mapped
+  }
+
+  #cachePut(sessionId: string, messages: PersistedMessage[]): void {
+    if (this.#messageCache.has(sessionId)) this.#messageCache.delete(sessionId)
+    this.#messageCache.set(sessionId, messages)
+    while (this.#messageCache.size > this.#messageCacheCap) {
+      const oldest = this.#messageCache.keys().next().value
+      if (oldest === undefined) break
+      this.#messageCache.delete(oldest)
+    }
+  }
+
+  #invalidateMessages(sessionId: string): void {
+    this.#messageCache.delete(sessionId)
+  }
+
+  // Best-effort prewarm: parse the most recently-touched sessions' transcripts
+  // into the LRU cache so the user's first click in the sidebar lands on a
+  // memory hit instead of a JSONL parse. Runs sequentially with small breaks
+  // so we don't starve the event loop on cold launch.
+  async prewarmRecentSessions(limit = 5): Promise<void> {
+    const sessions = this.db.listSessions()
+      .filter((s) => s.claudeStarted)
+      .slice(0, limit)
+    for (const s of sessions) {
+      if (this.#messageCache.has(s.id)) continue
+      try {
+        await this.loadMessages(s.id)
+      } catch {
+        /* ignore — prewarm is best-effort */
+      }
+      // Yield between sessions so the renderer's IPC calls don't queue behind
+      // a long parse.
+      await new Promise((r) => setImmediate(r))
+    }
   }
 
   // Backfill a session's title from the first user message in its on-disk
@@ -644,6 +707,7 @@ export class AgentManager extends EventEmitter {
 
   async deleteSession(id: string): Promise<void> {
     await this.#teardown(id, 'delete')
+    this.#invalidateMessages(id)
     this.db.deleteSession(id)
   }
 
@@ -1066,6 +1130,9 @@ export class AgentManager extends EventEmitter {
         live.turnError = null
         done?.()
       }
+      // Transcript on disk just grew with this turn — drop any cached parse
+      // so the next loadMessages re-reads (or stays evicted until requested).
+      this.#invalidateMessages(sessionId)
       this.emit('done', { sessionId })
     } else if (m.type === 'tool_progress') {
       const r = msg as { tool_use_id?: string; elapsed_time_seconds?: number }
