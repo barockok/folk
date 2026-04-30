@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, startTransition } from 'react'
 import { useSessions } from '../hooks/useSessions'
 import { useSessionStore } from '../stores/useSessionStore'
 import { useProviders } from '../hooks/useProviders'
@@ -166,7 +166,7 @@ export function SessionsPage() {
       <HistoryRail
         sessions={sessions}
         activeId={activeId}
-        onPick={(id) => { setActive(id); setDraft(null) }}
+        onPick={(id) => { startTransition(() => { setActive(id); setDraft(null) }) }}
         onDelete={del}
         onRename={async (id, title) => { await rename(id, title) }}
         onNew={handleNew}

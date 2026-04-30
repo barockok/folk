@@ -23,7 +23,13 @@ export default defineConfig({
     root: 'src/renderer',
     build: {
       rollupOptions: {
-        input: resolve('src/renderer/index.html')
+        input: resolve('src/renderer/index.html'),
+        output: {
+          manualChunks: {
+            react: ['react', 'react-dom'],
+            markdown: ['react-markdown', 'remark-gfm']
+          }
+        }
       }
     },
     resolve: {

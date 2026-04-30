@@ -1,8 +1,9 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import type { Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useSessionStore } from '../../stores/useSessionStore'
+import type { ChatMessage } from '../../stores/useSessionStore'
 import type { MessageBlock, PermissionRequest, PersistedToolCall, Session } from '@shared/types'
 import { ToolCard, humanizeToolName } from './ToolCard'
 import { InlineVisual } from './InlineVisual'
@@ -83,6 +84,196 @@ function collectCallIds(call: PersistedToolCall, into: Set<string>): void {
     for (const c of call.children) collectCallIds(c, into)
   }
 }
+
+interface MessageItemProps {
+  message: ChatMessage
+  isLast: boolean
+  continuation: boolean
+  continuesBelow: boolean
+  isStreaming: boolean
+  lifecycleTicker: string | null
+  pendingPerms: PermissionRequest[]
+  sessionId: string
+}
+
+const MessageItem = memo(function MessageItem({
+  message: m,
+  isLast,
+  continuation,
+  continuesBelow,
+  isStreaming,
+  lifecycleTicker,
+  pendingPerms,
+  sessionId
+}: MessageItemProps) {
+  const hasText = m.blocks.some((b) => b.kind === 'text')
+  const isStreamingThought = isLast && m.role === 'assistant' && !hasText
+  const stripTodos = (b: MessageBlock): boolean =>
+    !(b.kind === 'tool' && b.call.tool === 'TodoWrite')
+  const isMeaningful = (b: MessageBlock): boolean =>
+    !(b.kind === 'text' && b.text.trim().length === 0)
+  const lastBlockIdx = m.blocks.length - 1
+  const visibleBlocks = m.blocks.filter((b, idx) => {
+    if (!stripTodos(b) || !isMeaningful(b)) return false
+    if (b.kind === 'thinking') {
+      return isLast && idx === lastBlockIdx
+    }
+    return true
+  })
+  const lastBlock = m.blocks[m.blocks.length - 1]
+  const hasLiveThinking = isStreamingThought && lastBlock?.kind === 'thinking'
+  const hasRunningTool = m.blocks.some((b) => b.kind === 'tool' && b.call.output === undefined)
+  const showProgress =
+    isLast && m.role === 'assistant' && !m.error && isStreaming && !hasLiveThinking && !hasRunningTool
+
+  type Entry =
+    | { type: 'block'; b: MessageBlock; idx: number }
+    | { type: 'group'; calls: PersistedToolCall[]; idx: number }
+  const entries: Entry[] = []
+  for (let j = 0; j < visibleBlocks.length; j++) {
+    const b = visibleBlocks[j]
+    if (b.kind === 'tool') {
+      const calls: PersistedToolCall[] = [b.call]
+      const startIdx = j
+      while (j + 1 < visibleBlocks.length && visibleBlocks[j + 1].kind === 'tool') {
+        j++
+        calls.push((visibleBlocks[j] as { kind: 'tool'; call: PersistedToolCall }).call)
+      }
+      if (calls.length >= 2) {
+        entries.push({ type: 'group', calls, idx: startIdx })
+      } else {
+        entries.push({ type: 'block', b: { kind: 'tool', call: calls[0] } as MessageBlock, idx: startIdx })
+      }
+    } else {
+      entries.push({ type: 'block', b, idx: j })
+    }
+  }
+
+  let lastThinkingIdx = -1
+  for (let k = visibleBlocks.length - 1; k >= 0; k--) {
+    if (visibleBlocks[k].kind === 'thinking') {
+      lastThinkingIdx = k
+      break
+    }
+  }
+
+  return (
+    <article
+      className={`msg msg-${m.role}${continuation ? ' continuation' : ''}`}
+      data-continues-below={continuesBelow ? 'true' : 'false'}
+    >
+      {continuation ? (
+        <div className="msg-rail" aria-hidden="true">
+          <span className="msg-rail-dot" />
+        </div>
+      ) : (
+        <div className={`msg-avatar ${m.role === 'user' ? 'user' : 'assist'}`}>
+          {m.role === 'user' ? 'Y' : 'F'}
+        </div>
+      )}
+      <div className="msg-content">
+        {!continuation && (
+          <div className="msg-name">
+            {m.role === 'user' ? 'You' : 'folk'}
+            <span className="when">{new Date(m.createdAt).toLocaleTimeString()}</span>
+          </div>
+        )}
+        {entries.map((e) => {
+          if (e.type === 'group') {
+            return (
+              <div key={`${m.id}-grp-${e.idx}`} className="msg-tools">
+                <ToolGroup calls={e.calls} />
+              </div>
+            )
+          }
+          const b = e.b
+          const key = `${m.id}-${e.idx}`
+          if (b.kind === 'thinking') {
+            const isLiveThinking =
+              isLast &&
+              isStreaming &&
+              e.idx === lastThinkingIdx &&
+              lastThinkingIdx === visibleBlocks.length - 1
+            return (
+              <details
+                key={key}
+                className={`msg-thinking${isLiveThinking ? ' live' : ''}`}
+                open={isLiveThinking}
+              >
+                <summary>
+                  {isLiveThinking ? (
+                    <span className="dots">
+                      <span /><span /><span />
+                    </span>
+                  ) : (
+                    <span className="msg-thinking-bullet" aria-hidden="true">·</span>
+                  )}
+                  <span className="msg-thinking-label">
+                    {isLiveThinking ? 'Thinking' : 'Thought'}
+                  </span>
+                  {isLiveThinking && lifecycleTicker && (
+                    <span className="msg-thinking-ticker" title={lifecycleTicker}>
+                      {lifecycleTicker}
+                    </span>
+                  )}
+                  <span className="chev">▸</span>
+                </summary>
+                <div className="msg-thinking-body">{b.text}</div>
+              </details>
+            )
+          }
+          if (b.kind === 'tool') {
+            const matchingPerms =
+              b.call.tool === 'AskUserQuestion'
+                ? []
+                : pendingPerms.filter((pr) => pr.toolUseID === b.call.callId)
+            return (
+              <div key={key} className="msg-tools">
+                <ToolCard call={b.call} sessionId={sessionId} />
+                {matchingPerms.map((pr) => (
+                  <PermissionPrompt key={pr.requestId} req={pr} />
+                ))}
+              </div>
+            )
+          }
+          return (
+            <div key={key} className="msg-body md">
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD_COMPONENTS}>
+                {b.text}
+              </ReactMarkdown>
+            </div>
+          )
+        })}
+        {isLast && m.role === 'assistant' && (() => {
+          const renderedIds = new Set<string>()
+          for (const b of m.blocks) {
+            if (b.kind === 'tool') collectCallIds(b.call, renderedIds)
+          }
+          const orphans = pendingPerms.filter(
+            (pr) => !renderedIds.has(pr.toolUseID) && pr.toolName !== 'AskUserQuestion'
+          )
+          return orphans.map((pr) => (
+            <PermissionPrompt key={pr.requestId} req={pr} />
+          ))
+        })()}
+        {showProgress && (
+          <div className="msg-thinking live no-body">
+            <span className="dots"><span /><span /><span /></span>
+            <span className="msg-thinking-label">
+              {visibleBlocks.length === 0 ? 'Thinking…' : 'Working…'}
+            </span>
+            {lifecycleTicker && (
+              <span className="msg-thinking-ticker" title={lifecycleTicker}>
+                {lifecycleTicker}
+              </span>
+            )}
+          </div>
+        )}
+        {m.error && <div className="msg-error">{m.error.message}</div>}
+      </div>
+    </article>
+  )
+})
 
 // The SDK replays compaction by writing a single synthetic user message into
 // the on-disk transcript that contains the prior-session summary. After a
@@ -442,7 +633,7 @@ export function Conversation({ session }: { session: Session | null }) {
           </button>
         )}
         {items.map((p, i) => {
-          const { m, visibleBlocks, showProgress } = p
+          const { m } = p
           if (m.role === 'system') {
             const label = m.blocks.find((b) => b.kind === 'text')?.text ?? 'Context compacted'
             return (
@@ -453,7 +644,6 @@ export function Conversation({ session }: { session: Session | null }) {
               </div>
             )
           }
-          // Replayed compact-summary user message — collapse by default.
           if (m.role === 'user') {
             const firstText = m.blocks.find((b) => b.kind === 'text')?.text
             if (isCompactSummary(firstText)) {
@@ -462,183 +652,20 @@ export function Conversation({ session }: { session: Session | null }) {
           }
           const prev = i > 0 ? items[i - 1].m : null
           const next = i < items.length - 1 ? items[i + 1].m : null
-          // Timeline breaks at every role transition — each new turn (user
-          // start or assistant start) gets a fresh avatar with no rail above.
-          // Within a same-role run, rail stays connected.
           const continuation = prev != null && prev.role !== 'system' && prev.role === m.role
           const continuesBelow = next != null && next.role !== 'system' && next.role === m.role
           return (
-            <article
+            <MessageItem
               key={m.id}
-              className={`msg msg-${m.role}${continuation ? ' continuation' : ''}`}
-              data-continues-below={continuesBelow ? 'true' : 'false'}
-            >
-              {continuation ? (
-                <div className="msg-rail" aria-hidden="true">
-                  <span className="msg-rail-dot" />
-                </div>
-              ) : (
-                <div className={`msg-avatar ${m.role === 'user' ? 'user' : 'assist'}`}>
-                  {m.role === 'user' ? 'Y' : 'F'}
-                </div>
-              )}
-              <div className="msg-content">
-                {!continuation && (
-                  <div className="msg-name">
-                    {m.role === 'user' ? 'You' : 'folk'}
-                    <span className="when">{new Date(m.createdAt).toLocaleTimeString()}</span>
-                  </div>
-                )}
-                {(() => {
-                  // Coalesce consecutive same-tool tool blocks into a group
-                  // entry so a chain of identical calls renders as one chip.
-                  type Entry =
-                    | { type: 'block'; b: typeof visibleBlocks[number]; idx: number }
-                    | { type: 'group'; calls: PersistedToolCall[]; idx: number }
-                  const entries: Entry[] = []
-                  for (let j = 0; j < visibleBlocks.length; j++) {
-                    const b = visibleBlocks[j]
-                    if (b.kind === 'tool') {
-                      // Greedily absorb every subsequent tool block — different
-                      // tools allowed. Run breaks only when a text or thinking
-                      // block intervenes.
-                      const calls: PersistedToolCall[] = [b.call]
-                      const startIdx = j
-                      while (
-                        j + 1 < visibleBlocks.length &&
-                        visibleBlocks[j + 1].kind === 'tool'
-                      ) {
-                        j++
-                        calls.push(
-                          (visibleBlocks[j] as { kind: 'tool'; call: PersistedToolCall }).call
-                        )
-                      }
-                      if (calls.length >= 2) {
-                        entries.push({ type: 'group', calls, idx: startIdx })
-                      } else {
-                        entries.push({
-                          type: 'block',
-                          b: { kind: 'tool', call: calls[0] } as typeof visibleBlocks[number],
-                          idx: startIdx
-                        })
-                      }
-                    } else {
-                      entries.push({ type: 'block', b, idx: j })
-                    }
-                  }
-                  let lastThinkingIdx = -1
-                  for (let k = visibleBlocks.length - 1; k >= 0; k--) {
-                    if (visibleBlocks[k].kind === 'thinking') {
-                      lastThinkingIdx = k
-                      break
-                    }
-                  }
-                  return entries.map((e) => {
-                    if (e.type === 'group') {
-                      return (
-                        <div key={`${m.id}-grp-${e.idx}`} className="msg-tools">
-                          <ToolGroup calls={e.calls} />
-                        </div>
-                      )
-                    }
-                    const b = e.b
-                    const key = `${m.id}-${e.idx}`
-                    if (b.kind === 'thinking') {
-                      const isLive =
-                        p.isLast &&
-                        isStreaming &&
-                        e.idx === lastThinkingIdx &&
-                        lastThinkingIdx === visibleBlocks.length - 1
-                      return (
-                        <details
-                          key={key}
-                          className={`msg-thinking${isLive ? ' live' : ''}`}
-                          open={isLive}
-                        >
-                          <summary>
-                            {isLive ? (
-                              <span className="dots">
-                                <span /><span /><span />
-                              </span>
-                            ) : (
-                              <span className="msg-thinking-bullet" aria-hidden="true">·</span>
-                            )}
-                            <span className="msg-thinking-label">
-                              {isLive ? 'Thinking' : 'Thought'}
-                            </span>
-                            {isLive && lifecycleTicker && (
-                              <span className="msg-thinking-ticker" title={lifecycleTicker}>
-                                {lifecycleTicker}
-                              </span>
-                            )}
-                            <span className="chev">▸</span>
-                          </summary>
-                          <div className="msg-thinking-body">{b.text}</div>
-                        </details>
-                      )
-                    }
-                    if (b.kind === 'tool') {
-                      // AskUserQuestion is auto-allowed (it's an elicitation
-                      // tool, not a privileged op) — never render an
-                      // Allow/Deny prompt for it, even if a stale request
-                      // landed in the store before this auto-allow shipped.
-                      const matchingPerms =
-                        b.call.tool === 'AskUserQuestion'
-                          ? []
-                          : pendingPerms.filter((pr) => pr.toolUseID === b.call.callId)
-                      return (
-                        <div key={key} className="msg-tools">
-                          <ToolCard call={b.call} sessionId={session.id} />
-                          {matchingPerms.map((pr) => (
-                            <PermissionPrompt key={pr.requestId} req={pr} />
-                          ))}
-                        </div>
-                      )
-                    }
-                    return (
-                      <div key={key} className="msg-body md">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD_COMPONENTS}>
-                          {b.text}
-                        </ReactMarkdown>
-                      </div>
-                    )
-                  })
-                })()}
-                {p.isLast &&
-                  m.role === 'assistant' &&
-                  (() => {
-                    // Permission requests whose toolUseID didn't match any
-                    // rendered tool block — surface them at the message foot
-                    // so the user can still respond.
-                    const renderedIds = new Set<string>()
-                    for (const b of m.blocks) {
-                      if (b.kind === 'tool') collectCallIds(b.call, renderedIds)
-                    }
-                    const orphans = pendingPerms.filter(
-                      (pr) =>
-                        !renderedIds.has(pr.toolUseID) &&
-                        pr.toolName !== 'AskUserQuestion'
-                    )
-                    return orphans.map((pr) => (
-                      <PermissionPrompt key={pr.requestId} req={pr} />
-                    ))
-                  })()}
-                {showProgress && (
-                  <div className="msg-thinking live no-body">
-                    <span className="dots"><span /><span /><span /></span>
-                    <span className="msg-thinking-label">
-                      {visibleBlocks.length === 0 ? 'Thinking…' : 'Working…'}
-                    </span>
-                    {lifecycleTicker && (
-                      <span className="msg-thinking-ticker" title={lifecycleTicker}>
-                        {lifecycleTicker}
-                      </span>
-                    )}
-                  </div>
-                )}
-                {m.error && <div className="msg-error">{m.error.message}</div>}
-              </div>
-            </article>
+              message={m}
+              isLast={p.isLast}
+              continuation={continuation}
+              continuesBelow={continuesBelow}
+              isStreaming={isStreaming}
+              lifecycleTicker={lifecycleTicker}
+              pendingPerms={pendingPerms}
+              sessionId={session.id}
+            />
           )
         })}
       </div>
