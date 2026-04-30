@@ -1,10 +1,11 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import React, { Children, isValidElement, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import type { Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useSessionStore } from '../../stores/useSessionStore'
 import type { MessageBlock, PermissionRequest, PersistedToolCall, Session } from '@shared/types'
 import { ToolCard, humanizeToolName } from './ToolCard'
+import { InlineVisual } from './InlineVisual'
 
 // Local-image rewrite: absolute paths and file:// URLs aren't loadable by the
 // renderer directly (security + protocol). We register a custom folk-file://
@@ -22,6 +23,20 @@ function rewriteImgSrc(src?: string): string | undefined {
 }
 
 const MD_COMPONENTS: Components = {
+  pre: ({ children, ...rest }) => {
+    // Intercept html/svg fenced blocks and render as a live inline visual
+    // instead of a syntax-highlighted code block.
+    const kids = Children.toArray(children)
+    if (kids.length === 1 && isValidElement(kids[0])) {
+      const codeEl = kids[0] as React.ReactElement<{ className?: string; children?: React.ReactNode }>
+      const lang = /language-(html|svg)/.exec(codeEl.props.className ?? '')?.[1] as 'html' | 'svg' | undefined
+      if (lang) {
+        const code = String(codeEl.props.children ?? '').replace(/\n$/, '')
+        return <InlineVisual code={code} lang={lang} />
+      }
+    }
+    return <pre {...rest}>{children}</pre>
+  },
   img: ({ src, alt, ...props }) => {
     const safe = rewriteImgSrc(typeof src === 'string' ? src : undefined)
     return <img src={safe} alt={alt} {...props} />
