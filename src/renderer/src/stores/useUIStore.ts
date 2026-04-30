@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { INITIAL_SKILLS } from '../data'
 
 export type PageKey =
   | 'sessions'
@@ -23,6 +24,8 @@ interface UIState {
   density: 'compact' | 'regular'
   sidebarCollapsed: boolean
   forceOnboarding: boolean
+  folkSkillsEnabled: Record<string, boolean>
+  toggleFolkSkill: (id: string) => void
   setPage: (p: PageKey) => void
   openCmdk: () => void
   closeCmdk: () => void
@@ -42,6 +45,11 @@ export const useUIStore = create<UIState>((set) => ({
   density: (localStorage.getItem('folk.density') as 'compact' | 'regular') || 'compact',
   sidebarCollapsed: localStorage.getItem('folk.sidebarCollapsed') === '1',
   forceOnboarding: false,
+  folkSkillsEnabled: (() => {
+    const saved = localStorage.getItem('folk.folkSkills')
+    if (saved) return JSON.parse(saved) as Record<string, boolean>
+    return Object.fromEntries(INITIAL_SKILLS.map((s) => [s.id, s.enabled]))
+  })(),
   setPage: (p) => {
     localStorage.setItem('folk.lastTab', p)
     set({ page: p })
@@ -70,5 +78,11 @@ export const useUIStore = create<UIState>((set) => ({
       localStorage.setItem('folk.sidebarCollapsed', v ? '1' : '0')
       return { sidebarCollapsed: v }
     }),
-  setForceOnboarding: (v) => set({ forceOnboarding: v })
+  setForceOnboarding: (v) => set({ forceOnboarding: v }),
+  toggleFolkSkill: (id) =>
+    set((st) => {
+      const next = { ...st.folkSkillsEnabled, [id]: !st.folkSkillsEnabled[id] }
+      localStorage.setItem('folk.folkSkills', JSON.stringify(next))
+      return { folkSkillsEnabled: next }
+    })
 }))

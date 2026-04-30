@@ -1,14 +1,19 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useSessions } from '../hooks/useSessions'
 import { useSessionStore } from '../stores/useSessionStore'
+import { useProviders } from '../hooks/useProviders'
+import { useUIStore } from '../stores/useUIStore'
 import { HistoryRail } from './sessions/HistoryRail'
 import { Conversation } from './sessions/Conversation'
 import { Composer } from './sessions/Composer'
 import { TodoPanel } from './sessions/TodoPanel'
-import { SessionsEmpty } from './sessions/SessionsEmpty'
-import { SessionSetup } from '../onboarding/SessionSetup'
-import { loadDefaultSessionConfig } from '../lib/defaultSessionConfig'
+import { HeroConfigBar } from './sessions/HeroConfigBar'
+import {
+  loadDefaultSessionConfig,
+  saveDefaultSessionConfig
+} from '../lib/defaultSessionConfig'
 import { useProfileStore } from '../stores/useProfileStore'
+import { Icon } from '../components/icons'
 import type { Attachment, ChatMessage, Session, SessionConfig } from '@shared/types'
 
 // Stable empty array — returning `[]` from a Zustand selector triggers
@@ -24,6 +29,8 @@ const HERO_GREETINGS = [
 
 export function SessionsPage() {
   const { sessions, activeId, setActive, create, delete: del, rename, send, cancel } = useSessions()
+  const { enabledModels } = useProviders()
+  const setPage = useUIStore((s) => s.setPage)
   // A draft is a configured-but-unsent session — purely renderer-side, never
   // persisted to SQLite, never visible in the sidebar. The user clicks "new"
   // → we synthesize a Session shape from the stored defaults, render the
@@ -31,7 +38,6 @@ export function SessionsPage() {
   // become a real session via window.folk.sessions.create.
   const [draft, setDraft] = useState<{ session: Session; config: SessionConfig } | null>(null)
   const active = draft?.session ?? sessions.find((s) => s.id === activeId) ?? null
-  const [needsSetup, setNeedsSetup] = useState(false)
   const messages = useSessionStore((s) =>
     active ? s.messages[active.id] ?? EMPTY_MESSAGES : EMPTY_MESSAGES
   )
@@ -40,9 +46,7 @@ export function SessionsPage() {
   )
   const profileName = useProfileStore((s) => s.profile?.nickname?.trim() || '')
   // Hero composer mode: session is configured but the user hasn't sent the
-  // first turn yet (no persisted messages, nothing streaming). Mirrors
-  // Claude's Cowork canvas — center the composer with a greeting until the
-  // conversation has content to anchor the scroll view.
+  // first turn yet (no persisted messages, nothing streaming).
   // `claudeStarted` gates against the brief moment between activating a
   // resumed session and its transcript hydrating, where messages.length is
   // momentarily 0 — without this gate the hero flashes on every switch into
@@ -57,14 +61,6 @@ export function SessionsPage() {
   const greeting = profileName
     ? `Hey ${profileName.split(' ')[0]}, ${HERO_GREETINGS[greetingIdx].toLowerCase()}`
     : HERO_GREETINGS[greetingIdx]
-
-  async function handleLaunch(config: SessionConfig) {
-    // Launching from SessionSetup means the user picked the model/folder
-    // explicitly. Stage as a draft so the same "doesn't exist until first
-    // send" rule applies.
-    stageDraft(config)
-    setNeedsSetup(false)
-  }
 
   function stageDraft(config: SessionConfig) {
     const now = Date.now()
@@ -87,38 +83,49 @@ export function SessionsPage() {
     setActive(null)
   }
 
-  async function handleNew() {
+  function handleNew() {
+    // Always stage a draft. Defaults (saved or derived) populate the hero —
+    // the user can tweak any field via the inline config bar before sending.
     const def = loadDefaultSessionConfig()
-    if (def && def.modelId && def.workingDir) {
-      stageDraft({
-        modelId: def.modelId,
-        workingDir: def.workingDir,
-        flags: def.flags,
-        permissionMode: def.permissionMode,
-        incognito: def.incognito,
-        enabledMcpIds: def.enabledMcpIds ?? null
-      })
-      setNeedsSetup(false)
-      return
-    }
-    setActive(null)
-    setDraft(null)
-    setNeedsSetup(true)
+    const mostRecent = sessions
+      .slice()
+      .sort((a, b) => b.updatedAt - a.updatedAt)[0]
+    stageDraft({
+      modelId: def?.modelId ?? enabledModels[0]?.id ?? '',
+      workingDir: def?.workingDir ?? mostRecent?.workingDir ?? '',
+      flags: def?.flags,
+      permissionMode: def?.permissionMode ?? 'default',
+      incognito: def?.incognito ?? false,
+      enabledMcpIds: def?.enabledMcpIds ?? null
+    })
   }
 
-  function handleConfigureNew() {
-    setActive(null)
-    setDraft(null)
-    setNeedsSetup(true)
-  }
+  // Auto-stage a draft on mount whenever nothing is active. Replaces the old
+  // SessionsEmpty splash — folk drops you straight into a hero composer so
+  // the first action is always "type and send".
+  useEffect(() => {
+    if (active || draft) return
+    handleNew()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, draft])
 
   // Send wrapper that promotes the draft into a real persisted session on the
   // first submit. After this returns, `active` flips from the synthetic draft
   // to the real session pulled from `sessions` (created by useSessions.create
-  // upserting the row), and the sidebar shows it for the first time.
+  // upserting the row), and the sidebar shows it for the first time. We also
+  // snapshot the chosen config to localStorage so the next "+" click reuses
+  // the same folder/model/perms.
   async function handleSend(text: string, atts?: Attachment[]) {
     if (draft) {
       const real = await create(draft.config)
+      saveDefaultSessionConfig({
+        modelId: draft.config.modelId,
+        workingDir: draft.config.workingDir,
+        flags: draft.config.flags,
+        permissionMode: draft.config.permissionMode,
+        incognito: draft.config.incognito,
+        enabledMcpIds: draft.config.enabledMcpIds ?? null
+      })
       setDraft(null)
       await send(real.id, text, atts)
       return
@@ -127,8 +134,8 @@ export function SessionsPage() {
     await send(active.id, text, atts)
   }
 
-  // Absorb model/permission tweaks made against a draft into the staged
-  // config + synthesized Session so they survive the eventual create call.
+  // Absorb config tweaks made against a draft into the staged config + the
+  // synthesized Session so they survive the eventual create call.
   function patchDraft(patch: Partial<Session>) {
     setDraft((prev) => {
       if (!prev) return prev
@@ -137,41 +144,65 @@ export function SessionsPage() {
         config: {
           ...prev.config,
           modelId: patch.modelId ?? prev.config.modelId,
+          workingDir: patch.workingDir ?? prev.config.workingDir,
+          goal: patch.goal === null ? undefined : patch.goal ?? prev.config.goal,
+          flags: patch.flags === null ? undefined : patch.flags ?? prev.config.flags,
           permissionMode: patch.permissionMode ?? prev.config.permissionMode,
           incognito: patch.incognito ?? prev.config.incognito,
-          enabledMcpIds: patch.enabledMcpIds ?? prev.config.enabledMcpIds
+          enabledMcpIds:
+            patch.enabledMcpIds !== undefined
+              ? patch.enabledMcpIds
+              : prev.config.enabledMcpIds
         }
       }
     })
   }
+
+  const hasProvider = enabledModels.length > 0
+  const draftReady = !!active && (!isFresh || (!!active.modelId && !!active.workingDir))
 
   return (
     <div className="sess-wrap">
       <HistoryRail
         sessions={sessions}
         activeId={activeId}
-        onPick={(id) => { setActive(id); setDraft(null); setNeedsSetup(false) }}
+        onPick={(id) => { setActive(id); setDraft(null) }}
         onDelete={del}
         onRename={async (id, title) => { await rename(id, title) }}
         onNew={handleNew}
       />
       <div className={`sess-main${isFresh ? ' is-fresh' : ''}`}>
-        {needsSetup ? (
-          <SessionSetup
-            onLaunch={handleLaunch}
-            onCancel={() => setNeedsSetup(false)}
-          />
-        ) : active ? (
+        {active && (
           isFresh ? (
             <div className="sess-hero">
               <h1 className="sess-hero-title">{greeting}</h1>
-              <Composer
-                session={active}
-                onSend={handleSend}
-                onCancel={() => cancel(active.id)}
-                onConfigureNew={handleConfigureNew}
-                onDraftPatch={patchDraft}
-              />
+              {!hasProvider ? (
+                <div className="sess-hero-cta">
+                  <div className="sess-hero-cta-icon"><Icon name="cpu" size={20} /></div>
+                  <div className="sess-hero-cta-body">
+                    <div className="sess-hero-cta-title">Configure a provider to start</div>
+                    <div className="sess-hero-cta-sub">
+                      Add an Anthropic, OpenRouter, or custom provider key, then enable a model.
+                    </div>
+                  </div>
+                  <button className="btn btn-primary" onClick={() => setPage('model')}>
+                    Open Models
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <Composer
+                    session={active}
+                    onSend={handleSend}
+                    onCancel={() => cancel(active.id)}
+                    onDraftPatch={patchDraft}
+                  />
+                  <HeroConfigBar
+                    session={active}
+                    onPatch={patchDraft}
+                  />
+                </>
+              )}
             </div>
           ) : (
             <>
@@ -182,19 +213,13 @@ export function SessionsPage() {
                 session={active}
                 onSend={handleSend}
                 onCancel={() => cancel(active.id)}
-                onConfigureNew={handleConfigureNew}
                 onDraftPatch={patchDraft}
               />
             </>
           )
-        ) : (
-          <SessionsEmpty
-            hasSessions={sessions.length > 0}
-            onNew={handleNew}
-          />
         )}
       </div>
-      {!needsSetup && !isFresh && <TodoPanel session={active} />}
+      {!isFresh && draftReady && <TodoPanel session={active} />}
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import React, { Children, isValidElement, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import type { Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -22,20 +22,32 @@ function rewriteImgSrc(src?: string): string | undefined {
   return 'folk-file://localhost' + absolute.split('/').map(encodeURIComponent).join('/')
 }
 
+// Extract text content from a hast node tree.
+function hastText(node: HastNode): string {
+  if (node.type === 'text') return (node as { type: 'text'; value: string }).value
+  const el = node as HastElement
+  return (el.children ?? []).map(hastText).join('')
+}
+
+type HastNode = { type: string; children?: HastNode[] }
+type HastElement = HastNode & { tagName?: string; properties?: Record<string, unknown> }
+
 const MD_COMPONENTS: Components = {
-  pre: ({ children, ...rest }) => {
-    // Intercept html/svg fenced blocks and render as a live inline visual
-    // instead of a syntax-highlighted code block.
-    const kids = Children.toArray(children)
-    if (kids.length === 1 && isValidElement(kids[0])) {
-      const codeEl = kids[0] as React.ReactElement<{ className?: string; children?: React.ReactNode }>
-      const lang = /language-(html|svg)/.exec(codeEl.props.className ?? '')?.[1] as 'html' | 'svg' | undefined
+  pre: ({ node, children }) => {
+    // Use the hast AST (node prop) — reliable across react-markdown v8/v9/v10.
+    const codeChild = (node as HastElement | undefined)?.children?.find(
+      (c): c is HastElement => c.type === 'element' && (c as HastElement).tagName === 'code'
+    )
+    if (codeChild) {
+      const classes = (codeChild.properties?.className ?? []) as string[]
+      const langClass = classes.find((c) => /^language-/.test(c)) ?? ''
+      const lang = /language-(html|svg)/.exec(langClass)?.[1] as 'html' | 'svg' | undefined
       if (lang) {
-        const code = String(codeEl.props.children ?? '').replace(/\n$/, '')
+        const code = hastText(codeChild).replace(/\n$/, '')
         return <InlineVisual code={code} lang={lang} />
       }
     }
-    return <pre {...rest}>{children}</pre>
+    return <pre>{children}</pre>
   },
   img: ({ src, alt, ...props }) => {
     const safe = rewriteImgSrc(typeof src === 'string' ? src : undefined)

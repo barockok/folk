@@ -43,11 +43,12 @@ export interface FolkAPI {
     loadMessages: (id: string) => Promise<PersistedMessage[]>
     setPermissionMode: (id: string, mode: PermissionMode) => Promise<Session>
     setModel: (id: string, modelId: string) => Promise<Session>
+    setEnabledMcpIds: (id: string, mcpIds: string[] | null) => Promise<Session>
     backfillTitle: (id: string) => Promise<Session | null>
     rename: (id: string, title: string) => Promise<Session>
   }
   agent: {
-    sendMessage: (sessionId: string, text: string, attachments?: Attachment[]) => Promise<void>
+    sendMessage: (sessionId: string, text: string, attachments?: Attachment[], skillPrompts?: string[]) => Promise<void>
     cancel: (sessionId: string) => Promise<void>
     onChunk: (fn: (e: AgentChunk) => void) => () => void
     onThinking: (fn: (e: AgentChunk) => void) => () => void

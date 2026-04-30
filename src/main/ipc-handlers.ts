@@ -153,11 +153,15 @@ export function registerIpc(
   ipcMain.handle('sessions:setModel', (_e, id: string, modelId: string) =>
     agent.setModel(id, modelId)
   )
+  ipcMain.handle(
+    'sessions:setEnabledMcpIds',
+    (_e, id: string, mcpIds: string[] | null) => agent.setEnabledMcpIds(id, mcpIds)
+  )
 
   ipcMain.handle(
     'agent:sendMessage',
-    (_e, sessionId: string, text: string, attachments?: Attachment[]) =>
-      agent.sendMessage(sessionId, text, attachments)
+    (_e, sessionId: string, text: string, attachments?: Attachment[], skillPrompts?: string[]) =>
+      agent.sendMessage(sessionId, text, attachments, skillPrompts)
   )
   ipcMain.handle('agent:cancel', (_e, sessionId: string) => agent.cancel(sessionId))
   ipcMain.handle(

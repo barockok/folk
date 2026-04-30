@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events'
 import { promises as fs } from 'node:fs'
-import { homedir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { query, AbortError, getSessionMessages } from '@anthropic-ai/claude-agent-sdk'
 import type {
@@ -15,6 +15,7 @@ import { randomUUID } from 'node:crypto'
 import { Database } from './database'
 import { FOLK_PRESENTATION_PROMPT } from './system-prompt'
 import { waitForProxyPort } from './opencode-proxy/state'
+import { discoverLocalMCPs } from './mcp-local-discovery'
 import type {
   Session,
   SessionConfig,
@@ -208,6 +209,7 @@ interface LiveSession {
   turnError: ((e: Error) => void) | null
   streamedMessages: Set<string>
   lastUsedAt: number
+  tempConfigDir?: string
 }
 
 interface PendingPermission {
@@ -294,7 +296,53 @@ export class AgentManager extends EventEmitter {
     return { iterable: iterable(), push, close }
   }
 
-  async #ensureLive(session: Session): Promise<LiveSession> {
+  // Build a per-session CLAUDE_CONFIG_DIR that has a filtered .mcp.json so
+  // the SDK child process only starts the local MCPs the user selected.
+  // Returns null when enabledMcpIds is null (inherit all global MCPs).
+  // Symlinks every other ~/.claude/ entry so transcripts, skills, and plugins
+  // resolve normally despite the config dir being a temp path.
+  async #buildMcpConfigDir(session: Session): Promise<string | null> {
+    if (session.enabledMcpIds === null) return null
+
+    const claudeDir = join(homedir(), '.claude')
+    const tempDir = join(tmpdir(), `folk-mcp-${session.id}`)
+    await fs.mkdir(tempDir, { recursive: true })
+
+    // Build filtered .mcp.json from discovered local MCPs
+    const allowSet = new Set(session.enabledMcpIds)
+    const localMcps = await discoverLocalMCPs()
+    const mcpServers: Record<string, unknown> = {}
+    for (const m of localMcps) {
+      if (!allowSet.has(m.id)) continue
+      const entry: Record<string, unknown> = {}
+      if (m.transport === 'http' && m.url) {
+        entry.type = 'http'
+        entry.url = m.url
+      } else if (m.command) {
+        entry.command = m.command
+        if (m.args?.length) entry.args = m.args
+      }
+      if (m.env && Object.keys(m.env).length > 0) entry.env = m.env
+      mcpServers[m.name] = entry
+    }
+    await fs.writeFile(join(tempDir, '.mcp.json'), JSON.stringify({ mcpServers }, null, 2))
+
+    // Symlink all other ~/.claude/ entries so transcripts/skills/plugins resolve normally
+    try {
+      const entries = await fs.readdir(claudeDir)
+      await Promise.all(
+        entries
+          .filter((e) => e !== '.mcp.json' && e !== 'mcp_servers.json')
+          .map((e) => fs.symlink(join(claudeDir, e), join(tempDir, e)).catch(() => {}))
+      )
+    } catch {
+      // ~/.claude/ unreadable — not fatal, continue without symlinks
+    }
+
+    return tempDir
+  }
+
+  async #ensureLive(session: Session, skillPrompts?: string[]): Promise<LiveSession> {
     const existing = this.#live.get(session.id)
     if (existing) {
       existing.lastUsedAt = Date.now()
@@ -335,6 +383,9 @@ export class AgentManager extends EventEmitter {
       }
     }
     if (baseUrlOverride) envOverlay.ANTHROPIC_BASE_URL = baseUrlOverride
+
+    const tempConfigDir = await this.#buildMcpConfigDir(session)
+    if (tempConfigDir) envOverlay.CLAUDE_CONFIG_DIR = tempConfigDir
 
     const mcpMap: Record<string, McpServerConfig> = {}
     const allowList = session.enabledMcpIds
@@ -392,7 +443,9 @@ export class AgentManager extends EventEmitter {
         systemPrompt: {
           type: 'preset',
           preset: 'claude_code',
-          append: FOLK_PRESENTATION_PROMPT
+          append: skillPrompts?.length
+            ? FOLK_PRESENTATION_PROMPT + '\n\n' + skillPrompts.join('\n\n')
+            : FOLK_PRESENTATION_PROMPT
         },
         // Incognito: pass empty skills allowlist so the SDK loads no skills
         // from user/project/plugin sources into the session system prompt.
@@ -509,7 +562,8 @@ export class AgentManager extends EventEmitter {
       turnDone: null,
       turnError: null,
       streamedMessages: new Set(),
-      lastUsedAt: Date.now()
+      lastUsedAt: Date.now(),
+      tempConfigDir: tempConfigDir ?? undefined
     }
 
     live.pump = (async () => {
@@ -527,6 +581,9 @@ export class AgentManager extends EventEmitter {
       } finally {
         if (live.idleTimer) clearTimeout(live.idleTimer)
         this.#live.delete(session.id)
+        if (live.tempConfigDir) {
+          void fs.rm(live.tempConfigDir, { recursive: true, force: true }).catch(() => {})
+        }
       }
     })()
 
@@ -747,6 +804,16 @@ export class AgentManager extends EventEmitter {
     return this.db.getSession(id)!
   }
 
+  async setEnabledMcpIds(id: string, mcpIds: string[] | null): Promise<Session> {
+    const existing = this.db.getSession(id)
+    if (!existing) throw new Error(`session ${id} not found`)
+    if (this.#live.has(id)) {
+      await this.#teardown(id, 'cancel')
+    }
+    this.db.updateSession(id, { enabledMcpIds: mcpIds })
+    return this.db.getSession(id)!
+  }
+
   dispose(): void {
     const ids = [...this.#live.keys()]
     void Promise.all(ids.map((id) => this.#teardown(id, 'dispose')))
@@ -908,7 +975,8 @@ export class AgentManager extends EventEmitter {
   async sendMessage(
     sessionId: string,
     text: string,
-    _attachments?: Attachment[]
+    _attachments?: Attachment[],
+    skillPrompts?: string[]
   ): Promise<void> {
     const session = this.db.getSession(sessionId)
     if (!session) throw new Error(`session ${sessionId} not found`)
@@ -929,7 +997,7 @@ export class AgentManager extends EventEmitter {
     this.#resolveProvider(session.modelId)
 
     try {
-      await this.#sendOnce(session, text)
+      await this.#sendOnce(session, text, skillPrompts)
     } catch (err) {
       const msg = (err as Error)?.message ?? ''
       // The bundled Claude Code CLI keeps a per-session lock; if the prior
@@ -944,11 +1012,11 @@ export class AgentManager extends EventEmitter {
       await new Promise((r) => setTimeout(r, 600))
       const refreshed = this.db.getSession(sessionId)
       if (!refreshed) throw err
-      await this.#sendOnce(refreshed, text)
+      await this.#sendOnce(refreshed, text, skillPrompts)
     }
   }
 
-  async #sendOnce(session: Session, text: string): Promise<void> {
+  async #sendOnce(session: Session, text: string, skillPrompts?: string[]): Promise<void> {
     // LRU eviction: if we're at the cap and this session isn't already live,
     // evict the oldest live session. Fire-and-forget — the dying session
     // tears down in the background while we lazy-start the new one.
@@ -964,7 +1032,7 @@ export class AgentManager extends EventEmitter {
       if (lruId) void this.#teardown(lruId, 'lru')
     }
 
-    const live = await this.#ensureLive(session)
+    const live = await this.#ensureLive(session, skillPrompts)
     live.lastUsedAt = Date.now()
 
     if (live.idleTimer) {

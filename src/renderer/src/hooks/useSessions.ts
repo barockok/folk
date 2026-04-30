@@ -1,5 +1,7 @@
 import { useEffect } from 'react'
 import { useSessionStore } from '../stores/useSessionStore'
+import { useUIStore } from '../stores/useUIStore'
+import { INITIAL_SKILLS } from '../data'
 import type { Attachment, SessionConfig } from '@shared/types'
 
 export function useSessions() {
@@ -59,7 +61,11 @@ export function useSessions() {
       st.pushUserMessage(sessionId, text)
       st.pushPendingAssistant(sessionId)
       st.markStreaming(sessionId)
-      await window.folk.agent.sendMessage(sessionId, text, attachments)
+      const { folkSkillsEnabled } = useUIStore.getState()
+      const skillPrompts = INITIAL_SKILLS
+        .filter((s) => s.prompt && folkSkillsEnabled[s.id])
+        .map((s) => s.prompt!)
+      await window.folk.agent.sendMessage(sessionId, text, attachments, skillPrompts)
       // Main may have auto-titled the session on first turn; sync the record
       // so the sidebar updates without requiring a refresh.
       const fresh = await window.folk.sessions.get(sessionId)

@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useProviders } from '../../hooks/useProviders'
 import { useSessionStore } from '../../stores/useSessionStore'
 import { useUIStore } from '../../stores/useUIStore'
+import { useMCPStore } from '../../stores/useMCPStore'
 import {
   filterCommands,
   findCommand,
@@ -61,13 +62,19 @@ export function Composer({ session, onSend, onCancel, onConfigureNew, onDraftPat
   const isDraftSession = !!session && session.id.startsWith('draft-')
   const [text, setText] = useState('')
   const [modelPopOpen, setModelPopOpen] = useState(false)
+  const [permPopOpen, setPermPopOpen] = useState(false)
+  const [mcpPopOpen, setMcpPopOpen] = useState(false)
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [isDragging, setIsDragging] = useState(false)
   const [slashIndex, setSlashIndex] = useState(0)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const popRef = useRef<HTMLDivElement>(null)
+  const permPopRef = useRef<HTMLDivElement>(null)
+  const mcpPopRef = useRef<HTMLDivElement>(null)
   const dragCounterRef = useRef(0)
   const { enabledModels } = useProviders()
+  const mcpServers = useMCPStore((s) => s.servers)
+  const eligibleMcps = mcpServers.filter((s) => s.isEnabled)
 
   // Discover user/project commands from ~/.claude/commands and project dir.
   // These extend the built-in slash registry as `prompt`-kind entries: when
@@ -337,6 +344,28 @@ export function Composer({ session, onSend, onCancel, onConfigureNew, onDraftPat
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [modelPopOpen])
+
+  useEffect(() => {
+    if (!permPopOpen) return
+    const handler = (e: MouseEvent) => {
+      if (permPopRef.current && !permPopRef.current.contains(e.target as Node)) {
+        setPermPopOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [permPopOpen])
+
+  useEffect(() => {
+    if (!mcpPopOpen) return
+    const handler = (e: MouseEvent) => {
+      if (mcpPopRef.current && !mcpPopRef.current.contains(e.target as Node)) {
+        setMcpPopOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [mcpPopOpen])
 
   // Drag-and-drop handlers
   const handleDragEnter = useCallback((e: React.DragEvent) => {
@@ -772,31 +801,141 @@ export function Composer({ session, onSend, onCancel, onConfigureNew, onDraftPat
             )}
           </div>
 
-          {/* Permission mode chip */}
+          {/* Permission mode chip — popover, mirrors model selector */}
           {session && (
-            <select
-              className="btn btn-plain"
-              style={{ fontSize: 12, fontFamily: 'var(--ff-mono)' }}
-              value={session.permissionMode}
-              title={PERMISSION_LABELS[session.permissionMode].hint}
-              onChange={async (e) => {
-                const mode = e.target.value as PermissionMode
-                if (isDraftSession) {
-                  onDraftPatch?.({ permissionMode: mode })
-                  toast({ kind: 'ok', text: `Permissions: ${PERMISSION_LABELS[mode].label}` })
-                  return
-                }
-                const updated = await window.folk.sessions.setPermissionMode(session.id, mode)
-                useSessionStore.getState().upsertSession(updated)
-                toast({ kind: 'ok', text: `Permissions: ${PERMISSION_LABELS[mode].label}` })
-              }}
-            >
-              {(Object.keys(PERMISSION_LABELS) as PermissionMode[]).map((m) => (
-                <option key={m} value={m}>
-                  {PERMISSION_LABELS[m].label}
-                </option>
-              ))}
-            </select>
+            <div style={{ position: 'relative' }} ref={permPopRef}>
+              <button
+                className="btn btn-plain"
+                style={{ fontSize: 12, fontFamily: 'var(--ff-mono)', gap: 4 }}
+                onClick={() => setPermPopOpen((o) => !o)}
+                title={PERMISSION_LABELS[session.permissionMode].hint}
+                type="button"
+              >
+                {PERMISSION_LABELS[session.permissionMode].label} ⌄
+              </button>
+              {permPopOpen && (
+                <div className="model-pop">
+                  <div className="model-pop-hd">Permission mode</div>
+                  <div className="model-pop-list">
+                    {(Object.keys(PERMISSION_LABELS) as PermissionMode[]).map((mode) => {
+                      const isOn = session.permissionMode === mode
+                      return (
+                        <button
+                          key={mode}
+                          className={`model-pop-item ${isOn ? 'on' : ''}`}
+                          type="button"
+                          onClick={async () => {
+                            setPermPopOpen(false)
+                            if (session.permissionMode === mode) return
+                            if (isDraftSession) {
+                              onDraftPatch?.({ permissionMode: mode })
+                              toast({ kind: 'ok', text: `Permissions: ${PERMISSION_LABELS[mode].label}` })
+                              return
+                            }
+                            const updated = await window.folk.sessions.setPermissionMode(session.id, mode)
+                            useSessionStore.getState().upsertSession(updated)
+                            toast({ kind: 'ok', text: `Permissions: ${PERMISSION_LABELS[mode].label}` })
+                          }}
+                        >
+                          <div className="m-main">
+                            <div className="m-disp">{PERMISSION_LABELS[mode].label}</div>
+                            <div className="m-id">{PERMISSION_LABELS[mode].hint}</div>
+                          </div>
+                          {isOn && (
+                            <svg
+                              width="14"
+                              height="14"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2.5"
+                            >
+                              <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                          )}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* MCP chip — only for persisted sessions that have explicit MCP selection */}
+          {session && !isDraftSession && eligibleMcps.length > 0 && (
+            <div style={{ position: 'relative' }} ref={mcpPopRef}>
+              <button
+                className="btn btn-plain"
+                style={{ fontSize: 12, fontFamily: 'var(--ff-mono)', gap: 4 }}
+                onClick={() => setMcpPopOpen((o) => !o)}
+                title="Change MCP servers for this session"
+                type="button"
+              >
+                MCP {session.enabledMcpIds === null
+                  ? `· all (${eligibleMcps.length})`
+                  : session.enabledMcpIds.length === 0
+                    ? '· none'
+                    : `· ${session.enabledMcpIds.length}`} ⌄
+              </button>
+              {mcpPopOpen && (
+                <div className="model-pop">
+                  <div className="model-pop-hd">MCP servers</div>
+                  <div className="model-pop-list">
+                    <button
+                      className={`model-pop-item ${session.enabledMcpIds === null ? 'on' : ''}`}
+                      type="button"
+                      onClick={async () => {
+                        setMcpPopOpen(false)
+                        if (session.enabledMcpIds === null) return
+                        const updated = await window.folk.sessions.setEnabledMcpIds(session.id, null)
+                        useSessionStore.getState().upsertSession(updated)
+                        toast({ kind: 'ok', text: 'MCP: all (session restarted)' })
+                      }}
+                    >
+                      <div className="m-main">
+                        <div className="m-disp">All (default)</div>
+                        <div className="m-id">Use all globally-enabled MCP servers</div>
+                      </div>
+                      {session.enabledMcpIds === null && (
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                      )}
+                    </button>
+                    {eligibleMcps.map((s) => {
+                      const checked = session.enabledMcpIds === null || session.enabledMcpIds.includes(s.id)
+                      return (
+                        <button
+                          key={s.id}
+                          className={`model-pop-item ${checked && session.enabledMcpIds !== null ? 'on' : ''}`}
+                          type="button"
+                          onClick={async () => {
+                            const base = session.enabledMcpIds ?? eligibleMcps.map((m) => m.id)
+                            const next = base.includes(s.id)
+                              ? base.filter((x) => x !== s.id)
+                              : [...base, s.id]
+                            const updated = await window.folk.sessions.setEnabledMcpIds(session.id, next)
+                            useSessionStore.getState().upsertSession(updated)
+                            toast({ kind: 'ok', text: `MCP updated (session restarted)` })
+                          }}
+                        >
+                          <div className="m-main">
+                            <div className="m-disp">{s.name}{s.source === 'local' ? ' ↗' : ''}</div>
+                            <div className="m-id">{s.transport} · {s.source === 'local' ? 'Claude Code' : 'folk'}</div>
+                          </div>
+                          {checked && session.enabledMcpIds !== null && (
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                              <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                          )}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
           )}
 
           {onConfigureNew && (

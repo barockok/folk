@@ -34,6 +34,7 @@ export interface UISkill {
   trigger: string
   enabled: boolean
   author: string
+  prompt?: string
 }
 
 export interface UIPlugin {
@@ -76,7 +77,23 @@ export const INITIAL_MCPS: UIMCPSeed[] = [
 ]
 
 export const INITIAL_SKILLS: UISkill[] = [
-  { id: 'visual-builder', name: 'Visual Builder', desc: 'Renders HTML/SVG diagrams and charts inline as live interactive previews', trigger: 'chart, diagram, visualize, graph, plot', enabled: true, author: 'folk' },
+  { id: 'visual-builder', name: 'Visual Builder', desc: 'Renders HTML/SVG diagrams and charts inline as live interactive previews', trigger: 'chart, diagram, visualize, graph, plot', enabled: true, author: 'folk', prompt: `When visualizing data, processes, system architecture, mathematical concepts, timelines, or anything that benefits from a diagram: produce a self-contained \`html\` or \`svg\` fenced code block. Folk renders it live as an inline interactive preview — not as code.
+
+**CDN libraries — use these exact URLs and globals, no others:**
+- Chart.js 4: \`<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>\` → global \`Chart\`
+- Chart.js annotation plugin: \`<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>\` → global \`ChartAnnotation\`. Must call \`Chart.register(ChartAnnotation)\` before creating any chart.
+- D3.js 7: \`<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>\` → global \`d3\`
+- Plotly: \`<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>\` → global \`Plotly\`
+Load scripts in dependency order (Chart.js before its plugins). Never reference a global before its \`<script>\` tag.
+
+**Design rules — the visual must feel native to folk's UI:**
+- Folk injects these CSS tokens (use exclusively, no hardcoded hex): \`--bg\`, \`--bg-card\`, \`--bg-sub\`, \`--fg\`, \`--body\`, \`--border\`, \`--stripe-purple\` (#533afd), \`--stripe-purple-bg\`, \`--r\` (6px), \`--r-sm\` (5px), \`--r-xs\` (4px), \`--ff-sans\`, \`--ff-mono\`.
+- Primary accent: \`var(--stripe-purple)\`. Use for chart fills, highlights, active states.
+- Cards: \`background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r)\`. No \`box-shadow\`.
+- Inputs: \`background:var(--bg-sub);border:1px solid var(--border);border-radius:var(--r-xs);color:var(--fg)\`.
+- Secondary text: \`color:var(--body)\`. Eyebrow labels: \`font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--body)\`.
+- No padding on \`<body>\` — content starts at the edge.
+- For SVG: emit a standalone \`<svg>\` element only.` },
   { id: 's1', name: 'Write release notes', desc: 'Summarize git commits into warm, readable release notes', trigger: 'release, changelog, notes', enabled: true, author: 'you' },
   { id: 's2', name: 'Review PR for security', desc: 'Scan a diff for common security mistakes', trigger: 'security review, audit pr', enabled: true, author: 'anthropic' },
   { id: 's3', name: 'Draft email reply', desc: 'Reply to an email in my voice — concise, warm', trigger: 'reply, draft email', enabled: true, author: 'you' },

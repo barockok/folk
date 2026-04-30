@@ -17,12 +17,13 @@ const folk: FolkAPI = {
     loadMessages: (id) => ipcRenderer.invoke('sessions:loadMessages', id),
     setPermissionMode: (id, mode) => ipcRenderer.invoke('sessions:setPermissionMode', id, mode),
     setModel: (id, modelId) => ipcRenderer.invoke('sessions:setModel', id, modelId),
+    setEnabledMcpIds: (id, mcpIds) => ipcRenderer.invoke('sessions:setEnabledMcpIds', id, mcpIds),
     backfillTitle: (id) => ipcRenderer.invoke('sessions:backfillTitle', id),
     rename: (id, title) => ipcRenderer.invoke('sessions:rename', id, title)
   },
   agent: {
-    sendMessage: (sessionId, text, attachments) =>
-      ipcRenderer.invoke('agent:sendMessage', sessionId, text, attachments),
+    sendMessage: (sessionId, text, attachments, skillPrompts) =>
+      ipcRenderer.invoke('agent:sendMessage', sessionId, text, attachments, skillPrompts),
     cancel: (sessionId) => ipcRenderer.invoke('agent:cancel', sessionId),
     onChunk: (fn) => listen('agent:chunk', fn),
     onThinking: (fn) => listen('agent:thinking', fn),

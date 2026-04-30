@@ -12,22 +12,34 @@ function buildSrcdoc(code: string, lang: 'html' | 'svg', isDark: boolean, id: st
   --body: ${isDark ? '#8b96b0' : '#64748d'};
   --border: ${isDark ? '#1e2a4a' : '#e5edf5'};
   --stripe-purple: #533afd;
+  --stripe-purple-bg: ${isDark ? 'rgba(102,94,253,0.12)' : 'rgba(83,58,253,0.05)'};
+  --r: 6px; --r-sm: 5px; --r-xs: 4px;
+  --ff-sans: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+  --ff-mono: "Source Code Pro", SFMono-Regular, Menlo, monospace;
 }
-body {
-  margin: 0; padding: 16px;
-  font-family: -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
-  font-size: 14px; line-height: 1.5;
+html, body {
+  margin: 0; padding: 0;
   background: var(--bg); color: var(--fg);
+  font-family: var(--ff-sans);
+  font-size: 14px; line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
 }`.trim()
 
-  // Inlined height reporter — posts scrollHeight to parent keyed by id so
-  // sibling visuals on the same page don't clobber each other's heights.
-  const reporter = `<script>(function(){var i="${id}";function r(){parent.postMessage({folkVisualHeight:document.documentElement.scrollHeight,folkVisualId:i},'*');}if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',r);}else{r();}if(window.ResizeObserver){new ResizeObserver(r).observe(document.documentElement);}}());</script>`
+  // Catches unhandled errors and renders them inline so the frame is never
+  // silently blank — the user sees what went wrong without opening devtools.
+  const errorHandler = `window.addEventListener('error',function(e){
+var d=document.createElement('div');
+d.style.cssText='padding:10px 14px;margin:8px;background:rgba(234,34,97,0.08);color:#ea2261;font:12px/1.5 monospace;border-radius:5px;border:1px solid rgba(234,34,97,0.25);white-space:pre-wrap;word-break:break-all';
+d.textContent='Error: '+e.message+'\\n(line '+e.lineno+')';
+document.body?document.body.insertBefore(d,document.body.firstChild):document.addEventListener('DOMContentLoaded',function(){document.body.insertBefore(d,document.body.firstChild)});
+});`
 
-  const inject = `<style>*{box-sizing:border-box}${tokenCss}</style>${reporter}`
+  const reporter = `(function(){var i="${id}";function r(){parent.postMessage({folkVisualHeight:document.documentElement.scrollHeight,folkVisualId:i},'*');}if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',r);}else{r();}if(window.ResizeObserver){new ResizeObserver(r).observe(document.documentElement);}}());`
+
+  const inject = `<style>*{box-sizing:border-box}${tokenCss}</style><script>${errorHandler}${reporter}<\/script>`
 
   if (lang === 'svg') {
-    return `<!DOCTYPE html><html><head>${inject}</head><body style="display:flex;align-items:center;justify-content:center;min-height:100vh;">${code}</body></html>`
+    return `<!DOCTYPE html><html><head>${inject}</head><body style="display:flex;align-items:center;justify-content:center;">${code}</body></html>`
   }
 
   if (/<html[\s>]/i.test(code)) {
@@ -57,10 +69,7 @@ export function InlineVisual({ code, lang }: Props) {
 
   useEffect(() => {
     const handler = (e: MessageEvent) => {
-      if (
-        e.data?.folkVisualId === id &&
-        typeof e.data.folkVisualHeight === 'number'
-      ) {
+      if (e.data?.folkVisualId === id && typeof e.data.folkVisualHeight === 'number') {
         setHeight(Math.min(Math.max(e.data.folkVisualHeight, MIN_H), MAX_H))
       }
     }
@@ -70,35 +79,7 @@ export function InlineVisual({ code, lang }: Props) {
 
   return (
     <div className="inline-visual">
-      <div className="iv-bar">
-        <span className="iv-tag">{lang === 'svg' ? 'SVG' : 'Visual'}</span>
-        <div className="iv-actions">
-          <button
-            type="button"
-            className="btn btn-xs btn-plain"
-            onClick={() => setShowSource((v) => !v)}
-          >
-            {showSource ? 'Hide source' : 'Source'}
-          </button>
-          <button
-            type="button"
-            className="btn btn-xs btn-plain"
-            onClick={() => void navigator.clipboard.writeText(code)}
-          >
-            Copy
-          </button>
-          <button
-            type="button"
-            className="btn btn-xs btn-plain"
-            onClick={() => setExpanded((v) => !v)}
-            aria-label={expanded ? 'Collapse' : 'Expand'}
-          >
-            {expanded ? '↙' : '↗'}
-          </button>
-        </div>
-      </div>
       <div className="iv-frame-wrap" style={{ height: expanded ? MAX_H : height }}>
-        {/* key forces full remount on theme change so the injected token CSS updates */}
         <iframe
           key={isDark ? 'dark' : 'light'}
           srcDoc={srcdoc}
@@ -106,6 +87,17 @@ export function InlineVisual({ code, lang }: Props) {
           className="iv-frame"
           title={`${lang} visual`}
         />
+        <div className="iv-actions">
+          <button type="button" className="iv-btn" onClick={() => setShowSource((v) => !v)}>
+            {showSource ? 'Hide' : 'Source'}
+          </button>
+          <button type="button" className="iv-btn" onClick={() => void navigator.clipboard.writeText(code)}>
+            Copy
+          </button>
+          <button type="button" className="iv-btn" onClick={() => setExpanded((v) => !v)} aria-label={expanded ? 'Collapse' : 'Expand'}>
+            {expanded ? '↙' : '↗'}
+          </button>
+        </div>
       </div>
       {showSource && (
         <pre className="iv-source"><code>{code}</code></pre>
