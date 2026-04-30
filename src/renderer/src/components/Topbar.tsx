@@ -7,7 +7,7 @@ import type { PageKey } from '../stores/useUIStore'
 
 const PAGE_LABELS: Record<PageKey, string> = {
   sessions: 'Sessions',
-  mcp: 'MCP Servers',
+  mcp: 'MCP',
   skills: 'Skills',
   plugins: 'Plugins',
   marketplace: 'Marketplace',

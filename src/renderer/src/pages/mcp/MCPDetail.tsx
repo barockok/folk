@@ -294,7 +294,7 @@ export function MCPDetail({ id, isNew, onBack }: Props) {
                 disabled={!values.name.trim() || saving || (!isNew && !dirty)}
               >
                 <Icon name="check" size={13} />
-                {saving ? 'Saving…' : isNew ? 'Add server' : dirty ? 'Save changes' : 'Saved'}
+                {saving ? 'Saving…' : isNew ? 'Add MCP' : dirty ? 'Save changes' : 'Saved'}
               </button>
             </footer>
           )}

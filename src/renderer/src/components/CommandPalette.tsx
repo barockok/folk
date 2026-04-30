@@ -51,16 +51,16 @@ export function CommandPalette() {
   const items = useMemo<CmdItem[]>(() => {
     const base: CmdItem[] = [
       { g: 'Go to', id: 'sessions',     label: 'Sessions (Terminal)',         icon: 'terminal',  action: () => nav('sessions') },
-      { g: 'Go to', id: 'mcp',          label: 'MCP Servers',                icon: 'server',    action: () => nav('mcp') },
+      { g: 'Go to', id: 'mcp',          label: 'MCP',                        icon: 'server',    action: () => nav('mcp') },
       { g: 'Go to', id: 'skills',       label: 'Skills',                     icon: 'sparkles',  action: () => nav('skills') },
       { g: 'Go to', id: 'plugins',      label: 'Plugins',                    icon: 'puzzle',    action: () => nav('plugins') },
       { g: 'Go to', id: 'model',        label: 'Models & Providers',         icon: 'cpu',       action: () => nav('model') },
       { g: 'Go to', id: 'keybindings',  label: 'Keybindings',               icon: 'keyboard',  action: () => nav('keybindings') },
-      { g: 'Action', id: 'add-mcp',     label: 'Add a new MCP server',      icon: 'plus',
+      { g: 'Action', id: 'add-mcp',     label: 'Add a new MCP',             icon: 'plus',
         // TODO: thread action payload for "Add MCP" flow (Task 29)
         action: () => nav('mcp') },
       { g: 'Action', id: 'new-session', label: 'Start a new session',       icon: 'terminal',  action: () => nav('sessions') },
-      { g: 'Action', id: 'test-all',    label: 'Test-connect all MCP servers', icon: 'bolt',   action: () => nav('mcp') },
+      { g: 'Action', id: 'test-all',    label: 'Test-connect all MCPs',      icon: 'bolt',   action: () => nav('mcp') },
     ]
     if (!q.trim()) return base
     const needle = q.toLowerCase()

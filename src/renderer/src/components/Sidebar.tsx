@@ -19,7 +19,7 @@ const NAV_GROUPS: NavGroup[] = [
     group: 'Workspace',
     items: [
       { id: 'sessions', label: 'Sessions', icon: 'terminal' },
-      { id: 'mcp', label: 'MCP Servers', icon: 'server' },
+      { id: 'mcp', label: 'MCP', icon: 'server' },
       { id: 'skills', label: 'Skills', icon: 'sparkles' },
       { id: 'plugins', label: 'Plugins', icon: 'puzzle' },
     ],

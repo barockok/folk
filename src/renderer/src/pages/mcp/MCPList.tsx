@@ -34,7 +34,7 @@ function EnableToggle({
       type="button"
       role="switch"
       aria-checked={enabled}
-      aria-label={enabled ? 'Disable server' : 'Enable server'}
+      aria-label={enabled ? 'Disable MCP' : 'Enable MCP'}
       title={title}
       disabled={disabled}
       onClick={(e) => {
@@ -62,14 +62,14 @@ export function MCPList({ onOpen, onNew }: MCPListProps) {
           <div className="eyebrow" style={{ marginBottom: 8 }}>
             Tools
           </div>
-          <h1 className="h1">MCP Servers</h1>
+          <h1 className="h1">MCP</h1>
           <div className="sub">
             Plug Claude into your tools. Pick from a catalog, paste a command, or build your own —
             no JSON required.
           </div>
         </div>
         <button className="btn btn-primary" onClick={onNew}>
-          <Icon name="plus" size={14} /> Add server
+          <Icon name="plus" size={14} /> Add MCP
         </button>
       </div>
 
@@ -78,16 +78,16 @@ export function MCPList({ onOpen, onNew }: MCPListProps) {
           className="list-head"
           style={{ gridTemplateColumns: '1fr 120px' }}
         >
-          <div>Server</div>
+          <div>MCP</div>
           <div>Enabled</div>
         </div>
 
         {hydrated && servers.length === 0 && (
           <div className="empty">
-            <h3>No MCP servers configured</h3>
+            <h3>No MCPs configured</h3>
             <p>Click + Add to connect one.</p>
             <button className="btn btn-primary" onClick={onNew}>
-              <Icon name="plus" size={14} /> Add server
+              <Icon name="plus" size={14} /> Add MCP
             </button>
           </div>
         )}
@@ -144,8 +144,8 @@ export function MCPList({ onOpen, onNew }: MCPListProps) {
                   s.source === 'local'
                     ? `Managed by Claude Code · edit ${s.sourcePath ?? '~/.claude/.mcp.json'} to change`
                     : s.isEnabled
-                      ? 'Disable this server'
-                      : 'Enable this server'
+                      ? 'Disable this MCP'
+                      : 'Enable this MCP'
                 }
                 onChange={(next) => void setEnabled(s.id, next)}
               />

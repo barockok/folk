@@ -337,7 +337,7 @@ export function FirstRunOnboarding({ force = false }: { force?: boolean } = {}) 
                   <div>
                     <div className="ob-point-h">Your tools, always ready</div>
                     <div className="ob-point-p">
-                      MCP servers, skills, and plugins — installed and managed in one place.
+                      MCP, skills, and plugins — installed and managed in one place.
                     </div>
                   </div>
                 </div>

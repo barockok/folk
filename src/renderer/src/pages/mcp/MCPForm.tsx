@@ -124,7 +124,7 @@ export function serverFromValues(base: MCPServer | null, v: FormValues): MCPServ
     }
     return {
       id,
-      name: v.name.trim() || 'Untitled server',
+      name: v.name.trim() || 'Untitled MCP',
       template: null,
       transport: 'http',
       command: null,
@@ -149,7 +149,7 @@ export function serverFromValues(base: MCPServer | null, v: FormValues): MCPServ
   const { command, args } = splitCommandLine(v.commandLine.trim())
   return {
     id,
-    name: v.name.trim() || 'Untitled server',
+    name: v.name.trim() || 'Untitled MCP',
     template: null,
     transport: 'stdio',
     command: command || null,
@@ -238,7 +238,7 @@ export function MCPForm({ values, onChange, readOnly, focusApiKey }: MCPFormProp
 
       {isHttp ? (
         <>
-          <Field label="Remote MCP server URL" hint="The full URL of the MCP server.">
+          <Field label="Remote MCP URL" hint="The full URL of the MCP.">
             <input
               className="input mono"
               value={values.url}
@@ -259,7 +259,7 @@ export function MCPForm({ values, onChange, readOnly, focusApiKey }: MCPFormProp
           >
             <SecretField
               label="API key"
-              hint="Static bearer token, sent as Authorization header. Skip this if the server uses OAuth."
+              hint="Static bearer token, sent as Authorization header. Skip this if the MCP uses OAuth."
               value={values.apiKey}
               onChange={(v) => set('apiKey', v)}
               placeholder="Paste your API key or token"
@@ -269,7 +269,7 @@ export function MCPForm({ values, onChange, readOnly, focusApiKey }: MCPFormProp
 
             <Field
               label="OAuth Client ID (optional)"
-              hint="Leave empty to let folk register itself with the server when you sign in."
+              hint="Leave empty to let folk register itself with the MCP when you sign in."
             >
               <input
                 className="input mono"

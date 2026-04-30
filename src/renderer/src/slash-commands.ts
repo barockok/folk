@@ -35,7 +35,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   // Navigation
   {
     name: 'mcp',
-    description: 'Manage MCP servers',
+    description: 'Manage MCP',
     kind: 'navigate',
     run: (c) => c.setPage('mcp')
   },

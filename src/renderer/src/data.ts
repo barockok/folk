@@ -125,7 +125,7 @@ export const MARKET_CATS: string[] = ['All', 'Dev', 'Productivity', 'Writing', '
 export const KEYBINDINGS: UIKeybinding[] = [
   { action: 'Open command menu', keys: ['⌘', 'K'], scope: 'Global' },
   { action: 'New session', keys: ['⌘', 'N'], scope: 'Global' },
-  { action: 'Switch to MCP Servers', keys: ['⌘', '1'], scope: 'Global' },
+  { action: 'Switch to MCP', keys: ['⌘', '1'], scope: 'Global' },
   { action: 'Switch to Skills', keys: ['⌘', '2'], scope: 'Global' },
   { action: 'Switch to Plugins', keys: ['⌘', '3'], scope: 'Global' },
   { action: 'Test connect (selected MCP)', keys: ['⌘', 'T'], scope: 'MCP' },

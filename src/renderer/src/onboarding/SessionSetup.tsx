@@ -432,7 +432,7 @@ export function SessionSetup({ onLaunch, onCancel }: SessionSetupProps) {
                 {eligibleMcps.length > 0 && (
                   <div className="ss-opt-group">
                     <div className="ss-opt-head">
-                      <div className="ss-opt-label">MCP servers</div>
+                      <div className="ss-opt-label">MCP</div>
                       <div style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
                         <button
                           type="button"
