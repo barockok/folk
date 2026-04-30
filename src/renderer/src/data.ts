@@ -76,6 +76,7 @@ export const INITIAL_MCPS: UIMCPSeed[] = [
 ]
 
 export const INITIAL_SKILLS: UISkill[] = [
+  { id: 'visual-builder', name: 'Visual Builder', desc: 'Renders HTML/SVG diagrams and charts inline as live interactive previews', trigger: 'chart, diagram, visualize, graph, plot', enabled: true, author: 'folk' },
   { id: 's1', name: 'Write release notes', desc: 'Summarize git commits into warm, readable release notes', trigger: 'release, changelog, notes', enabled: true, author: 'you' },
   { id: 's2', name: 'Review PR for security', desc: 'Scan a diff for common security mistakes', trigger: 'security review, audit pr', enabled: true, author: 'anthropic' },
   { id: 's3', name: 'Draft email reply', desc: 'Reply to an email in my voice — concise, warm', trigger: 'reply, draft email', enabled: true, author: 'you' },
