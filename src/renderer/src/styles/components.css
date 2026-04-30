@@ -291,10 +291,17 @@
   background: var(--bg);
   flex: none;
   min-height: 50px;
+  -webkit-app-region: drag;
 }
 /* Topbar lives at top of window and spans both columns. Reserve space for
    macOS traffic lights at the left edge (~76px). */
 .topbar { padding-left: 84px; }
+/* Interactive elements inside the drag region must opt out. */
+.topbar button,
+.topbar [role="button"],
+.topbar input,
+.topbar select,
+.topbar a { -webkit-app-region: no-drag; }
 .crumbs { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--body); font-feature-settings: "ss01"; }
 .crumbs .sep { color: var(--fg-faint); }
 .crumbs .cur { color: var(--heading); font-weight: 500; }
