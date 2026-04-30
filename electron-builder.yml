@@ -7,6 +7,11 @@ files:
   - out/**/*
   - package.json
 asar: true
+asarUnpack:
+  # Claude agent SDK ships platform-specific native binaries that must be
+  # executable by the OS. Files inside app.asar cannot be spawned; unpack
+  # them so Electron rewrites paths to app.asar.unpacked/ transparently.
+  - "node_modules/@anthropic-ai/claude-agent-sdk-*/**"
 mac:
   target:
     - target: dmg
