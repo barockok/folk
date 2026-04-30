@@ -1322,6 +1322,46 @@
   flex-direction: column;
 }
 
+/* Hero composer — the first-run state for a freshly configured session.
+   Mirrors Claude Cowork: greeting headline above a centered composer card,
+   no Conversation rail, no TodoPanel. Replaced by the normal split layout
+   the moment the user submits the first turn. */
+.sess-main.is-fresh {
+  background: var(--bg);
+}
+.sess-hero {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 24px 96px;
+  gap: 28px;
+  overflow: auto;
+}
+.sess-hero-title {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  color: var(--heading);
+  text-align: center;
+  max-width: 720px;
+}
+[data-density="compact"] .sess-hero-title { font-size: 24px; }
+.sess-hero .composer {
+  width: 100%;
+  max-width: 720px;
+  border-top: 0;
+  padding: 0;
+  background: transparent;
+}
+.sess-hero .composer-inner {
+  box-shadow: var(--sh-standard);
+}
+
 /* ============================================================
    Sessions empty state — refined editorial canvas with a
    timeline-rail decoration that previews the conversation

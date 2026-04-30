@@ -22,6 +22,13 @@ interface ComposerProps {
   session: Session | null
   onSend: (text: string, attachments?: Attachment[]) => void
   onCancel: () => void
+  onConfigureNew?: () => void
+  // When the session is a renderer-side draft (id starts with `draft-`,
+  // not yet persisted to SQLite), Composer can't call setModel/
+  // setPermissionMode IPCs — they'd fail with "session not found". The
+  // page passes this callback to absorb those mutations into its draft
+  // state until the user submits the first turn.
+  onDraftPatch?: (patch: Partial<Session>) => void
 }
 
 const EMPTY_SUGGESTIONS: string[] = []
@@ -50,7 +57,8 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-export function Composer({ session, onSend, onCancel }: ComposerProps) {
+export function Composer({ session, onSend, onCancel, onConfigureNew, onDraftPatch }: ComposerProps) {
+  const isDraftSession = !!session && session.id.startsWith('draft-')
   const [text, setText] = useState('')
   const [modelPopOpen, setModelPopOpen] = useState(false)
   const [attachments, setAttachments] = useState<Attachment[]>([])
@@ -718,6 +726,11 @@ export function Composer({ session, onSend, onCancel }: ComposerProps) {
                             onClick={async () => {
                               setModelPopOpen(false)
                               if (!session || session.modelId === m.id) return
+                              if (isDraftSession) {
+                                onDraftPatch?.({ modelId: m.id })
+                                toast({ kind: 'ok', text: `Model: ${m.label ?? m.id}` })
+                                return
+                              }
                               try {
                                 const updated = await window.folk.sessions.setModel(session.id, m.id)
                                 useSessionStore.getState().upsertSession(updated)
@@ -768,6 +781,11 @@ export function Composer({ session, onSend, onCancel }: ComposerProps) {
               title={PERMISSION_LABELS[session.permissionMode].hint}
               onChange={async (e) => {
                 const mode = e.target.value as PermissionMode
+                if (isDraftSession) {
+                  onDraftPatch?.({ permissionMode: mode })
+                  toast({ kind: 'ok', text: `Permissions: ${PERMISSION_LABELS[mode].label}` })
+                  return
+                }
                 const updated = await window.folk.sessions.setPermissionMode(session.id, mode)
                 useSessionStore.getState().upsertSession(updated)
                 toast({ kind: 'ok', text: `Permissions: ${PERMISSION_LABELS[mode].label}` })
@@ -779,6 +797,19 @@ export function Composer({ session, onSend, onCancel }: ComposerProps) {
                 </option>
               ))}
             </select>
+          )}
+
+          {onConfigureNew && (
+            <button
+              className="btn btn-plain"
+              onClick={onConfigureNew}
+              type="button"
+              style={{ fontSize: 12, padding: '4px 8px' }}
+              title="Configure a new session — opens setup dialog"
+              aria-label="Configure new session"
+            >
+              <Icon name="settings" size={13} />
+            </button>
           )}
 
           <div className="hint" style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--fg-faint)', fontFamily: 'var(--ff-mono)', display: 'flex', alignItems: 'center', gap: 6 }}>

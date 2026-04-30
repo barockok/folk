@@ -9,7 +9,6 @@ interface HistoryRailProps {
   onDelete: (id: string) => Promise<void>
   onRename: (id: string, title: string) => Promise<void>
   onNew: () => void
-  onConfigureNew?: () => void
 }
 
 type Group = 'Today' | 'Yesterday' | 'This week' | 'Earlier'
@@ -137,8 +136,7 @@ export function HistoryRail({
   onPick,
   onDelete,
   onRename,
-  onNew,
-  onConfigureNew
+  onNew
 }: HistoryRailProps) {
   const [query, setQuery] = useState('')
   const [pendingId, setPendingId] = useState<string | null>(null)
@@ -202,18 +200,6 @@ export function HistoryRail({
           >
             + New
           </button>
-          {onConfigureNew && (
-            <button
-              className="btn btn-plain"
-              onClick={onConfigureNew}
-              type="button"
-              style={{ fontSize: 12, padding: '4px 8px' }}
-              title="Configure a new session — opens setup dialog"
-              aria-label="Configure new session"
-            >
-              <Icon name="settings" size={13} />
-            </button>
-          )}
         </div>
       </div>
 
