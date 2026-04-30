@@ -9,6 +9,8 @@ test-results
 playwright-report
 tests/e2e/playwright-report
 
+.worktrees
+
 # Code-signing artifacts — never commit
 *.p12
 *.cer
