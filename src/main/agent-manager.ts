@@ -1128,7 +1128,17 @@ export class AgentManager extends EventEmitter {
 
   #resolveProvider(modelId: string) {
     const providers = this.db.listProviders()
-    const match = providers.find((p) => p.models.some((m) => m.id === modelId))
+    let match = providers.find((p) => p.models.some((m) => m.id === modelId))
+    // Fallback: when the user hasn't fetched/persisted models yet, the
+    // provider's `models` array is empty. The renderer surfaces a hard-coded
+    // fallback list per provider id (see useProviders.FALLBACK_MODELS) — mirror
+    // it here so a fresh-install Anthropic session doesn't fail with
+    // "no provider configured for model …".
+    if (!match) {
+      if (/^claude-/i.test(modelId)) {
+        match = providers.find((p) => p.id === 'anthropic' && p.isEnabled)
+      }
+    }
     if (!match) throw new Error(`no provider configured for model ${modelId}`)
     return match
   }
