@@ -424,11 +424,23 @@ export class AgentManager extends EventEmitter {
 
     const claudeBin = resolveClaudeBinary()
     // Emit a diagnostic notice so the conversation timeline shows binary
-    // resolution state in production — helps debug packaged-app failures.
+    // resolution state + provider plumbing — helps debug "session hangs
+    // forever" reports without round-tripping through main-process logs.
+    const authMode = provider.authMode === 'claude-code'
+      ? 'claude-code'
+      : provider.id === 'opencode-free' || provider.id === 'opencode-paid'
+        ? 'opencode-bridge'
+        : provider.id === 'openrouter'
+          ? 'bearer'
+          : 'x-api-key'
     this.emit('notice', {
       sessionId: session.id,
       kind: 'lifecycle',
-      text: `[diag] packaged=${app.isPackaged} bin=${claudeBin ?? '(sdk-resolve)'} exists=${claudeBin ? existsSync(claudeBin) : 'n/a'}`
+      text:
+        `[diag] packaged=${app.isPackaged} bin=${claudeBin ?? '(sdk-resolve)'} ` +
+        `exists=${claudeBin ? existsSync(claudeBin) : 'n/a'} ` +
+        `provider=${provider.id} model=${session.modelId} auth=${authMode} ` +
+        `baseUrl=${baseUrlOverride ?? '(default)'} mcps=${Object.keys(mcpMap).length}`
     })
 
     const q = query({
@@ -439,10 +451,11 @@ export class AgentManager extends EventEmitter {
         model: session.modelId,
         env: envOverlay,
         mcpServers: mcpMap,
-        // Lock the CLI to only the mcpServers we pass. Without this the
-        // bundled CLI also discovers ~/.claude/.mcp.json + project .mcp.json,
-        // which leaks unselected entries through the per-session allowlist.
-        strictMcpConfig: true,
+        // Lock the CLI to only the mcpServers we pass — but only when the
+        // user has actually opted into a per-session allowlist. Forcing strict
+        // mode when no allowlist is set hangs the CLI in some configurations
+        // (no --mcp-config flag emitted alongside --strict-mcp-config).
+        strictMcpConfig: allowSet ? true : undefined,
         abortController: abort,
         includePartialMessages: true,
         stderr: (data: string) => {
