@@ -173,6 +173,7 @@ export function SessionsPage() {
         onCancel={cancel}
       />
       <div className={`sess-main${isFresh ? ' is-fresh' : ''}`}>
+        {isFresh && <div className="sess-aurora-btm" aria-hidden="true" />}
         {active && (
           isFresh ? (
             <div className="sess-hero">

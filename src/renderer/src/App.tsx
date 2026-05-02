@@ -63,7 +63,6 @@ export default function App() {
 
   return (
     <>
-      <UpdateBanner />
       <Shell>
         {page === 'sessions' && <SessionsPage />}
         {page === 'mcp' && <MCPPage />}
@@ -73,6 +72,7 @@ export default function App() {
         {page === 'keybindings' && <KeybindingsPage />}
         {page === 'profile' && <ProfilePage />}
       </Shell>
+      <UpdateBanner />
       {(!onboarded || forceOnboarding) && <FirstRunOnboarding force={forceOnboarding} />}
       <Lightbox />
     </>

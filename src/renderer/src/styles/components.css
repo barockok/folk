@@ -73,27 +73,37 @@ html[data-window-state="blurred"] .badge-ac {
   background: var(--bg-card);
   color: var(--heading);
 }
+/* Sidebar mark mirrors the macOS app icon — italic ascender on a purple
+   gradient. Keep the squircle silhouette (rounded square) so dock and
+   in-app reads consistent. */
 .sb-logo {
   width: 30px; height: 30px;
-  border-radius: var(--r);
-  background: var(--brand-dark);
+  border-radius: 7px;
+  background: linear-gradient(135deg, #6a4dff 0%, #3a23c4 100%);
   display: grid; place-items: center;
   color: #fff;
-  font-weight: 500;
-  font-size: 14px;
-  letter-spacing: -0.02em;
+  font-weight: 700;
+  font-style: italic;
+  font-size: 18px;
+  letter-spacing: -0.04em;
+  font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
   flex: none;
   position: relative;
   overflow: hidden;
-  box-shadow: var(--sh-ambient);
+  box-shadow: var(--sh-ambient), inset 0 1px 0 rgba(255,255,255,0.18);
 }
 .sb-logo::before {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(135deg, transparent 40%, rgba(249,107,238,0.4) 70%, var(--ruby) 110%);
+  background: radial-gradient(60% 50% at 30% 18%, rgba(255,255,255,0.32), transparent 70%);
+  pointer-events: none;
 }
-.sb-logo span { position: relative; z-index: 1; }
+.sb-logo span {
+  position: relative;
+  z-index: 1;
+  transform: translate(-1px, -1px);
+}
 .sb-brand-name { font-weight: 500; font-size: 15px; letter-spacing: -0.01em; color: var(--heading); }
 .sb-brand-sub { font-size: 11px; color: var(--body); margin-top: 1px; }
 
@@ -1403,38 +1413,106 @@ html[data-window-state="blurred"] .badge-ac {
   position: absolute;
   z-index: 0;
   pointer-events: none;
-  inset: -20%;
+  inset: -25%;
+  /* Top-half aurora: gentle, slow drift — frames the headline. */
   background:
-    radial-gradient(40% 38% at 28% 32%, color-mix(in oklab, var(--stripe-purple) 22%, transparent) 0%, transparent 70%),
-    radial-gradient(36% 30% at 72% 68%, color-mix(in oklab, var(--stripe-purple) 14%, transparent) 0%, transparent 70%);
-  filter: blur(40px) saturate(1.05);
-  opacity: 0.55;
-  animation: hero-drift 28s ease-in-out infinite alternate;
+    radial-gradient(38% 36% at 25% 30%, color-mix(in oklab, var(--stripe-purple) 36%, transparent) 0%, transparent 65%),
+    radial-gradient(28% 26% at 60% 25%, color-mix(in oklab, #3aa3ff 22%, transparent) 0%, transparent 65%);
+  filter: blur(48px) saturate(1.1);
+  opacity: 0.85;
+  animation: hero-drift 18s ease-in-out infinite alternate;
 }
-[data-theme="dark"] .sess-main.is-fresh::before { opacity: 0.45; }
-/* Faint dotted grid, masked to fade out at the edges so it never reads as
-   a hard pattern. Sits above the aurora, below content. */
+[data-theme="dark"] .sess-main.is-fresh::before { opacity: 0.6; }
+/* Dotted grid — bigger, softer, pans diagonally so the texture moves with
+   the aurora rather than just sitting beneath it. Mask still fades edges. */
 .sess-main.is-fresh::after {
   content: '';
   position: absolute;
   z-index: 0;
   pointer-events: none;
   inset: 0;
-  background-image: radial-gradient(circle at 1px 1px, color-mix(in oklab, var(--heading) 8%, transparent) 1px, transparent 1.5px);
-  background-size: 22px 22px;
-  -webkit-mask-image: radial-gradient(60% 50% at 50% 55%, #000 30%, transparent 80%);
-          mask-image: radial-gradient(60% 50% at 50% 55%, #000 30%, transparent 80%);
-  opacity: 0.7;
-  animation: hero-grid-pan 60s linear infinite;
+  /* Plus-icon grid: SVG mask cuts the colored fill into tiny crosshairs;
+     a second radial mask fades them at the edges. mask-composite intersect
+     so a tile only shows where BOTH masks cover. Static — no pan. */
+  background-color: color-mix(in oklab, var(--heading) 9%, transparent);
+  -webkit-mask-image:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 36 36'><path d='M18 14.5v7M14.5 18h7' stroke='%23000' stroke-width='1' stroke-linecap='round'/></svg>"),
+    radial-gradient(70% 60% at 50% 55%, #000 25%, transparent 85%);
+  -webkit-mask-size: 36px 36px, 100% 100%;
+  -webkit-mask-repeat: repeat, no-repeat;
+  -webkit-mask-composite: source-in;
+  mask-image:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 36 36'><path d='M18 14.5v7M14.5 18h7' stroke='%23000' stroke-width='1' stroke-linecap='round'/></svg>"),
+    radial-gradient(70% 60% at 50% 55%, #000 25%, transparent 85%);
+  mask-size: 36px 36px, 100% 100%;
+  mask-repeat: repeat, no-repeat;
+  mask-composite: intersect;
+  opacity: 0.6;
 }
 @keyframes hero-drift {
-  0%   { transform: translate3d(-2%, -1%, 0) rotate(0deg); }
-  50%  { transform: translate3d(3%, 2%, 0) rotate(8deg); }
-  100% { transform: translate3d(-1%, 3%, 0) rotate(-6deg); }
+  0%   { transform: translate3d(-6%, -4%, 0) rotate(-4deg) scale(1); }
+  25%  { transform: translate3d(4%, -2%, 0) rotate(3deg) scale(1.04); }
+  50%  { transform: translate3d(7%, 5%, 0) rotate(8deg) scale(1.08); }
+  75%  { transform: translate3d(-3%, 6%, 0) rotate(-2deg) scale(1.02); }
+  100% { transform: translate3d(-7%, -1%, 0) rotate(-7deg) scale(1.05); }
 }
 @keyframes hero-grid-pan {
-  0%   { background-position: 0 0; }
-  100% { background-position: 22px 22px; }
+  0% {
+    -webkit-mask-position: 0 0, 0 0;
+    mask-position: 0 0, 0 0;
+    transform: translate3d(0, 0, 0);
+  }
+  50% { transform: translate3d(8px, -6px, 0); }
+  100% {
+    -webkit-mask-position: 22px 22px, 0 0;
+    mask-position: 22px 22px, 0 0;
+    transform: translate3d(0, 0, 0);
+  }
+}
+/* Bottom-half aurora — independent, much more dynamic than the top.
+   Sits in front of dots but behind content. Two warm blobs trade place
+   with a faster, looser drift + scale pulse so the lower half breathes. */
+.sess-aurora-btm {
+  position: absolute;
+  z-index: 0;
+  pointer-events: none;
+  left: -20%;
+  right: -20%;
+  bottom: -25%;
+  height: 80%;
+  background:
+    radial-gradient(36% 50% at 30% 70%, color-mix(in oklab, #c43aff 40%, transparent) 0%, transparent 65%),
+    radial-gradient(40% 55% at 75% 80%, color-mix(in oklab, #ff5fa8 28%, transparent) 0%, transparent 65%),
+    radial-gradient(28% 40% at 55% 95%, color-mix(in oklab, var(--stripe-purple) 32%, transparent) 0%, transparent 60%);
+  filter: blur(56px) saturate(1.15);
+  opacity: 0.9;
+  animation: hero-aurora-btm 11s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite alternate;
+}
+[data-theme="dark"] .sess-aurora-btm { opacity: 0.65; }
+@keyframes hero-aurora-btm {
+  0% {
+    transform: translate3d(-12%, 4%, 0) rotate(-10deg) scale(1);
+    filter: blur(56px) saturate(1.15) hue-rotate(0deg);
+  }
+  20% {
+    transform: translate3d(8%, -3%, 0) rotate(6deg) scale(1.12);
+    filter: blur(60px) saturate(1.25) hue-rotate(-8deg);
+  }
+  45% {
+    transform: translate3d(14%, 6%, 0) rotate(14deg) scale(1.18);
+    filter: blur(52px) saturate(1.3) hue-rotate(10deg);
+  }
+  70% {
+    transform: translate3d(-6%, 8%, 0) rotate(-4deg) scale(1.06);
+    filter: blur(58px) saturate(1.2) hue-rotate(4deg);
+  }
+  100% {
+    transform: translate3d(-15%, -2%, 0) rotate(-14deg) scale(1.1);
+    filter: blur(54px) saturate(1.18) hue-rotate(-6deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sess-aurora-btm { animation: none !important; }
 }
 .sess-hero {
   flex: 1;
@@ -3977,16 +4055,28 @@ html[data-window-state="blurred"] .badge-ac {
 
 /* Update banner — top-of-app status strip */
 .update-banner {
-  position: relative;
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 14px;
-  border-bottom: var(--hair) solid var(--border);
-  background: linear-gradient(180deg, rgba(124, 58, 237, 0.08), rgba(124, 58, 237, 0.04));
+  padding: 10px 14px;
+  border: var(--hair) solid var(--border);
+  border-radius: 10px;
+  background: color-mix(in oklab, var(--bg-card) 96%, transparent);
+  backdrop-filter: blur(16px) saturate(1.2);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+  box-shadow: 0 18px 40px -12px rgba(20, 15, 60, 0.28), 0 4px 10px -4px rgba(20, 15, 60, 0.12);
   color: var(--heading);
   font-size: 12.5px;
-  z-index: 30;
+  z-index: 80;
+  animation: update-banner-rise 280ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+@keyframes update-banner-rise {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 .update-banner--ready {
   background: linear-gradient(180deg, rgba(5, 150, 105, 0.10), rgba(5, 150, 105, 0.04));

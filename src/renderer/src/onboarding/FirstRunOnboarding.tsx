@@ -249,6 +249,7 @@ export function FirstRunOnboarding({ force = false }: { force?: boolean } = {}) 
 
   return (
     <div className="ob-scrim">
+      <div className="ob-aurora-btm" aria-hidden="true" />
       <div className="ob-card">
         {/* Header */}
         <div className="ob-head">
@@ -302,11 +303,6 @@ export function FirstRunOnboarding({ force = false }: { force?: boolean } = {}) 
           {step === 0 && (
             <div className="ob-welcome">
               <div className="ob-hero">
-                <div className="ob-hero-mark">
-                  <div className="sb-logo" style={{ width: 56, height: 56, fontSize: 24 }}>
-                    <span>f</span>
-                  </div>
-                </div>
                 <h1 className="ob-title">Meet folk.</h1>
                 <p className="ob-lede">
                   A local-first way to work with any model, with your tools and your files.

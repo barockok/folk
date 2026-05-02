@@ -10,14 +10,79 @@
   z-index: 9999;
   display: grid; place-items: center;
   padding: 40px 24px;
-  overflow-y: auto;
+  /* Aurora layers extend past the viewport (inset: -25%) — clip them here.
+     Card itself owns scrolling when its content overflows. */
+  overflow: hidden;
+  isolation: isolate;
 }
 [data-theme="dark"] .ob-scrim {
   background: color-mix(in oklab, #0a0a14 86%, transparent);
 }
+/* Ambient backdrop — same vocabulary as the hero composer: top aurora,
+   bottom dynamic aurora, dot grid, all behind the card. */
+.ob-scrim::before {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  pointer-events: none;
+  inset: -25%;
+  background:
+    radial-gradient(38% 36% at 25% 30%, color-mix(in oklab, var(--stripe-purple) 36%, transparent) 0%, transparent 65%),
+    radial-gradient(28% 26% at 60% 25%, color-mix(in oklab, #3aa3ff 22%, transparent) 0%, transparent 65%);
+  filter: blur(48px) saturate(1.1);
+  opacity: 0.85;
+  animation: hero-drift 18s ease-in-out infinite alternate;
+}
+[data-theme="dark"] .ob-scrim::before { opacity: 0.6; }
+.ob-scrim::after {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  pointer-events: none;
+  inset: 0;
+  background-color: color-mix(in oklab, var(--heading) 9%, transparent);
+  -webkit-mask-image:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 36 36'><path d='M18 14.5v7M14.5 18h7' stroke='%23000' stroke-width='1' stroke-linecap='round'/></svg>"),
+    radial-gradient(70% 60% at 50% 55%, #000 25%, transparent 85%);
+  -webkit-mask-size: 36px 36px, 100% 100%;
+  -webkit-mask-repeat: repeat, no-repeat;
+  -webkit-mask-composite: source-in;
+  mask-image:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 36 36'><path d='M18 14.5v7M14.5 18h7' stroke='%23000' stroke-width='1' stroke-linecap='round'/></svg>"),
+    radial-gradient(70% 60% at 50% 55%, #000 25%, transparent 85%);
+  mask-size: 36px 36px, 100% 100%;
+  mask-repeat: repeat, no-repeat;
+  mask-composite: intersect;
+  opacity: 0.6;
+}
+.ob-aurora-btm {
+  position: absolute;
+  z-index: 0;
+  pointer-events: none;
+  left: -20%;
+  right: -20%;
+  bottom: -25%;
+  height: 80%;
+  background:
+    radial-gradient(36% 50% at 30% 70%, color-mix(in oklab, #c43aff 40%, transparent) 0%, transparent 65%),
+    radial-gradient(40% 55% at 75% 80%, color-mix(in oklab, #ff5fa8 28%, transparent) 0%, transparent 65%),
+    radial-gradient(28% 40% at 55% 95%, color-mix(in oklab, var(--stripe-purple) 32%, transparent) 0%, transparent 60%);
+  filter: blur(56px) saturate(1.15);
+  opacity: 0.9;
+  animation: hero-aurora-btm 11s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite alternate;
+}
+[data-theme="dark"] .ob-aurora-btm { opacity: 0.65; }
+/* Card sits above the ambient layers. */
+.ob-scrim > .ob-card { position: relative; z-index: 1; }
+@media (prefers-reduced-motion: reduce) {
+  .ob-scrim::before,
+  .ob-scrim::after,
+  .ob-aurora-btm { animation: none !important; }
+}
 
 .ob-card {
   width: min(720px, 100%);
+  max-height: calc(100vh - 80px);
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
@@ -64,7 +129,7 @@
   color: var(--stripe-purple);
 }
 
-.ob-body { padding: 32px 40px; min-height: 340px; }
+.ob-body { padding: 32px 40px; min-height: 340px; flex: 1; min-height: 0; overflow-y: auto; }
 
 .ob-welcome { text-align: center; }
 .ob-hero { margin-bottom: 28px; }
