@@ -176,6 +176,7 @@ For native module changes (rare): `npx @electron/rebuild -w better-sqlite3` afte
 - **markdown image paths.** Absolute paths from the model render via `folk-file://` (see Architecture). Relative paths can't be resolved (no base dir in chat context) — pass through and let the broken-image icon prompt the user. `~/...` is also unresolved in the renderer.
 - **macOS traffic lights** sit at the top-left over the sidebar. Sidebar `padding-top: 36px` leaves clearance.
 - **The `claude.md` file is the same file as `CLAUDE.md`** on macOS HFS+/APFS (case-insensitive). Editing one edits both.
+- **Inline artifact auto-fix loop.** `InlineVisual` iframe captures runtime errors (`error` + `unhandledrejection`) and posts `folkVisualError` back to the parent. The component forwards via `onError` only when the artifact lives in the latest assistant message. `Conversation.tsx` builds per-message MD components via `buildAssistantMdComponents({sessionId, messageId, isLast})` so the closure sees those flags; the compact-summary path uses a static factory result (`STATIC_ASSISTANT_MD`, `isLast: false`) to suppress fixes when re-rendering history. Dedup is module-level (`autoFixedArtifacts: Set<string>` keyed by `sessionId:messageId:errorMessage`) — never refires for the same error and skipped while the session is already streaming.
 
 ---
 

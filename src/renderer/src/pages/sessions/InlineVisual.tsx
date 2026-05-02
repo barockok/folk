@@ -27,12 +27,17 @@ html, body {
 
   // Catches unhandled errors and renders them inline so the frame is never
   // silently blank — the user sees what went wrong without opening devtools.
-  const errorHandler = `window.addEventListener('error',function(e){
+  // Also reports errors back to the parent so the renderer can trigger an
+  // auto-fix turn when the artifact lives in the latest assistant message.
+  const errorHandler = `var __folkId="${id}";function __folkReport(msg,line){try{parent.postMessage({folkVisualError:{message:String(msg||''),line:Number(line)||0},folkVisualId:__folkId},'*');}catch(_){}}
+window.addEventListener('error',function(e){
 var d=document.createElement('div');
 d.style.cssText='padding:10px 14px;margin:8px;background:rgba(234,34,97,0.08);color:#ea2261;font:12px/1.5 monospace;border-radius:5px;border:1px solid rgba(234,34,97,0.25);white-space:pre-wrap;word-break:break-all';
 d.textContent='Error: '+e.message+'\\n(line '+e.lineno+')';
 document.body?document.body.insertBefore(d,document.body.firstChild):document.addEventListener('DOMContentLoaded',function(){document.body.insertBefore(d,document.body.firstChild)});
-});`
+__folkReport(e.message,e.lineno);
+});
+window.addEventListener('unhandledrejection',function(e){__folkReport((e.reason&&(e.reason.message||e.reason))||'unhandled rejection',0);});`
 
   const reporter = `(function(){var i="${id}";function r(){parent.postMessage({folkVisualHeight:document.documentElement.scrollHeight,folkVisualId:i},'*');}if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',r);}else{r();}if(window.ResizeObserver){new ResizeObserver(r).observe(document.documentElement);}}());`
 
@@ -59,9 +64,13 @@ const DEFAULT_H = 300
 // confusing in a chat context.
 const COLLAPSED_H = 560
 
-interface Props { code: string; lang: 'html' | 'svg' }
+interface Props {
+  code: string
+  lang: 'html' | 'svg'
+  onError?: (info: { message: string; line: number }) => void
+}
 
-export function InlineVisual({ code, lang }: Props) {
+export function InlineVisual({ code, lang, onError }: Props) {
   const theme = useUIStore((s) => s.theme)
   const isDark = theme === 'dark'
   const id = useRef(Math.random().toString(36).slice(2)).current
@@ -71,15 +80,28 @@ export function InlineVisual({ code, lang }: Props) {
 
   const srcdoc = buildSrcdoc(code, lang, isDark, id)
 
+  const reportedErrorRef = useRef<string | null>(null)
+
   useEffect(() => {
     const handler = (e: MessageEvent) => {
-      if (e.data?.folkVisualId === id && typeof e.data.folkVisualHeight === 'number') {
+      if (e.data?.folkVisualId !== id) return
+      if (typeof e.data.folkVisualHeight === 'number') {
         setHeight(Math.max(e.data.folkVisualHeight, MIN_H))
+      }
+      const err = e.data.folkVisualError
+      if (err && typeof err.message === 'string' && err.message) {
+        if (reportedErrorRef.current === err.message) return
+        reportedErrorRef.current = err.message
+        onError?.({ message: err.message, line: typeof err.line === 'number' ? err.line : 0 })
       }
     }
     window.addEventListener('message', handler)
     return () => window.removeEventListener('message', handler)
-  }, [id])
+  }, [id, onError])
+
+  useEffect(() => {
+    reportedErrorRef.current = null
+  }, [code])
 
   const renderH = collapsed ? Math.min(height, COLLAPSED_H) : height
   const canCollapse = height > COLLAPSED_H

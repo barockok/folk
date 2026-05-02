@@ -1,4 +1,4 @@
-import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import type { Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -67,7 +67,47 @@ const USER_MD_COMPONENTS: Components = {
   }
 }
 
-const MD_COMPONENTS: Components = {
+const autoFixedArtifacts = new Set<string>()
+
+async function dispatchArtifactAutoFix(
+  sessionId: string,
+  messageId: string,
+  err: { message: string; line: number },
+  code: string,
+  lang: 'html' | 'svg'
+): Promise<void> {
+  const key = sessionId + ':' + messageId + ':' + err.message
+  if (autoFixedArtifacts.has(key)) return
+  autoFixedArtifacts.add(key)
+
+  const st = useSessionStore.getState()
+  if (st.streamingSessions.has(sessionId)) return
+
+  const snippet = code.length > 600 ? code.slice(0, 600) + '\n…' : code
+  const lineSuffix = err.line ? ' (line ' + err.line + ')' : ''
+  const prompt =
+    'The inline ' + lang + ' artifact you just produced threw a runtime error:\n\n' +
+    '```\n' + err.message + lineSuffix + '\n```\n\n' +
+    'Source:\n\n```' + lang + '\n' + snippet + '\n```\n\n' +
+    'Fix the artifact so it renders without errors. Common causes: missing plugin ' +
+    'registration (e.g. ChartDataLabels, ChartAnnotation), wrong CDN URL, undefined ' +
+    'globals, or script load order. Re-emit the full corrected artifact in a single ' +
+    '```html (or ```svg) block.'
+
+  st.pushUserMessage(sessionId, prompt)
+  st.pushPendingAssistant(sessionId)
+  st.markStreaming(sessionId)
+  await window.folk.agent.sendMessage(sessionId, prompt)
+}
+
+interface MdContext {
+  sessionId: string
+  messageId: string
+  isLast: boolean
+}
+
+function buildAssistantMdComponents(ctx: MdContext): Components {
+  return {
   pre: ({ node, children }) => {
     // Use the hast AST (node prop) — reliable across react-markdown v8/v9/v10.
     const codeChild = (node as HastElement | undefined)?.children?.find(
@@ -79,7 +119,12 @@ const MD_COMPONENTS: Components = {
       const lang = /language-(html|svg)/.exec(langClass)?.[1] as 'html' | 'svg' | undefined
       if (lang) {
         const code = hastText(codeChild).replace(/\n$/, '')
-        return <InlineVisual code={code} lang={lang} />
+        const onError = ctx.isLast
+          ? (err: { message: string; line: number }) => {
+              void dispatchArtifactAutoFix(ctx.sessionId, ctx.messageId, err, code, lang)
+            }
+          : undefined
+        return <InlineVisual code={code} lang={lang} onError={onError} />
       }
     }
     return <pre>{children}</pre>
@@ -107,7 +152,14 @@ const MD_COMPONENTS: Components = {
       </a>
     )
   }
+  }
 }
+
+const STATIC_ASSISTANT_MD: Components = buildAssistantMdComponents({
+  sessionId: '',
+  messageId: '',
+  isLast: false
+})
 
 const EMPTY_MESSAGES: never[] = []
 const EMPTY_PERMS: PermissionRequest[] = []
@@ -140,6 +192,10 @@ const MessageItem = memo(function MessageItem({
   pendingPerms,
   sessionId
 }: MessageItemProps) {
+  const assistantMdComponents = useMemo(
+    () => buildAssistantMdComponents({ sessionId, messageId: m.id, isLast }),
+    [sessionId, m.id, isLast]
+  )
   const hasText = m.blocks.some((b) => b.kind === 'text')
   const isStreamingThought = isLast && m.role === 'assistant' && !hasText
   const stripTodos = (b: MessageBlock): boolean =>
@@ -264,7 +320,7 @@ const MessageItem = memo(function MessageItem({
             <div key={key} className="msg-body md">
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
-                components={m.role === 'user' ? USER_MD_COMPONENTS : MD_COMPONENTS}
+                components={m.role === 'user' ? USER_MD_COMPONENTS : assistantMdComponents}
                 urlTransform={(url) => url}
               >
                 {b.text}
@@ -352,7 +408,7 @@ function CompactSummaryCard({ text }: { text: string }) {
       </button>
       {open && (
         <div className="compact-summary-body">
-          <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD_COMPONENTS}>
+          <ReactMarkdown remarkPlugins={[remarkGfm]} components={STATIC_ASSISTANT_MD}>
             {text}
           </ReactMarkdown>
         </div>
