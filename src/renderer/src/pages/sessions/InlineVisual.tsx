@@ -30,7 +30,11 @@ html, body {
    gap accumulates each frame — body scrollHeight grows → iframe grows →
    chart resizes → repeat. Forcing block layout removes the gap.
    Canvas also gets max-width so responsive charts can't push past parent. */
-canvas, img, svg, video, iframe { display: block; max-width: 100%; }`.trim()
+canvas, img, svg, video, iframe { display: block; max-width: 100%; }
+/* Iframe is sized to fit content — outer chat handles paging. Hide any
+   nested scrollbars so charts/SVGs don't show stray rails. */
+html { scrollbar-width: none; -ms-overflow-style: none; }
+html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; display: none; }`.trim()
 
   // Catches unhandled errors and renders them inline so the frame is never
   // silently blank — the user sees what went wrong without opening devtools.

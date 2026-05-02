@@ -441,6 +441,11 @@ function renderDiffPanel(call: PersistedToolCall): ReactElement | null {
   )
 }
 
+// Collapse-by-default threshold. Small edits (Edit hunks ≤ 12 lines) inline;
+// anything bigger — typically Write of a fresh file or a large refactor —
+// stays folded so the chat doesn't drown. Click expands.
+const DIFF_INLINE_LIMIT = 12
+
 function DiffCard({
   call,
   status,
@@ -452,7 +457,14 @@ function DiffCard({
   path: string
   lines: string[]
 }) {
-  const [open, setOpen] = useState(true)
+  let adds = 0
+  let dels = 0
+  for (const l of lines) {
+    if (l.startsWith('+')) adds++
+    else if (l.startsWith('-')) dels++
+  }
+  const big = lines.length > DIFF_INLINE_LIMIT
+  const [open, setOpen] = useState(!big)
   return (
     <div className={`tool-card diff-card ${statusClass(status)}`} data-open={open ? 'true' : 'false'}>
       <button type="button" className="tool-hd" onClick={() => setOpen((v) => !v)}>
@@ -461,6 +473,10 @@ function DiffCard({
         </span>
         <span className="tool-name" title={call.tool}>{humanizeToolName(call.tool).label}</span>
         {path && <span className="tool-srv" title={path}>{path}</span>}
+        <span className="diff-stat" aria-label={`${adds} added, ${dels} removed`}>
+          {adds > 0 && <span className="diff-stat-add">+{adds}</span>}
+          {dels > 0 && <span className="diff-stat-del">−{dels}</span>}
+        </span>
         <span className="tool-status">
           {status === 'running' && <span className="spinner" />}
           {status}

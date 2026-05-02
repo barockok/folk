@@ -2650,6 +2650,21 @@ html[data-window-state="blurred"] .badge-ac {
   background: color-mix(in srgb, var(--err) 14%, transparent);
   color: color-mix(in srgb, var(--err) 85%, var(--heading));
 }
+.diff-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--ff-mono);
+  font-size: 11px;
+  font-feature-settings: "tnum";
+  margin-left: auto;
+  padding-right: 2px;
+}
+/* When .diff-stat is present it owns the right-side push; the status
+   chip sits next to it without its own auto margin. */
+.tool-hd .diff-stat + .tool-status { margin-left: 0; }
+.diff-stat-add { color: color-mix(in srgb, var(--ok) 75%, var(--heading)); }
+.diff-stat-del { color: color-mix(in srgb, var(--err) 75%, var(--heading)); }
 .perm-card {
   display: flex;
   flex-direction: column;
