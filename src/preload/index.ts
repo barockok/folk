@@ -14,6 +14,7 @@ const folk: FolkAPI = {
     get: (id) => ipcRenderer.invoke('sessions:get', id),
     create: (config) => ipcRenderer.invoke('sessions:create', config),
     delete: (id) => ipcRenderer.invoke('sessions:delete', id),
+    clear: (id) => ipcRenderer.invoke('sessions:clear', id),
     loadMessages: (id) => ipcRenderer.invoke('sessions:loadMessages', id),
     setPermissionMode: (id, mode) => ipcRenderer.invoke('sessions:setPermissionMode', id, mode),
     setModel: (id, modelId) => ipcRenderer.invoke('sessions:setModel', id, modelId),

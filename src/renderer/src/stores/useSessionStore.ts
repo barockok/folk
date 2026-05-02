@@ -76,6 +76,7 @@ interface SessionState {
   hydrateMessages: (sessionId: string) => Promise<void>
   markStreaming: (sessionId: string) => void
   markIdle: (sessionId: string) => void
+  clearMessages: (sessionId: string) => void
   appendChunk: (e: AgentChunk) => void
   appendThinking: (e: AgentChunk) => void
   appendToolCall: (e: AgentToolCall) => void
@@ -218,6 +219,32 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       const next = new Set(st.streamingSessions)
       next.delete(sessionId)
       return { streamingSessions: next, lifecycleTicker: ticker }
+    }),
+  clearMessages: (sessionId) =>
+    set((st) => {
+      const messages = { ...st.messages }
+      delete messages[sessionId]
+      const pendingPermissions = { ...st.pendingPermissions }
+      delete pendingPermissions[sessionId]
+      const pendingElicitations = { ...st.pendingElicitations }
+      delete pendingElicitations[sessionId]
+      const promptSuggestions = { ...st.promptSuggestions }
+      delete promptSuggestions[sessionId]
+      const stats = { ...st.stats }
+      delete stats[sessionId]
+      const ticker = { ...st.lifecycleTicker }
+      delete ticker[sessionId]
+      const streaming = new Set(st.streamingSessions)
+      streaming.delete(sessionId)
+      return {
+        messages,
+        pendingPermissions,
+        pendingElicitations,
+        promptSuggestions,
+        stats,
+        lifecycleTicker: ticker,
+        streamingSessions: streaming
+      }
     }),
   setSessions: (sessions) => set({ sessions }),
   upsertSession: (s) =>

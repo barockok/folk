@@ -3,6 +3,7 @@ import { Shell } from './components/Shell'
 import { UpdateBanner } from './components/UpdateBanner'
 import { useAgent } from './hooks/useAgent'
 import { useUpdater } from './hooks/useUpdater'
+import { useGlobalCancelHotkey } from './hooks/useGlobalCancelHotkey'
 import { useUIStore } from './stores/useUIStore'
 import { useProfileStore } from './stores/useProfileStore'
 import { useProvidersStore } from './stores/useProvidersStore'
@@ -20,6 +21,7 @@ import { ProfilePage } from './pages/ProfilePage'
 export default function App() {
   useAgent()
   useUpdater()
+  useGlobalCancelHotkey()
   const { page, theme, density } = useUIStore()
 
   useEffect(() => {

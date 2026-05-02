@@ -823,6 +823,31 @@ export class AgentManager extends EventEmitter {
     this.db.deleteSession(id)
   }
 
+  // /clear — wipe the session's conversation history but keep the row, the
+  // working directory, model, MCP set, and permission mode. Mirrors Claude
+  // Code CLI's /clear: same session shell, fresh context.
+  async clearSession(id: string): Promise<Session> {
+    const existing = this.db.getSession(id)
+    if (!existing) throw new Error(`session ${id} not found`)
+    // Tear down any in-flight SDK query first so we don't race the file
+    // delete against the CLI writing more lines into it.
+    if (this.#live.has(id)) await this.#teardown(id, 'cancel')
+    // Remove the on-disk transcript jsonl. The SDK keys resume by sessionId
+    // against this file; deleting it makes the next sendMessage spin up a
+    // fresh init (gated by claudeStarted=false below).
+    const projDir = existing.workingDir.replace(/\//g, '-')
+    const file = join(homedir(), '.claude', 'projects', projDir, `${id}.jsonl`)
+    try {
+      await fs.unlink(file)
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code
+      if (code !== 'ENOENT') throw err
+    }
+    this.db.updateSession(id, { claudeStarted: false, status: 'idle' })
+    this.#invalidateMessages(id)
+    return this.db.getSession(id)!
+  }
+
   // Update the persisted permissionMode and tear down the live SDK session so
   // the next turn picks up the new mode (the SDK reads it at session init).
   renameSession(id: string, title: string): Session {
@@ -942,14 +967,68 @@ export class AgentManager extends EventEmitter {
 
   async cancel(sessionId: string): Promise<void> {
     const session = this.db.getSession(sessionId)
-    await this.#teardown(sessionId, 'cancel')
-    this.db.updateSession(sessionId, { status: 'cancelled' })
-    // Aborting mid-tool can leave assistant tool_use blocks without matching
-    // user tool_result blocks in the on-disk transcript — Anthropic's API then
-    // 400s on the next resume turn, surfacing as "Process exited with code 1".
-    // Scrub by appending synthetic cancelled-tool_results so the transcript is
-    // balanced before the next resume.
-    if (session) await this.#balanceCancelledToolUses(session).catch(() => {})
+    const live = this.#live.get(sessionId)
+    // Eager flip — don't gate UI on the SDK actually unwinding. The SDK can
+    // sit inside a long-running tool (Bash, network fetch) that doesn't
+    // honor the abort signal promptly; if we awaited teardown.pump, this
+    // IPC handler would hang and the renderer's Stop button would feel
+    // unreliable. Update DB + emit synthetic cancelled error now so the UI
+    // clears its streaming state immediately.
+    if (session && session.status !== 'cancelled') {
+      this.db.updateSession(sessionId, { status: 'cancelled' })
+    }
+    this.emit('error', {
+      sessionId,
+      code: 'cancelled',
+      message: 'Cancelled',
+      retryable: false
+    })
+    if (!live) return
+    // Fire abort and remove from #live synchronously so further dispatches
+    // for this session are dropped (see #dispatchMessage early-return).
+    this.#live.delete(sessionId)
+    if (live.idleTimer) {
+      clearTimeout(live.idleTimer)
+      live.idleTimer = null
+    }
+    for (const [toolUseId, ask] of this.#pendingAsks) {
+      if (ask.sessionId === sessionId) {
+        this.#pendingAsks.delete(toolUseId)
+        ask.resolve('')
+      }
+    }
+    for (const [reqId, pending] of this.#pendingElicitations) {
+      if (pending.sessionId === sessionId) {
+        this.#pendingElicitations.delete(reqId)
+        pending.resolve({ action: 'cancel' })
+      }
+    }
+    // Pending permission requests are auto-resolved by the per-request
+    // abort listener (see canUseTool path) once live.abort fires below.
+    try {
+      live.abort.abort()
+    } catch {
+      /* noop */
+    }
+    // Background cleanup — pump may resolve quickly (clean abort) or hang
+    // until the underlying tool finishes. Either way, do the transcript
+    // balance once it settles. Errors swallowed; this runs detached from
+    // the IPC reply.
+    void live.pump
+      .catch(() => {})
+      .then(() => {
+        if (session) return this.#balanceCancelledToolUses(session).catch(() => {})
+        return undefined
+      })
+      .then(() => {
+        if (this.#live.size === 0 && this.#onIdle) {
+          try {
+            this.#onIdle()
+          } catch (err) {
+            console.error('[agent-manager] onIdle handler threw:', err)
+          }
+        }
+      })
   }
 
   async #balanceCancelledToolUses(session: Session): Promise<void> {
@@ -1191,6 +1270,10 @@ export class AgentManager extends EventEmitter {
 
 
   #dispatchMessage(sessionId: string, msg: unknown): void {
+    // Once cancel() removes the session from #live, any further messages
+    // pumped out of the SDK iterator are stale and must not reach the UI —
+    // the user already saw the turn flip to 'cancelled'.
+    if (!this.#live.has(sessionId)) return
     const m = msg as {
       type: string
       message?: { id?: string; content?: Array<Record<string, unknown>> }

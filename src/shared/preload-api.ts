@@ -40,6 +40,7 @@ export interface FolkAPI {
     get: (id: string) => Promise<Session | null>
     create: (config: SessionConfig) => Promise<Session>
     delete: (id: string) => Promise<void>
+    clear: (id: string) => Promise<Session>
     loadMessages: (id: string) => Promise<PersistedMessage[]>
     setPermissionMode: (id: string, mode: PermissionMode) => Promise<Session>
     setModel: (id: string, modelId: string) => Promise<Session>

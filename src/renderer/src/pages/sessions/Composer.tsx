@@ -24,6 +24,7 @@ interface ComposerProps {
   session: Session | null
   onSend: (text: string, attachments?: Attachment[]) => void
   onCancel: () => void
+  onClear?: () => void | Promise<void>
   onConfigureNew?: () => void
   // When the session is a renderer-side draft (id starts with `draft-`,
   // not yet persisted to SQLite), Composer can't call setModel/
@@ -59,7 +60,7 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-export function Composer({ session, onSend, onCancel, onConfigureNew, onDraftPatch }: ComposerProps) {
+export function Composer({ session, onSend, onCancel, onClear, onConfigureNew, onDraftPatch }: ComposerProps) {
   const isDraftSession = !!session && session.id.startsWith('draft-')
   const [text, setText] = useState('')
   const [modelPopOpen, setModelPopOpen] = useState(false)
@@ -240,10 +241,21 @@ export function Composer({ session, onSend, onCancel, onConfigureNew, onDraftPat
       openModelPopover: () => setModelPopOpen(true),
       send: (t) => onSend(t),
       cancel: onCancel,
+      clearContext: () => {
+        if (!onClear) {
+          toast({ kind: 'warn', text: 'Clear is not available here' })
+          return
+        }
+        return Promise.resolve(onClear()).then(() => {
+          toast({ kind: 'ok', text: 'Context cleared' })
+        }).catch((e: Error) => {
+          toast({ kind: 'err', text: `Clear failed: ${e.message}` })
+        })
+      },
       showCost,
       showStatus
     }),
-    [session, setPage, newSession, exportTranscript, toast, onSend, onCancel, showCost, showStatus]
+    [session, setPage, newSession, exportTranscript, toast, onSend, onCancel, onClear, showCost, showStatus]
   )
 
   const runSlash = useCallback(
@@ -316,6 +328,19 @@ export function Composer({ session, onSend, onCancel, onConfigureNew, onDraftPat
           return
         }
       }
+      // Esc while a turn is streaming → cancel. Read the streaming flag
+      // straight from the store (set synchronously by markStreaming) — the
+      // session prop's status field lags by an IPC round-trip after send,
+      // which made this branch flaky inside a focused textarea.
+      if (e.key === 'Escape' && session) {
+        const streaming = useSessionStore.getState().streamingSessions.has(session.id)
+        if (streaming || session.status === 'running') {
+          e.preventDefault()
+          e.stopPropagation()
+          onCancel()
+          return
+        }
+      }
       // Enter sends. Shift+Enter inserts a newline (default behavior).
       // IME composition (e.nativeEvent.isComposing) must not trigger send.
       if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
@@ -323,7 +348,7 @@ export function Composer({ session, onSend, onCancel, onConfigureNew, onDraftPat
         handleSend()
       }
     },
-    [handleSend, slashOpen, slashMatches, slashIndex, runSlash]
+    [handleSend, slashOpen, slashMatches, slashIndex, runSlash, session?.status, onCancel]
   )
 
   // Reset slash highlight whenever the menu reopens or the filter changes.
@@ -881,7 +906,7 @@ export function Composer({ session, onSend, onCancel, onConfigureNew, onDraftPat
           )}
 
           <div className="hint" style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--fg-faint)', fontFamily: 'var(--ff-mono)', display: 'flex', alignItems: 'center', gap: 6 }}>
-            {!isRunning && <span>⌘↵</span>}
+            <span>{isRunning ? 'esc to stop' : '⌘↵'}</span>
           </div>
 
           {isRunning ? (

@@ -356,6 +356,12 @@ const MessageItem = memo(function MessageItem({
         {m.error && m.error.code !== 'cancelled' && (
           <div className="msg-error">{m.error.message}</div>
         )}
+        {m.error && m.error.code === 'cancelled' && (
+          <div className="msg-cancelled" role="status" aria-label="Turn cancelled">
+            <span className="msg-cancelled-dot" />
+            Stopped by you
+          </div>
+        )}
       </div>
     </article>
   )
@@ -420,6 +426,7 @@ function CompactSummaryCard({ text }: { text: string }) {
 function PermissionPrompt({ req }: { req: PermissionRequest }) {
   const remove = useSessionStore((s) => s.removePermissionRequest)
   const [busy, setBusy] = useState(false)
+  const cardRef = useRef<HTMLDivElement | null>(null)
   const respond = async (
     behavior: 'allow' | 'deny',
     allowAlways = false
@@ -437,10 +444,28 @@ function PermissionPrompt({ req }: { req: PermissionRequest }) {
       setBusy(false)
     }
   }
+  // Esc → deny. Auto-focus the card so the document keydown lands on it
+  // even if the user hasn't tabbed to a button yet.
+  useEffect(() => {
+    cardRef.current?.focus()
+  }, [])
   const tool = humanizeToolName(req.toolName).label
   const summary = req.title || `Allow ${tool}?`
   return (
-    <div className="perm-card" role="alertdialog" aria-label={summary}>
+    <div
+      className="perm-card"
+      role="alertdialog"
+      aria-label={summary}
+      tabIndex={-1}
+      ref={cardRef}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape' && !busy) {
+          e.preventDefault()
+          e.stopPropagation()
+          void respond('deny')
+        }
+      }}
+    >
       <div className="perm-card-hd">
         <span className="perm-card-ic">⚠</span>
         <span className="perm-card-title">{summary}</span>

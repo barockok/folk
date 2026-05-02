@@ -9,6 +9,7 @@ interface HistoryRailProps {
   onDelete: (id: string) => Promise<void>
   onRename: (id: string, title: string) => Promise<void>
   onNew: () => void
+  onCancel: (id: string) => void | Promise<void>
 }
 
 type Group = 'Today' | 'Yesterday' | 'This week' | 'Earlier'
@@ -136,7 +137,8 @@ export function HistoryRail({
   onPick,
   onDelete,
   onRename,
-  onNew
+  onNew,
+  onCancel
 }: HistoryRailProps) {
   const [query, setQuery] = useState('')
   const [pendingId, setPendingId] = useState<string | null>(null)
@@ -254,6 +256,21 @@ export function HistoryRail({
                         {notStarted ? 'not started' : formatRelTime(s.createdAt)}
                       </span>
                     </div>
+
+                    {s.status === 'running' && (
+                      <button
+                        className="sess-stop"
+                        type="button"
+                        title="Stop this session (esc when active)"
+                        aria-label={`Stop session ${s.title}`}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          void onCancel(s.id)
+                        }}
+                      >
+                        <Icon name="pause" size={11} />
+                      </button>
+                    )}
 
                     <button
                       className="sess-kebab"

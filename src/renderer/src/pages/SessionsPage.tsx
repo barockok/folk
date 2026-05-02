@@ -28,7 +28,7 @@ const HERO_GREETINGS = [
 ] as const
 
 export function SessionsPage() {
-  const { sessions, activeId, setActive, create, delete: del, rename, send, cancel } = useSessions()
+  const { sessions, activeId, setActive, create, delete: del, rename, send, cancel, clear } = useSessions()
   const { enabledModels } = useProviders()
   const setPage = useUIStore((s) => s.setPage)
   // A draft is a configured-but-unsent session — purely renderer-side, never
@@ -170,6 +170,7 @@ export function SessionsPage() {
         onDelete={del}
         onRename={async (id, title) => { await rename(id, title) }}
         onNew={handleNew}
+        onCancel={cancel}
       />
       <div className={`sess-main${isFresh ? ' is-fresh' : ''}`}>
         {active && (
@@ -195,6 +196,7 @@ export function SessionsPage() {
                     session={active}
                     onSend={handleSend}
                     onCancel={() => cancel(active.id)}
+                    onClear={active.id.startsWith('draft-') ? undefined : () => clear(active.id)}
                     onDraftPatch={patchDraft}
                   />
                   <HeroConfigBar

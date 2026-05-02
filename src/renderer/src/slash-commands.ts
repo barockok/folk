@@ -15,6 +15,7 @@ export interface SlashContext {
   openModelPopover: () => void
   send: (text: string) => void
   cancel: () => void
+  clearContext: () => void | Promise<void>
   showCost: () => void
   showStatus: () => void
 }
@@ -86,6 +87,12 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   // Renderer actions
   {
     name: 'clear',
+    description: 'Clear conversation history (same session, fresh context)',
+    kind: 'action',
+    run: (c) => c.clearContext()
+  },
+  {
+    name: 'new',
     description: 'Start a new session in the same folder',
     kind: 'action',
     run: (c) => c.newSession()

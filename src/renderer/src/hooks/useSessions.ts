@@ -86,7 +86,27 @@ export function useSessions() {
       const fresh = await window.folk.sessions.get(sessionId)
       if (fresh) upsertSession(fresh)
     },
+    async clear(sessionId: string) {
+      // Optimistic local wipe — drop messages immediately so the UI feels
+      // instantaneous. Main re-emits the cleared session via upsertSession
+      // once it's flipped claudeStarted/status on disk.
+      const st = useSessionStore.getState()
+      st.markIdle(sessionId)
+      st.clearMessages(sessionId)
+      const fresh = await window.folk.sessions.clear(sessionId)
+      upsertSession(fresh)
+    },
     async cancel(sessionId: string) {
+      // Optimistic local flip — main also flips DB + emits a synthetic
+      // 'cancelled' error, but the renderer's session.status feeds the
+      // composer's Stop button directly. Patch immediately so the UI is
+      // responsive even if the SDK is mid-tool and slow to unwind.
+      const st = useSessionStore.getState()
+      const cur = st.sessions.find((s) => s.id === sessionId)
+      if (cur && cur.status === 'running') {
+        st.upsertSession({ ...cur, status: 'cancelled' })
+      }
+      st.markIdle(sessionId)
       await window.folk.agent.cancel(sessionId)
     }
   }
