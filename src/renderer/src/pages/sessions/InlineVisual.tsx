@@ -53,7 +53,11 @@ document.body?document.body.insertBefore(d,document.body.firstChild):document.ad
 
 const MIN_H = 100
 const DEFAULT_H = 300
-const MAX_H = 560
+// Height we collapse to when the user presses the collapse button on a tall
+// artifact. Default render is uncapped so the artifact grows to its natural
+// height and the outer chat scroll handles paging — nested iframe scroll is
+// confusing in a chat context.
+const COLLAPSED_H = 560
 
 interface Props { code: string; lang: 'html' | 'svg' }
 
@@ -63,23 +67,26 @@ export function InlineVisual({ code, lang }: Props) {
   const id = useRef(Math.random().toString(36).slice(2)).current
   const [height, setHeight] = useState(DEFAULT_H)
   const [showSource, setShowSource] = useState(false)
-  const [expanded, setExpanded] = useState(false)
+  const [collapsed, setCollapsed] = useState(false)
 
   const srcdoc = buildSrcdoc(code, lang, isDark, id)
 
   useEffect(() => {
     const handler = (e: MessageEvent) => {
       if (e.data?.folkVisualId === id && typeof e.data.folkVisualHeight === 'number') {
-        setHeight(Math.min(Math.max(e.data.folkVisualHeight, MIN_H), MAX_H))
+        setHeight(Math.max(e.data.folkVisualHeight, MIN_H))
       }
     }
     window.addEventListener('message', handler)
     return () => window.removeEventListener('message', handler)
   }, [id])
 
+  const renderH = collapsed ? Math.min(height, COLLAPSED_H) : height
+  const canCollapse = height > COLLAPSED_H
+
   return (
     <div className="inline-visual">
-      <div className="iv-frame-wrap" style={{ height: expanded ? MAX_H : height }}>
+      <div className="iv-frame-wrap" style={{ height: renderH }}>
         <iframe
           key={isDark ? 'dark' : 'light'}
           srcDoc={srcdoc}
@@ -94,9 +101,16 @@ export function InlineVisual({ code, lang }: Props) {
           <button type="button" className="iv-btn" onClick={() => void navigator.clipboard.writeText(code)}>
             Copy
           </button>
-          <button type="button" className="iv-btn" onClick={() => setExpanded((v) => !v)} aria-label={expanded ? 'Collapse' : 'Expand'}>
-            {expanded ? '↙' : '↗'}
-          </button>
+          {canCollapse && (
+            <button
+              type="button"
+              className="iv-btn"
+              onClick={() => setCollapsed((v) => !v)}
+              aria-label={collapsed ? 'Expand' : 'Collapse'}
+            >
+              {collapsed ? '↗' : '↙'}
+            </button>
+          )}
         </div>
       </div>
       {showSource && (
