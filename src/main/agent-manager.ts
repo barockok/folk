@@ -1028,11 +1028,26 @@ export class AgentManager extends EventEmitter {
   async sendMessage(
     sessionId: string,
     text: string,
-    _attachments?: Attachment[],
+    attachments?: Attachment[],
     skillPrompts?: string[]
   ): Promise<void> {
     const session = this.db.getSession(sessionId)
     if (!session) throw new Error(`session ${sessionId} not found`)
+
+    // Persist attachments under <workingDir>/.folk/attachments/<sessionId>/
+    // and append absolute paths to the user message so the model can Read
+    // them. Images are emitted as markdown image syntax so folk's renderer
+    // shows an inline preview when the transcript is replayed.
+    let effectiveText = text
+    if (attachments && attachments.length > 0) {
+      const written = await this.#writeAttachments(session, attachments)
+      const lines: string[] = []
+      for (const a of written) {
+        if (a.kind === 'image') lines.push(`![${a.name}](${a.path})`)
+        else lines.push(`- ${a.path} (${a.mimeType})`)
+      }
+      effectiveText = `${text}\n\nAttached:\n${lines.join('\n')}`.trim()
+    }
 
     // Auto-title from first user message when the session is still using the
     // placeholder. Trim to a single line and ~60 chars so the sidebar stays
@@ -1050,7 +1065,7 @@ export class AgentManager extends EventEmitter {
     this.#resolveProvider(session.modelId)
 
     try {
-      await this.#sendOnce(session, text, skillPrompts)
+      await this.#sendOnce(session, effectiveText, skillPrompts)
     } catch (err) {
       const msg = (err as Error)?.message ?? ''
       // The bundled Claude Code CLI keeps a per-session lock; if the prior
@@ -1077,8 +1092,25 @@ export class AgentManager extends EventEmitter {
       await new Promise((r) => setTimeout(r, 600))
       const refreshed = this.db.getSession(sessionId)
       if (!refreshed) throw err
-      await this.#sendOnce(refreshed, text, skillPrompts)
+      await this.#sendOnce(refreshed, effectiveText, skillPrompts)
     }
+  }
+
+  async #writeAttachments(
+    session: Session,
+    atts: Attachment[]
+  ): Promise<Array<{ name: string; mimeType: string; kind: Attachment['kind']; path: string }>> {
+    const dir = join(session.workingDir, '.folk', 'attachments', session.id)
+    await fs.mkdir(dir, { recursive: true })
+    const out: Array<{ name: string; mimeType: string; kind: Attachment['kind']; path: string }> = []
+    for (const a of atts) {
+      const stamp = Date.now().toString(36)
+      const safe = a.name.replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 80) || 'file'
+      const path = join(dir, `${stamp}-${randomUUID().slice(0, 6)}-${safe}`)
+      await fs.writeFile(path, Buffer.from(a.dataBase64, 'base64'))
+      out.push({ name: a.name, mimeType: a.mimeType, kind: a.kind, path })
+    }
+    return out
   }
 
   async #sendOnce(session: Session, text: string, skillPrompts?: string[]): Promise<void> {

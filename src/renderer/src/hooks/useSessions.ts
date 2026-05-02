@@ -58,7 +58,22 @@ export function useSessions() {
     },
     async send(sessionId: string, text: string, attachments?: Attachment[]) {
       const st = useSessionStore.getState()
-      st.pushUserMessage(sessionId, text)
+      // Mirror the user message the model will see: append image thumbnails
+      // (data URI) and a list of non-image attachment names so the timeline
+      // bubble shows them immediately. Once the SDK persists the turn, the
+      // jsonl-backed copy uses the on-disk folk-file:// path instead — both
+      // render identically through the markdown image component.
+      const optimisticText =
+        attachments && attachments.length > 0
+          ? `${text}\n\n${attachments
+              .map((a) =>
+                a.kind === 'image'
+                  ? `![${a.name}](data:${a.mimeType};base64,${a.dataBase64})`
+                  : `- ${a.name}`
+              )
+              .join('\n')}`.trim()
+          : text
+      st.pushUserMessage(sessionId, optimisticText)
       st.pushPendingAssistant(sessionId)
       st.markStreaming(sessionId)
       const { folkSkillsEnabled } = useUIStore.getState()

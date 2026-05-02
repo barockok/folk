@@ -3,6 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import type { Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useSessionStore } from '../../stores/useSessionStore'
+import { useUIStore } from '../../stores/useUIStore'
 import type { ChatMessage } from '../../stores/useSessionStore'
 import type { MessageBlock, PermissionRequest, PersistedToolCall, Session } from '@shared/types'
 import { ToolCard, humanizeToolName } from './ToolCard'
@@ -32,6 +33,39 @@ function hastText(node: HastNode): string {
 
 type HastNode = { type: string; children?: HastNode[] }
 type HastElement = HastNode & { tagName?: string; properties?: Record<string, unknown> }
+
+const USER_MD_COMPONENTS: Components = {
+  img: ({ src, alt }) => {
+    const safe = rewriteImgSrc(typeof src === 'string' ? src : undefined)
+    return (
+      <img
+        className="user-attach-thumb"
+        src={safe}
+        alt={alt}
+        onClick={() => safe && useUIStore.getState().openLightbox(safe)}
+      />
+    )
+  },
+  a: ({ href, children, ...props }) => {
+    const url = typeof href === 'string' ? href : ''
+    const isExternal = /^https?:\/\//i.test(url) || url.startsWith('mailto:')
+    return (
+      <a
+        href={url}
+        target={isExternal ? '_blank' : undefined}
+        rel={isExternal ? 'noopener noreferrer' : undefined}
+        onClick={(e) => {
+          if (!isExternal) return
+          e.preventDefault()
+          void window.folk.shell.openExternal(url)
+        }}
+        {...props}
+      >
+        {children}
+      </a>
+    )
+  }
+}
 
 const MD_COMPONENTS: Components = {
   pre: ({ node, children }) => {
@@ -228,7 +262,11 @@ const MessageItem = memo(function MessageItem({
           }
           return (
             <div key={key} className="msg-body md">
-              <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD_COMPONENTS}>
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={m.role === 'user' ? USER_MD_COMPONENTS : MD_COMPONENTS}
+                urlTransform={(url) => url}
+              >
                 {b.text}
               </ReactMarkdown>
             </div>

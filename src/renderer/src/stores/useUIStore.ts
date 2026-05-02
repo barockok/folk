@@ -25,6 +25,7 @@ interface UIState {
   sidebarCollapsed: boolean
   forceOnboarding: boolean
   folkSkillsEnabled: Record<string, boolean>
+  lightboxSrc: string | null
   toggleFolkSkill: (id: string) => void
   setPage: (p: PageKey) => void
   openCmdk: () => void
@@ -35,6 +36,8 @@ interface UIState {
   setDensity: (d: 'compact' | 'regular') => void
   toggleSidebar: () => void
   setForceOnboarding: (v: boolean) => void
+  openLightbox: (src: string) => void
+  closeLightbox: () => void
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -45,6 +48,7 @@ export const useUIStore = create<UIState>((set) => ({
   density: (localStorage.getItem('folk.density') as 'compact' | 'regular') || 'compact',
   sidebarCollapsed: localStorage.getItem('folk.sidebarCollapsed') === '1',
   forceOnboarding: false,
+  lightboxSrc: null,
   folkSkillsEnabled: (() => {
     const saved = localStorage.getItem('folk.folkSkills')
     if (saved) return JSON.parse(saved) as Record<string, boolean>
@@ -84,5 +88,7 @@ export const useUIStore = create<UIState>((set) => ({
       const next = { ...st.folkSkillsEnabled, [id]: !st.folkSkillsEnabled[id] }
       localStorage.setItem('folk.folkSkills', JSON.stringify(next))
       return { folkSkillsEnabled: next }
-    })
+    }),
+  openLightbox: (src) => set({ lightboxSrc: src }),
+  closeLightbox: () => set({ lightboxSrc: null })
 }))

@@ -8,6 +8,7 @@ import { useProfileStore } from './stores/useProfileStore'
 import { useProvidersStore } from './stores/useProvidersStore'
 import { useMCPStore } from './stores/useMCPStore'
 import { FirstRunOnboarding } from './onboarding/FirstRunOnboarding'
+import { Lightbox } from './components/Lightbox'
 import { SessionsPage } from './pages/SessionsPage'
 import { MCPPage } from './pages/MCPPage'
 import { ModelPage } from './pages/ModelPage'
@@ -49,6 +50,7 @@ export default function App() {
         {page === 'profile' && <ProfilePage />}
       </Shell>
       {(!onboarded || forceOnboarding) && <FirstRunOnboarding force={forceOnboarding} />}
+      <Lightbox />
     </>
   )
 }
