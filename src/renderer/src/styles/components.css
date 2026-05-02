@@ -2,6 +2,19 @@
    Stripe-inspired app layout, components, pages
    ============================================================ */
 
+/* Window blur state — match macOS native app convention of desaturating
+   chrome when the window loses focus. Driven by `data-window-state` on
+   <html>, set from the main-process blur/focus events. */
+html[data-window-state="blurred"] .sb-item.active .sb-ico { color: var(--fg-faint); }
+html[data-window-state="blurred"] .sb-item.active {
+  background: var(--bg-sub);
+  box-shadow: none;
+}
+html[data-window-state="blurred"] .sb-brand-mark,
+html[data-window-state="blurred"] .badge-ac {
+  filter: grayscale(0.85) opacity(0.85);
+}
+
 /* Shell */
 .shell {
   display: grid;

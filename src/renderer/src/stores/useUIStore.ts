@@ -23,6 +23,8 @@ interface UIState {
   theme: 'light' | 'dark'
   density: 'compact' | 'regular'
   sidebarCollapsed: boolean
+  tweaksOpen: boolean
+  windowBlurred: boolean
   forceOnboarding: boolean
   folkSkillsEnabled: Record<string, boolean>
   lightboxSrc: string | null
@@ -35,6 +37,9 @@ interface UIState {
   setTheme: (t: 'light' | 'dark') => void
   setDensity: (d: 'compact' | 'regular') => void
   toggleSidebar: () => void
+  setTweaksOpen: (v: boolean) => void
+  toggleTweaks: () => void
+  setWindowBlurred: (v: boolean) => void
   setForceOnboarding: (v: boolean) => void
   openLightbox: (src: string) => void
   closeLightbox: () => void
@@ -47,6 +52,8 @@ export const useUIStore = create<UIState>((set) => ({
   theme: (localStorage.getItem('folk.theme') as 'light' | 'dark') || 'light',
   density: (localStorage.getItem('folk.density') as 'compact' | 'regular') || 'compact',
   sidebarCollapsed: localStorage.getItem('folk.sidebarCollapsed') === '1',
+  tweaksOpen: false,
+  windowBlurred: false,
   forceOnboarding: false,
   lightboxSrc: null,
   folkSkillsEnabled: (() => {
@@ -82,6 +89,12 @@ export const useUIStore = create<UIState>((set) => ({
       localStorage.setItem('folk.sidebarCollapsed', v ? '1' : '0')
       return { sidebarCollapsed: v }
     }),
+  setTweaksOpen: (v) => set({ tweaksOpen: v }),
+  toggleTweaks: () => set((st) => ({ tweaksOpen: !st.tweaksOpen })),
+  setWindowBlurred: (v) => {
+    document.documentElement.setAttribute('data-window-state', v ? 'blurred' : 'focused')
+    set({ windowBlurred: v })
+  },
   setForceOnboarding: (v) => set({ forceOnboarding: v }),
   toggleFolkSkill: (id) =>
     set((st) => {

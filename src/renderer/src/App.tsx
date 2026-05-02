@@ -34,6 +34,28 @@ export default function App() {
     void useMCPStore.getState().load()
   }, [])
 
+  // Wire main-process menu items + window state events to the UI store.
+  // Window blur/focus paints `data-window-state` on <html> so CSS can
+  // desaturate sidebar accents to match macOS native app behavior.
+  useEffect(() => {
+    const api = window.folk?.app
+    if (!api) return
+    const offState = api.onWindowState((s) =>
+      useUIStore.getState().setWindowBlurred(s === 'blurred')
+    )
+    const offTweaks = api.onOpenTweaks(() => useUIStore.getState().setTweaksOpen(true))
+    const offCmdk = api.onOpenCmdk(() => useUIStore.getState().openCmdk())
+    const offSidebar = api.onToggleSidebar(() => useUIStore.getState().toggleSidebar())
+    const offNew = api.onNewSession(() => useUIStore.getState().setPage('sessions'))
+    return () => {
+      offState()
+      offTweaks()
+      offCmdk()
+      offSidebar()
+      offNew()
+    }
+  }, [])
+
   const onboarded = localStorage.getItem('folk.onboarded') === '1'
   const forceOnboarding = useUIStore((s) => s.forceOnboarding)
 

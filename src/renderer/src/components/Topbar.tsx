@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import { Icon } from './icons'
 import { TweaksPanel } from './TweaksPanel'
 import { useUIStore } from '../stores/useUIStore'
@@ -27,7 +27,9 @@ export function Topbar() {
     return found?.title ?? null
   })
 
-  const [tweaksOpen, setTweaksOpen] = useState(false)
+  const tweaksOpen = useUIStore((s) => s.tweaksOpen)
+  const setTweaksOpen = useUIStore((s) => s.setTweaksOpen)
+  const toggleTweaks = useUIStore((s) => s.toggleTweaks)
   const tweaksWrapRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
@@ -45,7 +47,7 @@ export function Topbar() {
       document.removeEventListener('mousedown', onDown)
       document.removeEventListener('keydown', onKey)
     }
-  }, [tweaksOpen])
+  }, [tweaksOpen, setTweaksOpen])
 
   const crumbs: string[] = ['folk', PAGE_LABELS[page]]
   if (page === 'sessions' && activeSessionTitle) {
@@ -94,7 +96,7 @@ export function Topbar() {
         <div className="tweaks-wrap" ref={tweaksWrapRef}>
           <button
             className="btn btn-plain btn-icon"
-            onClick={() => setTweaksOpen((v) => !v)}
+            onClick={toggleTweaks}
             title="Tweaks"
             aria-label="Open tweaks"
             aria-expanded={tweaksOpen}

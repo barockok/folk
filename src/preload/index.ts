@@ -76,7 +76,28 @@ const folk: FolkAPI = {
     openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url)
   },
   app: {
-    reportTheme: (theme) => ipcRenderer.send('app:theme', theme)
+    reportTheme: (theme) => ipcRenderer.send('app:theme', theme),
+    onWindowState: (fn) => listen('app:windowState', fn),
+    onOpenTweaks: (fn) => {
+      const h = (): void => fn()
+      ipcRenderer.on('app:openTweaks', h)
+      return () => ipcRenderer.off('app:openTweaks', h)
+    },
+    onOpenCmdk: (fn) => {
+      const h = (): void => fn()
+      ipcRenderer.on('app:openCmdk', h)
+      return () => ipcRenderer.off('app:openCmdk', h)
+    },
+    onNewSession: (fn) => {
+      const h = (): void => fn()
+      ipcRenderer.on('app:newSession', h)
+      return () => ipcRenderer.off('app:newSession', h)
+    },
+    onToggleSidebar: (fn) => {
+      const h = (): void => fn()
+      ipcRenderer.on('app:toggleSidebar', h)
+      return () => ipcRenderer.off('app:toggleSidebar', h)
+    }
   },
   updater: {
     check: () => ipcRenderer.invoke('updater:check'),

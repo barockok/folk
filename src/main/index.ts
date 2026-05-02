@@ -1,4 +1,5 @@
-import { app, BrowserWindow, ipcMain, nativeTheme, net, protocol, shell } from 'electron'
+import { app, BrowserWindow, Menu, ipcMain, nativeTheme, net, protocol, screen, shell } from 'electron'
+import type { MenuItemConstructorOptions } from 'electron'
 import { join } from 'node:path'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
@@ -24,6 +25,51 @@ function writePersistedTheme(t: 'light' | 'dark'): void {
   } catch {
     /* best-effort cache; loss only re-introduces the flash on the next boot */
   }
+}
+
+// Persisted window bounds so resize/move survive relaunch. Validated against
+// current display layout — a saved position on a now-disconnected monitor
+// would otherwise spawn the window offscreen.
+interface WindowBounds { x?: number; y?: number; width: number; height: number }
+function windowCachePath(): string {
+  return join(app.getPath('userData'), 'folk-window.cache')
+}
+function readPersistedBounds(): WindowBounds | null {
+  try {
+    const raw = readFileSync(windowCachePath(), 'utf8')
+    const v = JSON.parse(raw) as Partial<WindowBounds>
+    if (typeof v.width === 'number' && typeof v.height === 'number') {
+      return {
+        x: typeof v.x === 'number' ? v.x : undefined,
+        y: typeof v.y === 'number' ? v.y : undefined,
+        width: v.width,
+        height: v.height
+      }
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+function writePersistedBounds(b: WindowBounds): void {
+  try {
+    writeFileSync(windowCachePath(), JSON.stringify(b), 'utf8')
+  } catch {
+    /* best-effort */
+  }
+}
+function isBoundsOnScreen(b: WindowBounds): boolean {
+  if (typeof b.x !== 'number' || typeof b.y !== 'number') return true
+  const displays = screen.getAllDisplays()
+  return displays.some((d) => {
+    const wa = d.workArea
+    return (
+      b.x! >= wa.x - 50 &&
+      b.y! >= wa.y - 50 &&
+      b.x! + b.width <= wa.x + wa.width + 50 &&
+      b.y! + b.height <= wa.y + wa.height + 50
+    )
+  })
 }
 
 // Register the custom scheme BEFORE app.whenReady so the renderer treats it
@@ -90,6 +136,104 @@ async function bootProxyWithRetry(): Promise<void> {
   }
 }
 
+function buildApplicationMenu(): void {
+  const isMac = process.platform === 'darwin'
+  const sendToRenderer = (channel: string): void => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel)
+  }
+
+  const template: MenuItemConstructorOptions[] = [
+    ...(isMac
+      ? ([
+          {
+            label: app.name,
+            submenu: [
+              { role: 'about' },
+              { type: 'separator' },
+              {
+                label: 'Preferences…',
+                accelerator: 'CmdOrCtrl+,',
+                click: () => sendToRenderer('app:openTweaks')
+              },
+              { type: 'separator' },
+              { role: 'services' },
+              { type: 'separator' },
+              { role: 'hide' },
+              { role: 'hideOthers' },
+              { role: 'unhide' },
+              { type: 'separator' },
+              { role: 'quit' }
+            ]
+          }
+        ] as MenuItemConstructorOptions[])
+      : []),
+    {
+      label: 'File',
+      submenu: [
+        {
+          label: 'New Session',
+          accelerator: 'CmdOrCtrl+N',
+          click: () => sendToRenderer('app:newSession')
+        },
+        { type: 'separator' },
+        isMac ? { role: 'close' } : { role: 'quit' }
+      ]
+    },
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'pasteAndMatchStyle' },
+        { role: 'delete' },
+        { role: 'selectAll' }
+      ]
+    },
+    {
+      label: 'View',
+      submenu: [
+        {
+          label: 'Search…',
+          accelerator: 'CmdOrCtrl+K',
+          click: () => sendToRenderer('app:openCmdk')
+        },
+        { type: 'separator' },
+        {
+          label: 'Toggle Sidebar',
+          accelerator: 'CmdOrCtrl+\\',
+          click: () => sendToRenderer('app:toggleSidebar')
+        },
+        { type: 'separator' },
+        { role: 'reload' },
+        { role: 'forceReload' },
+        { role: 'toggleDevTools' },
+        { type: 'separator' },
+        { role: 'resetZoom' },
+        { role: 'zoomIn' },
+        { role: 'zoomOut' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' }
+      ]
+    },
+    {
+      label: 'Window',
+      submenu: [
+        { role: 'minimize' },
+        { role: 'zoom' },
+        ...(isMac
+          ? ([{ type: 'separator' }, { role: 'front' }] as MenuItemConstructorOptions[])
+          : ([{ role: 'close' }] as MenuItemConstructorOptions[]))
+      ]
+    }
+  ]
+
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template))
+}
+
 function createWindow(): void {
   // Pick an initial backgroundColor that matches the renderer's tokens for the
   // user's theme. Without this the window paints white before the first React
@@ -99,9 +243,15 @@ function createWindow(): void {
   const isDark = lastTheme ? lastTheme === 'dark' : nativeTheme.shouldUseDarkColors
   const initialBg = isDark ? '#0a0f1e' : '#ffffff'
 
+  const savedBounds = readPersistedBounds()
+  const useSaved = savedBounds && isBoundsOnScreen(savedBounds)
+  const bounds: WindowBounds = useSaved ? savedBounds! : { width: 1280, height: 820 }
+
   mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 820,
+    width: bounds.width,
+    height: bounds.height,
+    x: bounds.x,
+    y: bounds.y,
     minWidth: 960,
     minHeight: 640,
     show: false,
@@ -121,6 +271,37 @@ function createWindow(): void {
   mainWindow.on('ready-to-show', () => mainWindow!.show())
   mainWindow.on('closed', () => {
     mainWindow = null
+  })
+
+  // Persist bounds on resize/move (debounced) and at close. Use the
+  // BrowserWindow's getBounds — works for both maximized-restore and normal
+  // states because we want the actual current size.
+  let saveTimer: NodeJS.Timeout | null = null
+  const queueSaveBounds = (): void => {
+    if (saveTimer) clearTimeout(saveTimer)
+    saveTimer = setTimeout(() => {
+      if (!mainWindow || mainWindow.isDestroyed()) return
+      if (mainWindow.isMinimized() || mainWindow.isFullScreen()) return
+      writePersistedBounds(mainWindow.getNormalBounds())
+    }, 400)
+  }
+  mainWindow.on('resize', queueSaveBounds)
+  mainWindow.on('move', queueSaveBounds)
+  mainWindow.on('close', () => {
+    if (saveTimer) clearTimeout(saveTimer)
+    if (!mainWindow || mainWindow.isDestroyed()) return
+    if (mainWindow.isMinimized() || mainWindow.isFullScreen()) return
+    writePersistedBounds(mainWindow.getNormalBounds())
+  })
+
+  // Tell the renderer when the window loses/gains focus so it can desaturate
+  // chrome (sidebar icons, accent highlights) — matches macOS native app
+  // behavior. Renderer applies a `data-window-state` attribute on <html>.
+  mainWindow.on('blur', () => {
+    mainWindow?.webContents.send('app:windowState', 'blurred')
+  })
+  mainWindow.on('focus', () => {
+    mainWindow?.webContents.send('app:windowState', 'focused')
   })
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url)
@@ -181,10 +362,29 @@ app.whenReady().then(() => {
   })
 
   // Renderer reports its applied theme so we can paint the window in the
-  // matching color on the next cold launch.
+  // matching color on the next cold launch and recolor the live window so
+  // resize doesn't flash the previous theme's bg.
   ipcMain.on('app:theme', (_e, t: unknown) => {
-    if (t === 'light' || t === 'dark') writePersistedTheme(t)
+    if (t !== 'light' && t !== 'dark') return
+    writePersistedTheme(t)
+    const bg = t === 'dark' ? '#0a0f1e' : '#ffffff'
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.setBackgroundColor(bg)
+    }
   })
+
+  // OS-level appearance change. folk's theme is user-driven (not auto-OS) so
+  // we don't override it — but a user who hasn't picked a theme yet (no
+  // persisted value) should follow the system.
+  nativeTheme.on('updated', () => {
+    if (readPersistedTheme()) return
+    const bg = nativeTheme.shouldUseDarkColors ? '#0a0f1e' : '#ffffff'
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.setBackgroundColor(bg)
+    }
+  })
+
+  buildApplicationMenu()
 
   // Open the window FIRST so the renderer starts loading HTML+JS in parallel
   // with the rest of main-process init. The renderer doesn't issue IPC until
