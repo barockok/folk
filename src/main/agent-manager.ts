@@ -14,7 +14,7 @@ import type {
 } from '@anthropic-ai/claude-agent-sdk'
 import { randomUUID } from 'node:crypto'
 import { Database } from './database'
-import { FOLK_PRESENTATION_PROMPT } from './system-prompt'
+import { FOLK_PRESENTATION_PROMPT, formatProfilePrompt } from './system-prompt'
 import { waitForProxyPort } from './opencode-proxy/state'
 import { discoverLocalMCPs } from './mcp-local-discovery'
 import type {
@@ -473,6 +473,8 @@ export class AgentManager extends EventEmitter {
           preset: 'claude_code',
           append: (() => {
             const parts = [FOLK_PRESENTATION_PROMPT]
+            const profilePrompt = formatProfilePrompt(this.db.getProfile())
+            if (profilePrompt) parts.push(profilePrompt)
             if (allowSet) {
               const active = Object.keys(mcpMap).sort()
               parts.push(

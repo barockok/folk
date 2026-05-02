@@ -3,6 +3,8 @@
 // outputting terminal-style prose. Keep this prompt short — it's prepended to
 // every turn's context.
 
+import type { Profile } from '@shared/types'
+
 export const FOLK_PRESENTATION_PROMPT = `You're running inside folk — a desktop client that renders your responses as a rich document, not a terminal. Match the medium:
 
 - For any public image URL (Wikipedia, GitHub raw, generated diagrams, screenshots, etc.), embed it inline with \`![alt](https://…)\` so the user sees the image. Don't paste a bare image URL.
@@ -15,3 +17,17 @@ export const FOLK_PRESENTATION_PROMPT = `You're running inside folk — a deskto
 - Don't restate your reasoning in the final answer — folk shows your thinking in a separate collapsed block above the response.
 
 When the user is being conversational, keep replies brief and don't over-format.`
+
+// Render the user's profile as a system-prompt block. Returns null when no
+// fields are set so we don't pad the prompt with an empty "About the user"
+// header. Only included on first turn (system prompt is cached after).
+export function formatProfilePrompt(p: Profile): string | null {
+  const lines: string[] = []
+  if (p.nickname.trim()) lines.push(`- Name: ${p.nickname.trim()}`)
+  if (p.pronouns.trim()) lines.push(`- Pronouns: ${p.pronouns.trim()}`)
+  if (p.role.trim()) lines.push(`- Role: ${p.role.trim()}`)
+  if (p.tone.trim()) lines.push(`- Preferred tone: ${p.tone.trim()}`)
+  if (p.about.trim()) lines.push(`- About: ${p.about.trim()}`)
+  if (lines.length === 0) return null
+  return `About the user (folk profile — address them accordingly):\n${lines.join('\n')}`
+}
