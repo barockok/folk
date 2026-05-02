@@ -1,5 +1,5 @@
 appId: com.folk.app
-productName: folk
+productName: Folk
 directories:
   output: dist
   buildResources: resources

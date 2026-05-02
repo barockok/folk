@@ -43,7 +43,17 @@ interface UIState {
   setForceOnboarding: (v: boolean) => void
   openLightbox: (src: string) => void
   closeLightbox: () => void
+  // Bump to ask SessionsPage to stage a fresh draft. Triggered from the
+  // sidebar "+ New" button or anywhere else that wants a new session.
+  newSessionTick: number
+  requestNewSession: () => void
+  sidebarWidth: number
+  setSidebarWidth: (px: number) => void
 }
+
+export const SIDEBAR_MIN = 180
+export const SIDEBAR_MAX = 380
+export const SIDEBAR_DEFAULT = 232
 
 export const useUIStore = create<UIState>((set) => ({
   page: (localStorage.getItem('folk.lastTab') as PageKey) || 'sessions',
@@ -103,5 +113,18 @@ export const useUIStore = create<UIState>((set) => ({
       return { folkSkillsEnabled: next }
     }),
   openLightbox: (src) => set({ lightboxSrc: src }),
-  closeLightbox: () => set({ lightboxSrc: null })
+  closeLightbox: () => set({ lightboxSrc: null }),
+  newSessionTick: 0,
+  requestNewSession: () =>
+    set((st) => ({ newSessionTick: st.newSessionTick + 1, page: 'sessions' })),
+  sidebarWidth: (() => {
+    const raw = Number(localStorage.getItem('folk.sidebarWidth'))
+    if (!Number.isFinite(raw) || raw < SIDEBAR_MIN || raw > SIDEBAR_MAX) return SIDEBAR_DEFAULT
+    return raw
+  })(),
+  setSidebarWidth: (px) => {
+    const clamped = Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, Math.round(px)))
+    localStorage.setItem('folk.sidebarWidth', String(clamped))
+    set({ sidebarWidth: clamped })
+  }
 }))

@@ -6,7 +6,6 @@
 .ob-scrim {
   position: fixed; inset: 0;
   background: color-mix(in oklab, var(--bg-sub) 94%, transparent);
-  backdrop-filter: blur(8px);
   z-index: 9999;
   display: grid; place-items: center;
   padding: 40px 24px;
@@ -31,7 +30,7 @@
     radial-gradient(28% 26% at 60% 25%, color-mix(in oklab, #3aa3ff 22%, transparent) 0%, transparent 65%);
   filter: blur(48px) saturate(1.1);
   opacity: 0.85;
-  animation: hero-drift 18s ease-in-out infinite alternate;
+  animation: hero-drift 54s ease-in-out infinite alternate;
 }
 [data-theme="dark"] .ob-scrim::before { opacity: 0.6; }
 .ob-scrim::after {
@@ -69,7 +68,7 @@
     radial-gradient(28% 40% at 55% 95%, color-mix(in oklab, var(--stripe-purple) 32%, transparent) 0%, transparent 60%);
   filter: blur(56px) saturate(1.15);
   opacity: 0.9;
-  animation: hero-aurora-btm 11s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite alternate;
+  animation: hero-aurora-btm 33s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite alternate;
 }
 [data-theme="dark"] .ob-aurora-btm { opacity: 0.65; }
 /* Card sits above the ambient layers. */

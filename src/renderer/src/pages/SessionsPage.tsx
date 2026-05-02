@@ -1,9 +1,8 @@
-import { useEffect, useState, startTransition } from 'react'
+import { useEffect, useState } from 'react'
 import { useSessions } from '../hooks/useSessions'
 import { useSessionStore } from '../stores/useSessionStore'
 import { useProviders } from '../hooks/useProviders'
 import { useUIStore } from '../stores/useUIStore'
-import { HistoryRail } from './sessions/HistoryRail'
 import { Conversation } from './sessions/Conversation'
 import { Composer } from './sessions/Composer'
 import { TodoPanel } from './sessions/TodoPanel'
@@ -28,7 +27,7 @@ const HERO_GREETINGS = [
 ] as const
 
 export function SessionsPage() {
-  const { sessions, activeId, setActive, create, delete: del, rename, send, cancel, clear } = useSessions()
+  const { sessions, activeId, setActive, create, send, cancel, clear } = useSessions()
   const { enabledModels } = useProviders()
   const setPage = useUIStore((s) => s.setPage)
   // A draft is a configured-but-unsent session — purely renderer-side, never
@@ -37,6 +36,16 @@ export function SessionsPage() {
   // hero composer against it, and only when they actually submit does it
   // become a real session via window.folk.sessions.create.
   const [draft, setDraft] = useState<{ session: Session; config: SessionConfig } | null>(null)
+  // External activations (palette, deep links) bypass the rail click handler
+  // that normally clears the draft. Drop the draft any time the active
+  // session id resolves to a real persisted session — otherwise the draft
+  // hero stays mounted on top of the picked session.
+  useEffect(() => {
+    if (!draft) return
+    if (activeId && sessions.some((s) => s.id === activeId)) {
+      setDraft(null)
+    }
+  }, [activeId, sessions, draft])
   const active = draft?.session ?? sessions.find((s) => s.id === activeId) ?? null
   const messages = useSessionStore((s) =>
     active ? s.messages[active.id] ?? EMPTY_MESSAGES : EMPTY_MESSAGES
@@ -109,6 +118,17 @@ export function SessionsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, draft])
 
+  // External "+ New" requests (sidebar button, command palette) bump
+  // newSessionTick — drop the active session and stage a fresh draft.
+  const newSessionTick = useUIStore((s) => s.newSessionTick)
+  useEffect(() => {
+    if (newSessionTick === 0) return
+    setActive(null)
+    setDraft(null)
+    handleNew()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [newSessionTick])
+
   // Send wrapper that promotes the draft into a real persisted session on the
   // first submit. After this returns, `active` flips from the synthetic draft
   // to the real session pulled from `sessions` (created by useSessions.create
@@ -163,15 +183,6 @@ export function SessionsPage() {
 
   return (
     <div className="sess-wrap">
-      <HistoryRail
-        sessions={sessions}
-        activeId={activeId}
-        onPick={(id) => { startTransition(() => { setActive(id); setDraft(null) }) }}
-        onDelete={del}
-        onRename={async (id, title) => { await rename(id, title) }}
-        onNew={handleNew}
-        onCancel={cancel}
-      />
       <div className={`sess-main${isFresh ? ' is-fresh' : ''}`}>
         {isFresh && <div className="sess-aurora-btm" aria-hidden="true" />}
         {active && (

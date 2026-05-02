@@ -18,20 +18,20 @@ html[data-window-state="blurred"] .badge-ac {
 /* Shell */
 .shell {
   display: grid;
-  grid-template-columns: 232px 1fr;
-  grid-template-rows: auto 1fr;
+  grid-template-columns: var(--sb-width, 232px) 1fr;
+  grid-template-rows: auto 1fr auto;
   grid-template-areas:
-    "topbar topbar"
-    "sidebar main";
+    "topbar  topbar"
+    "sidebar main"
+    "updater updater";
   height: 100vh;
   background: var(--bg-sub);
-  transition: grid-template-columns 220ms cubic-bezier(.2,.8,.2,1);
 }
 .shell > .topbar { grid-area: topbar; }
 .shell > .sb { grid-area: sidebar; }
 .shell > .main-body { grid-area: main; }
-[data-density="compact"] .shell { grid-template-columns: 208px 1fr; }
-.shell.sb-closed { grid-template-columns: 56px 1fr; }
+.shell > .update-banner { grid-area: updater; }
+.shell.sb-closed { grid-template-columns: 56px 1fr; transition: grid-template-columns 220ms cubic-bezier(.2,.8,.2,1); }
 
 /* Sidebar */
 .sb {
@@ -43,6 +43,32 @@ html[data-window-state="blurred"] .badge-ac {
   min-height: 0;
   padding-top: 16px;
 }
+/* Drag-to-resize handle pinned to the right edge of the sidebar. Wider hit
+   area than the visible 1px so it's easy to grab. Highlights on hover or
+   while resizing. Double-click resets to the default width. */
+.sb-resizer {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 5;
+  background: transparent;
+  transition: background 120ms ease;
+}
+.sb-resizer:hover,
+.sb.sb-resizing .sb-resizer {
+  background: linear-gradient(
+    to right,
+    transparent 0%,
+    transparent 40%,
+    color-mix(in oklab, var(--stripe-purple) 55%, transparent) 50%,
+    transparent 60%,
+    transparent 100%
+  );
+}
+.sb-collapsed .sb-resizer { display: none; }
 .sb-brand {
   display: flex;
   align-items: center;
@@ -168,6 +194,71 @@ html[data-window-state="blurred"] .badge-ac {
 .sb-item .sb-ico { width: 16px; height: 16px; opacity: .7; flex: none; }
 .sb-item.active .sb-ico { opacity: 1; color: var(--stripe-purple); }
 .sb-item-meta { margin-left: auto; font-size: 11px; color: var(--fg-faint); font-variant-numeric: tabular-nums; }
+
+/* Group header that hosts a small action button on the right (e.g. "+"). */
+.sb-group-with-action {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 6px;
+}
+.sb-group-act {
+  width: 18px; height: 18px;
+  display: inline-grid; place-items: center;
+  padding: 0;
+  background: transparent;
+  border: var(--hair) solid transparent;
+  border-radius: 4px;
+  color: var(--fg-faint);
+  cursor: pointer;
+  transition: background 120ms, color 120ms, border-color 120ms;
+}
+.sb-group-act:hover {
+  background: var(--bg-card);
+  border-color: var(--border);
+  color: var(--heading);
+}
+
+/* Compact recent-sessions list — Claude-desktop-ish density. */
+.sb-sessions { display: flex; flex-direction: column; gap: 1px; }
+.sb-session {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--r-sm);
+  font-size: 12.5px;
+  color: var(--body);
+  cursor: pointer;
+  position: relative;
+  height: 24px;
+  line-height: 1;
+}
+.sb-session:hover { background: var(--bg-card); color: var(--heading); }
+.sb-session.active {
+  background: var(--stripe-purple-bg);
+  color: var(--heading);
+}
+.sb-session-title {
+  flex: 1;
+  min-width: 0;
+  font-weight: 400;
+  letter-spacing: -0.005em;
+}
+.sb-session-dot {
+  width: 5px; height: 5px;
+  border-radius: 999px;
+  flex: none;
+}
+.sb-session-act {
+  width: 18px; height: 18px;
+  display: inline-grid; place-items: center;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  color: var(--fg-faint);
+  cursor: pointer;
+  flex: none;
+}
+.sb-session-act:hover { background: var(--bg-sub); color: var(--heading); }
+.sb-session-act-danger:hover { color: var(--err, #ea2261); }
 
 .sb-collapsed .sb-nav { padding: 0 8px 12px; align-items: stretch; }
 .sb-collapsed .sb-item {
@@ -345,12 +436,30 @@ html[data-window-state="blurred"] .badge-ac {
 .cmdk-trigger:hover { border-color: var(--border-purple); }
 .cmdk-trigger .kbd { margin-left: auto; }
 
-.tb-actions { display: flex; align-items: center; gap: 4px; }
+.tb-actions { display: flex; align-items: center; gap: 6px; margin-left: auto; }
 .tb-actions .btn-icon {
   width: 30px; height: 30px;
   padding: 0;
   display: inline-grid; place-items: center;
   border-radius: var(--r-sm);
+}
+/* cmd-K affordance: icon + kbd inline at the same row height as the cog. */
+.tb-actions .cmdk-chip {
+  width: auto;
+  height: 30px;
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--fg-faint);
+  border-radius: var(--r-sm);
+}
+.tb-actions .cmdk-chip:hover { color: var(--heading); }
+.cmdk-chip .kbd {
+  font-family: var(--ff-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  color: inherit;
 }
 
 .main-body { flex: 1; min-height: 0; overflow: auto; scrollbar-gutter: stable; }
@@ -458,12 +567,17 @@ html[data-window-state="blurred"] .badge-ac {
 .modal-scrim {
   position: fixed; inset: 0;
   background: rgba(6,27,49,0.35);
-  backdrop-filter: blur(6px);
   z-index: 80;
   display: grid;
   place-items: center;
   padding: 40px;
   animation: fadeIn .14s ease-out;
+}
+/* Top-anchored variant — used by the command palette so the search input
+   stays pinned at a fixed Y while result rows grow/shrink below it. */
+.modal-scrim--top {
+  align-items: start;
+  padding-top: 96px;
 }
 .modal {
   width: 100%;
@@ -1095,13 +1209,12 @@ html[data-window-state="blurred"] .badge-ac {
 /* Sessions layout — history rail + full-bleed main */
 .sess-wrap {
   display: grid;
-  grid-template-columns: 280px 1fr;
+  grid-template-columns: 1fr;
   height: 100%;
   min-height: 0;
 }
-[data-density="compact"] .sess-wrap { grid-template-columns: 240px 1fr; }
-.sess-wrap:has(.sess-todo-panel) { grid-template-columns: 280px 1fr 320px; }
-[data-density="compact"] .sess-wrap:has(.sess-todo-panel) { grid-template-columns: 240px 1fr 280px; }
+.sess-wrap:has(.sess-todo-panel) { grid-template-columns: 1fr 320px; }
+[data-density="compact"] .sess-wrap:has(.sess-todo-panel) { grid-template-columns: 1fr 280px; }
 
 .sess-todo-panel {
   background: var(--bg);
@@ -1420,7 +1533,7 @@ html[data-window-state="blurred"] .badge-ac {
     radial-gradient(28% 26% at 60% 25%, color-mix(in oklab, #3aa3ff 22%, transparent) 0%, transparent 65%);
   filter: blur(48px) saturate(1.1);
   opacity: 0.85;
-  animation: hero-drift 18s ease-in-out infinite alternate;
+  animation: hero-drift 54s ease-in-out infinite alternate;
 }
 [data-theme="dark"] .sess-main.is-fresh::before { opacity: 0.6; }
 /* Dotted grid — bigger, softer, pans diagonally so the texture moves with
@@ -1486,7 +1599,7 @@ html[data-window-state="blurred"] .badge-ac {
     radial-gradient(28% 40% at 55% 95%, color-mix(in oklab, var(--stripe-purple) 32%, transparent) 0%, transparent 60%);
   filter: blur(56px) saturate(1.15);
   opacity: 0.9;
-  animation: hero-aurora-btm 11s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite alternate;
+  animation: hero-aurora-btm 33s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite alternate;
 }
 [data-theme="dark"] .sess-aurora-btm { opacity: 0.65; }
 @keyframes hero-aurora-btm {
@@ -4055,27 +4168,20 @@ html[data-window-state="blurred"] .badge-ac {
 
 /* Update banner — top-of-app status strip */
 .update-banner {
-  position: fixed;
-  left: 12px;
-  right: 12px;
-  bottom: 12px;
+  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 14px;
-  border: var(--hair) solid var(--border);
-  border-radius: 10px;
-  background: color-mix(in oklab, var(--bg-card) 96%, transparent);
-  backdrop-filter: blur(16px) saturate(1.2);
-  -webkit-backdrop-filter: blur(16px) saturate(1.2);
-  box-shadow: 0 18px 40px -12px rgba(20, 15, 60, 0.28), 0 4px 10px -4px rgba(20, 15, 60, 0.12);
+  padding: 10px 16px;
+  border-top: var(--hair) solid var(--border);
+  background: color-mix(in oklab, var(--bg-card) 98%, transparent);
   color: var(--heading);
   font-size: 12.5px;
-  z-index: 80;
-  animation: update-banner-rise 280ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  z-index: 5;
+  animation: update-banner-rise 240ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 @keyframes update-banner-rise {
-  from { opacity: 0; transform: translateY(12px); }
+  from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 .update-banner--ready {

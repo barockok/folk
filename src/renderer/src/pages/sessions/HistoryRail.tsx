@@ -140,7 +140,6 @@ export function HistoryRail({
   onNew,
   onCancel
 }: HistoryRailProps) {
-  const [query, setQuery] = useState('')
   const [pendingId, setPendingId] = useState<string | null>(null)
   const [menuId, setMenuId] = useState<string | null>(null)
   const [renameTarget, setRenameTarget] = useState<Session | null>(null)
@@ -158,11 +157,7 @@ export function HistoryRail({
     return () => document.removeEventListener('mousedown', handler)
   }, [menuId])
 
-  const filtered = useMemo(() => {
-    if (!query.trim()) return sessions
-    const q = query.toLowerCase()
-    return sessions.filter((s) => s.title.toLowerCase().includes(q))
-  }, [sessions, query])
+  const filtered = sessions
 
   const grouped = useMemo(() => {
     const map: Record<Group, Session[]> = {
@@ -203,17 +198,6 @@ export function HistoryRail({
             + New
           </button>
         </div>
-      </div>
-
-      <div className="sess-search">
-        <input
-          className="input"
-          type="search"
-          placeholder="Search sessions…"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          style={{ width: '100%', fontSize: 13 }}
-        />
       </div>
 
       <div className="sess-list">
@@ -326,7 +310,7 @@ export function HistoryRail({
 
         {filtered.length === 0 && (
           <div className="empty" style={{ padding: '40px 16px', fontSize: 13 }}>
-            {query ? 'No sessions match.' : 'No sessions yet. Start one!'}
+            No sessions yet. Start one!
           </div>
         )}
       </div>

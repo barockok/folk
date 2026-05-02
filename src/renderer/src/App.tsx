@@ -1,6 +1,5 @@
 import { useEffect } from 'react'
 import { Shell } from './components/Shell'
-import { UpdateBanner } from './components/UpdateBanner'
 import { useAgent } from './hooks/useAgent'
 import { useUpdater } from './hooks/useUpdater'
 import { useGlobalCancelHotkey } from './hooks/useGlobalCancelHotkey'
@@ -72,7 +71,6 @@ export default function App() {
         {page === 'keybindings' && <KeybindingsPage />}
         {page === 'profile' && <ProfilePage />}
       </Shell>
-      <UpdateBanner />
       {(!onboarded || forceOnboarding) && <FirstRunOnboarding force={forceOnboarding} />}
       <Lightbox />
     </>

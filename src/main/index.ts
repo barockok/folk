@@ -337,6 +337,11 @@ function createWindow(): void {
   }
 }
 
+// OS-level brand: Dock, menu bar, Finder, Activity Monitor read this.
+// In production the .app bundle's Info.plist (set via electron-builder
+// productName) wins, but app.setName ensures dev runs are consistent.
+app.setName('Folk')
+
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.folk.app')
   app.on('browser-window-created', (_, window) => {
@@ -364,6 +369,7 @@ app.whenReady().then(() => {
   // Renderer reports its applied theme so we can paint the window in the
   // matching color on the next cold launch and recolor the live window so
   // resize doesn't flash the previous theme's bg.
+  ipcMain.handle('app:version', () => app.getVersion())
   ipcMain.on('app:theme', (_e, t: unknown) => {
     if (t !== 'light' && t !== 'dark') return
     writePersistedTheme(t)

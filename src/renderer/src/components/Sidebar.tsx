@@ -1,7 +1,32 @@
+import { useEffect, useRef, useState } from 'react'
 import { Icon } from './icons'
-import { useUIStore } from '../stores/useUIStore'
+import { useUIStore, SIDEBAR_MIN, SIDEBAR_MAX } from '../stores/useUIStore'
 import { useProfileStore } from '../stores/useProfileStore'
+import { useSessionStore } from '../stores/useSessionStore'
+import { useSessions } from '../hooks/useSessions'
 import type { PageKey } from '../stores/useUIStore'
+import type { Session, SessionStatus } from '@shared/types'
+
+const SIDEBAR_RECENTS_LIMIT = 14
+
+function StatusDot({ status }: { status: SessionStatus }) {
+  const color =
+    status === 'running'
+      ? 'var(--stripe-purple)'
+      : status === 'error'
+        ? 'var(--ruby)'
+        : status === 'cancelled'
+          ? 'var(--warn)'
+          : 'transparent'
+  if (color === 'transparent') return null
+  return (
+    <span
+      className="sb-session-dot"
+      style={{ background: color }}
+      aria-hidden="true"
+    />
+  )
+}
 
 interface NavItem {
   id: PageKey
@@ -18,7 +43,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     group: 'Workspace',
     items: [
-      { id: 'sessions', label: 'Sessions', icon: 'terminal' },
+      { id: 'sessions', label: 'New session', icon: 'plus' },
       { id: 'mcp', label: 'MCP', icon: 'server' },
       { id: 'skills', label: 'Skills', icon: 'sparkles' },
       { id: 'plugins', label: 'Plugins', icon: 'puzzle' },
@@ -38,12 +63,60 @@ export function Sidebar() {
   const setPage = useUIStore((s) => s.setPage)
   const collapsed = useUIStore((s) => s.sidebarCollapsed)
   const nickname = useProfileStore((s) => s.profile?.nickname)
+  const sessions = useSessionStore((s) => s.sessions)
+  const activeId = useSessionStore((s) => s.activeId)
+  const setActive = useSessionStore((s) => s.setActive)
+  const streamingSessions = useSessionStore((s) => s.streamingSessions)
+  const requestNewSession = useUIStore((s) => s.requestNewSession)
+  const setSidebarWidth = useUIStore((s) => s.setSidebarWidth)
+  const { delete: deleteSession, cancel } = useSessions()
+  const [hoverId, setHoverId] = useState<string | null>(null)
+  const dragStateRef = useRef<{ startX: number; startWidth: number } | null>(null)
+  const [dragging, setDragging] = useState(false)
+
+  // Drag-to-resize. Pointer-down on the handle captures the starting width
+  // and tracks deltas at the document level so the user can flick out past
+  // the sidebar without losing the grab.
+  useEffect(() => {
+    if (!dragging) return
+    const onMove = (e: PointerEvent) => {
+      const ds = dragStateRef.current
+      if (!ds) return
+      setSidebarWidth(ds.startWidth + (e.clientX - ds.startX))
+    }
+    const onUp = () => {
+      dragStateRef.current = null
+      setDragging(false)
+    }
+    document.addEventListener('pointermove', onMove)
+    document.addEventListener('pointerup', onUp, { once: true })
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+    return () => {
+      document.removeEventListener('pointermove', onMove)
+      document.removeEventListener('pointerup', onUp)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+  }, [dragging, setSidebarWidth])
 
   const initial = (nickname || 'Y').slice(0, 1).toUpperCase()
   const displayName = nickname || 'You'
 
+  const recents = sessions.slice(0, SIDEBAR_RECENTS_LIMIT)
+
+  const openSession = (id: string) => {
+    setActive(id)
+    setPage('sessions')
+  }
+
+  const handleDelete = async (s: Session) => {
+    if (!confirm(`Delete "${s.title}"? This cannot be undone.`)) return
+    await deleteSession(s.id)
+  }
+
   return (
-    <aside className={`sb${collapsed ? ' sb-collapsed' : ''}`}>
+    <aside className={`sb${collapsed ? ' sb-collapsed' : ''}${dragging ? ' sb-resizing' : ''}`}>
       <div className="sb-brand">
         <div className="sb-logo" title={collapsed ? 'folk' : undefined}>
           <span>f</span>
@@ -59,28 +132,107 @@ export function Sidebar() {
         {NAV_GROUPS.map((g) => (
           <div key={g.group}>
             {!collapsed && <div className="sb-group">{g.group}</div>}
-            {g.items.map((it) => (
-              <div
-                key={it.id}
-                className={`sb-item${page === it.id ? ' active' : ''}`}
-                role="button"
-                tabIndex={0}
-                aria-current={page === it.id ? 'page' : undefined}
-                onClick={() => setPage(it.id)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    if (e.key === ' ') e.preventDefault()
-                    setPage(it.id)
-                  }
-                }}
-                title={collapsed ? it.label : undefined}
-              >
-                <Icon name={it.icon} size={16} className="sb-ico" />
-                {!collapsed && <span>{it.label}</span>}
-              </div>
-            ))}
+            {g.items.map((it) => {
+              // The "New session" entry doubles as the sessions-page nav and
+              // the create-session action — clicking it always stages a fresh
+              // hero composer (via requestNewSession), which also flips the
+              // active page to sessions.
+              const isNew = it.id === 'sessions'
+              const onActivate = isNew ? requestNewSession : () => setPage(it.id)
+              return (
+                <div
+                  key={it.id}
+                  className={`sb-item${page === it.id ? ' active' : ''}`}
+                  role="button"
+                  tabIndex={0}
+                  aria-current={page === it.id ? 'page' : undefined}
+                  onClick={onActivate}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      if (e.key === ' ') e.preventDefault()
+                      onActivate()
+                    }
+                  }}
+                  title={collapsed ? it.label : undefined}
+                >
+                  <Icon name={it.icon} size={16} className="sb-ico" />
+                  {!collapsed && <span>{it.label}</span>}
+                </div>
+              )
+            })}
           </div>
         ))}
+
+        {!collapsed && (
+          <div>
+            <div className="sb-group sb-group-with-action">
+              <span>Recents</span>
+              <button
+                type="button"
+                className="sb-group-act"
+                onClick={requestNewSession}
+                title="New session (⌘N)"
+                aria-label="New session"
+              >
+                <Icon name="plus" size={11} />
+              </button>
+            </div>
+            <div className="sb-sessions">
+              {recents.map((s) => {
+                const isActive = s.id === activeId
+                const isStreaming = streamingSessions.has(s.id)
+                return (
+                  <div
+                    key={s.id}
+                    className={`sb-session${isActive ? ' active' : ''}`}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => openSession(s.id)}
+                    onMouseEnter={() => setHoverId(s.id)}
+                    onMouseLeave={() => setHoverId((cur) => (cur === s.id ? null : cur))}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        if (e.key === ' ') e.preventDefault()
+                        openSession(s.id)
+                      }
+                    }}
+                    title={s.title}
+                  >
+                    <StatusDot status={s.status} />
+                    <span className="sb-session-title trunc">{s.title || 'Untitled session'}</span>
+                    {isStreaming ? (
+                      <button
+                        type="button"
+                        className="sb-session-act"
+                        title="Stop turn"
+                        aria-label={`Stop ${s.title}`}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          void cancel(s.id)
+                        }}
+                      >
+                        <Icon name="pause" size={11} />
+                      </button>
+                    ) : hoverId === s.id ? (
+                      <button
+                        type="button"
+                        className="sb-session-act sb-session-act-danger"
+                        title="Delete session"
+                        aria-label={`Delete ${s.title}`}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          void handleDelete(s)
+                        }}
+                      >
+                        <Icon name="trash" size={11} />
+                      </button>
+                    ) : null}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
       </nav>
 
       <div
@@ -106,6 +258,28 @@ export function Sidebar() {
         )}
         {!collapsed && <Icon name="chevronRight" size={13} className="sb-profile-caret" />}
       </div>
+
+      {!collapsed && (
+        <div
+          className="sb-resizer"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize sidebar"
+          aria-valuemin={SIDEBAR_MIN}
+          aria-valuemax={SIDEBAR_MAX}
+          aria-valuenow={useUIStore.getState().sidebarWidth}
+          onPointerDown={(e) => {
+            e.preventDefault()
+            ;(e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId)
+            dragStateRef.current = {
+              startX: e.clientX,
+              startWidth: useUIStore.getState().sidebarWidth
+            }
+            setDragging(true)
+          }}
+          onDoubleClick={() => setSidebarWidth(232)}
+        />
+      )}
     </aside>
   )
 }

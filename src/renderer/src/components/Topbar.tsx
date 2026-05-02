@@ -74,25 +74,17 @@ export function Topbar() {
         ))}
       </div>
 
-      <div
-        className="cmdk-trigger"
-        role="button"
-        tabIndex={0}
-        aria-label="Search or run a command"
-        onClick={openCmdk}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            if (e.key === ' ') e.preventDefault()
-            openCmdk()
-          }
-        }}
-      >
-        <Icon name="search" size={14} />
-        <span>Search or run a command…</span>
-        <span className="kbd">⌘K</span>
-      </div>
-
       <div className="tb-actions">
+        <button
+          type="button"
+          className="btn btn-plain btn-icon cmdk-chip"
+          onClick={openCmdk}
+          title="Search or run a command"
+          aria-label="Open command palette"
+        >
+          <Icon name="search" size={14} />
+          <span className="kbd">⌘K</span>
+        </button>
         <div className="tweaks-wrap" ref={tweaksWrapRef}>
           <button
             className="btn btn-plain btn-icon"

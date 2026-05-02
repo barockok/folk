@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useUIStore } from '../stores/useUIStore'
 import type { PageKey } from '../stores/useUIStore'
+import { useSessionStore } from '../stores/useSessionStore'
 import { Icon } from './icons'
 
-type ItemGroup = 'Go to' | 'Action'
+type ItemGroup = 'Go to' | 'Action' | 'Sessions'
 
 interface CmdItem {
   g: ItemGroup
@@ -17,6 +18,8 @@ export function CommandPalette() {
   const cmdkOpen = useUIStore((s) => s.cmdkOpen)
   const closeCmdk = useUIStore((s) => s.closeCmdk)
   const setPage = useUIStore((s) => s.setPage)
+  const sessions = useSessionStore((s) => s.sessions)
+  const setActive = useSessionStore((s) => s.setActive)
 
   const [q, setQ] = useState('')
   const [sel, setSel] = useState(0)
@@ -48,6 +51,12 @@ export function CommandPalette() {
     closeCmdk()
   }
 
+  const openSession = (id: string) => {
+    setActive(id)
+    setPage('sessions')
+    closeCmdk()
+  }
+
   const items = useMemo<CmdItem[]>(() => {
     const base: CmdItem[] = [
       { g: 'Go to', id: 'sessions',     label: 'Sessions (Terminal)',         icon: 'terminal',  action: () => nav('sessions') },
@@ -62,11 +71,24 @@ export function CommandPalette() {
       { g: 'Action', id: 'new-session', label: 'Start a new session',       icon: 'terminal',  action: () => nav('sessions') },
       { g: 'Action', id: 'test-all',    label: 'Test-connect all MCPs',      icon: 'bolt',   action: () => nav('mcp') },
     ]
-    if (!q.trim()) return base
-    const needle = q.toLowerCase()
-    return base.filter((i) => i.label.toLowerCase().includes(needle))
+    const needle = q.trim().toLowerCase()
+    // Sessions only appear once the user is actually searching — keeps the
+    // empty-state palette compact and avoids any chance of opening a session
+    // by accident (Enter on first-row default).
+    if (!needle) return base
+    const matchedBase = base.filter((i) => i.label.toLowerCase().includes(needle))
+    const matchedSessions: CmdItem[] = sessions
+      .filter((s) => (s.title || 'Untitled session').toLowerCase().includes(needle))
+      .map((s) => ({
+        g: 'Sessions',
+        id: `s-${s.id}`,
+        label: s.title || 'Untitled session',
+        icon: 'terminal',
+        action: () => openSession(s.id)
+      }))
+    return [...matchedBase, ...matchedSessions]
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, setPage])
+  }, [q, setPage, sessions])
 
   if (!cmdkOpen) return null
 
@@ -83,7 +105,7 @@ export function CommandPalette() {
 
   return (
     <div
-      className="modal-scrim"
+      className="modal-scrim modal-scrim--top"
       role="dialog"
       aria-modal="true"
       aria-label="Command palette"

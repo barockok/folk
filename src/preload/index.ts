@@ -78,6 +78,7 @@ const folk: FolkAPI = {
   },
   app: {
     reportTheme: (theme) => ipcRenderer.send('app:theme', theme),
+    version: () => ipcRenderer.invoke('app:version'),
     onWindowState: (fn) => listen('app:windowState', fn),
     onOpenTweaks: (fn) => {
       const h = (): void => fn()

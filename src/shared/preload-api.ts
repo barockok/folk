@@ -122,6 +122,7 @@ export interface FolkAPI {
   }
   app: {
     reportTheme: (theme: 'light' | 'dark') => void
+    version: () => Promise<string>
     onWindowState: (fn: (state: 'blurred' | 'focused') => void) => () => void
     onOpenTweaks: (fn: () => void) => () => void
     onOpenCmdk: (fn: () => void) => () => void
