@@ -5,6 +5,7 @@ import type { Session, PersistedToolCall, MessageBlock } from '@shared/types'
 import { extractTodos, humanizeToolName, type TodoItem } from './ToolCard'
 import { Icon } from '../../components/icons'
 import { fileIconFor } from '../../lib/fileIcon'
+import { ShellPanel, hasShells } from './ShellPanel'
 
 const EMPTY: never[] = []
 
@@ -141,7 +142,9 @@ export function TodoPanel({ session }: { session: Session | null }) {
   if (!session) return null
   const stats = collect(messages)
   const totalToolCalls = stats.totalToolCalls
-  const hasAnything = !!stats.todos || stats.files.length > 0 || totalToolCalls > 0
+  const shellsPresent = hasShells(messages)
+  const hasAnything =
+    !!stats.todos || stats.files.length > 0 || totalToolCalls > 0 || shellsPresent
   if (!hasAnything) {
     return (
       <aside className="sess-todo-panel">
@@ -162,6 +165,7 @@ export function TodoPanel({ session }: { session: Session | null }) {
 
   return (
     <aside className="sess-todo-panel">
+      <ShellPanel session={session} />
       {stats.todos && stats.todos.length > 0 && (
         <section className="sctx-section">
           <div className="sctx-hd">

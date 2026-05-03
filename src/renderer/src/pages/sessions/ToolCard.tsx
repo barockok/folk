@@ -536,6 +536,335 @@ export function extractTodos(input: unknown): TodoItem[] | null {
   return out
 }
 
+function isBackgroundBash(input: unknown): boolean {
+  if (!input || typeof input !== 'object') return false
+  return (input as Record<string, unknown>).run_in_background === true
+}
+
+function asString(v: unknown): string {
+  if (v == null) return ''
+  if (typeof v === 'string') return v
+  if (Array.isArray(v)) {
+    const parts: string[] = []
+    for (const item of v) {
+      if (typeof item === 'string') parts.push(item)
+      else if (item && typeof item === 'object') {
+        const o = item as Record<string, unknown>
+        if (typeof o.text === 'string') parts.push(o.text)
+        else parts.push(asString(o))
+      }
+    }
+    return parts.join('\n')
+  }
+  if (typeof v === 'object') {
+    const o = v as Record<string, unknown>
+    if (typeof o.text === 'string') return o.text
+    try {
+      return JSON.stringify(v)
+    } catch {
+      return String(v)
+    }
+  }
+  return String(v)
+}
+
+function asObject(v: unknown): Record<string, unknown> | null {
+  if (v && typeof v === 'object' && !Array.isArray(v)) {
+    const o = v as Record<string, unknown>
+    if (typeof o.text === 'string') return asObject(o.text)
+    return o
+  }
+  if (Array.isArray(v)) {
+    for (const item of v) {
+      const r = asObject(item)
+      if (r) return r
+    }
+  }
+  if (typeof v === 'string') {
+    const s = v.trim()
+    if (s.startsWith('{')) {
+      try {
+        const p = JSON.parse(s)
+        if (p && typeof p === 'object' && !Array.isArray(p)) return p as Record<string, unknown>
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+  return null
+}
+
+// Modern SDK: Bash w/ run_in_background returns a BashOutput JSON with a
+// `backgroundTaskId` field. Older formats may inline "bash_id: ..." text.
+function parseBashId(output: unknown): string | null {
+  const obj = asObject(output)
+  if (obj) {
+    for (const k of ['backgroundTaskId', 'task_id', 'bash_id', 'shell_id']) {
+      const v = obj[k]
+      if (typeof v === 'string' && v) return v
+    }
+  }
+  const s = asString(output)
+  if (!s) return null
+  const m =
+    s.match(/backgroundTaskId["']?\s*[:=]\s*["']?([A-Za-z0-9_-]+)/) ||
+    s.match(/task_id["']?\s*[:=]\s*["']?([A-Za-z0-9_-]+)/) ||
+    s.match(/bash_id["']?\s*[:=]\s*["']?([A-Za-z0-9_-]+)/) ||
+    s.match(/shell_id["']?\s*[:=]\s*["']?([A-Za-z0-9_-]+)/) ||
+    s.match(/(?:^|\b)Task\s*(?:id|ID)\s*[:=]\s*([A-Za-z0-9_-]{6,})/) ||
+    s.match(/\/tasks\/([A-Za-z0-9_-]{6,})\.output/) ||
+    s.match(/Started\s+in\s+background\s+as\s+(?:task\s+)?([A-Za-z0-9_-]{6,})/i)
+  return m ? m[1] : null
+}
+
+interface BashOutputParts {
+  status?: 'running' | 'completed' | 'killed' | 'error' | string
+  exitCode?: string
+  stdout?: string
+  stderr?: string
+  raw: string
+}
+
+function parseBashOutput(output: unknown): BashOutputParts {
+  const raw = asString(output)
+  const obj = asObject(output)
+  if (obj) {
+    const interrupted = obj.interrupted === true
+    const exit =
+      typeof obj.exit_code === 'number'
+        ? String(obj.exit_code)
+        : typeof obj.exitCode === 'number'
+        ? String(obj.exitCode)
+        : undefined
+    const status = interrupted
+      ? 'killed'
+      : typeof obj.backgroundTaskId === 'string' && exit === undefined
+      ? 'running'
+      : exit !== undefined
+      ? exit === '0'
+        ? 'completed'
+        : 'error'
+      : undefined
+    return {
+      status,
+      exitCode: exit,
+      stdout: typeof obj.stdout === 'string' ? obj.stdout : undefined,
+      stderr: typeof obj.stderr === 'string' ? obj.stderr : undefined,
+      raw
+    }
+  }
+  const tag = (name: string): string | undefined => {
+    const m = raw.match(new RegExp(`<${name}>([\\s\\S]*?)</${name}>`, 'i'))
+    return m ? m[1].trim() : undefined
+  }
+  const status = (tag('status') || raw.match(/status[:\s]+([A-Za-z_]+)/i)?.[1])?.toLowerCase()
+  return {
+    status,
+    exitCode: tag('exit_code') || tag('exitCode'),
+    stdout: tag('stdout'),
+    stderr: tag('stderr'),
+    raw
+  }
+}
+
+function shellIdFromInput(input: unknown): string | null {
+  if (!input || typeof input !== 'object') return null
+  const o = input as Record<string, unknown>
+  const v = o.task_id ?? o.bash_id ?? o.shell_id ?? o.id
+  return typeof v === 'string' ? v : null
+}
+
+function BashBackgroundCard({
+  call,
+  status
+}: {
+  call: PersistedToolCall
+  status: 'running' | 'success' | 'error'
+}) {
+  const [open, setOpen] = useState(false)
+  const cmd =
+    call.input && typeof call.input === 'object'
+      ? ((call.input as Record<string, unknown>).command as string | undefined)
+      : undefined
+  const desc =
+    call.input && typeof call.input === 'object'
+      ? ((call.input as Record<string, unknown>).description as string | undefined)
+      : undefined
+  const bashId = parseBashId(call.output)
+  return (
+    <div className={`tool-card ${statusClass(status)}`} data-open={open ? 'true' : 'false'}>
+      <button type="button" className="tool-hd" onClick={() => setOpen((v) => !v)}>
+        <span className="tool-ic">
+          <Icon name="terminal" size={12} />
+        </span>
+        <span className="tool-name">Bash</span>
+        <span className="tool-srv" title={cmd}>
+          background{desc ? ` · ${desc}` : cmd ? ` · ${cmd}` : ''}
+        </span>
+        <span className="tool-status">
+          {status === 'running' && <span className="spinner" />}
+          {status === 'success' && (
+            <span
+              className="dot"
+              style={{ background: 'var(--ok)', borderRadius: '50%', display: 'inline-block' }}
+            />
+          )}
+          {status === 'error' && (
+            <span
+              className="dot"
+              style={{
+                background: 'var(--err, #ea2261)',
+                borderRadius: '50%',
+                display: 'inline-block'
+              }}
+            />
+          )}
+          {bashId ? bashId : status === 'running' ? 'spawning…' : status}
+        </span>
+        <span className="tool-caret">
+          <Icon name="chevronRight" size={12} />
+        </span>
+      </button>
+      {open && (
+        <div className="tool-body">
+          {cmd && (
+            <div className="tool-section">
+              <div className="tool-label">command</div>
+              <pre>{cmd}</pre>
+            </div>
+          )}
+          {call.output !== undefined && (
+            <div className="tool-section">
+              <div className="tool-label">{call.isError ? 'error' : 'output'}</div>
+              <pre>
+                {typeof call.output === 'string'
+                  ? call.output
+                  : JSON.stringify(call.output, null, 2)}
+              </pre>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function BashOutputCard({
+  call,
+  status
+}: {
+  call: PersistedToolCall
+  status: 'running' | 'success' | 'error'
+}) {
+  const [open, setOpen] = useState(true)
+  const id = shellIdFromInput(call.input)
+  const parts = parseBashOutput(call.output)
+  const shellStatus = parts.status
+  const liveBadge =
+    shellStatus === 'running'
+      ? 'running'
+      : shellStatus === 'completed'
+      ? `done${parts.exitCode ? ` · exit ${parts.exitCode}` : ''}`
+      : shellStatus === 'killed'
+      ? 'killed'
+      : shellStatus || (status === 'running' ? 'polling…' : status)
+  return (
+    <div className={`tool-card ${statusClass(status)}`} data-open={open ? 'true' : 'false'}>
+      <button type="button" className="tool-hd" onClick={() => setOpen((v) => !v)}>
+        <span className="tool-ic">
+          <Icon name="terminal" size={12} />
+        </span>
+        <span className="tool-name">{call.tool}</span>
+        <span className="tool-srv" title={id || undefined}>
+          task{id ? ` · ${id}` : ''}
+        </span>
+        <span className="tool-status">
+          {shellStatus === 'running' && <span className="spinner" />}
+          {shellStatus === 'completed' && (
+            <span
+              className="dot"
+              style={{ background: 'var(--ok)', borderRadius: '50%', display: 'inline-block' }}
+            />
+          )}
+          {(shellStatus === 'killed' || shellStatus === 'error') && (
+            <span
+              className="dot"
+              style={{
+                background: 'var(--err, #ea2261)',
+                borderRadius: '50%',
+                display: 'inline-block'
+              }}
+            />
+          )}
+          {liveBadge}
+        </span>
+        <span className="tool-caret">
+          <Icon name="chevronRight" size={12} />
+        </span>
+      </button>
+      {open && (
+        <div className="tool-body">
+          {parts.stdout !== undefined && (
+            <div className="tool-section">
+              <div className="tool-label">stdout</div>
+              <pre>{parts.stdout || '(empty)'}</pre>
+            </div>
+          )}
+          {parts.stderr !== undefined && parts.stderr.length > 0 && (
+            <div className="tool-section">
+              <div className="tool-label">stderr</div>
+              <pre style={{ color: 'var(--err, #ea2261)' }}>{parts.stderr}</pre>
+            </div>
+          )}
+          {parts.stdout === undefined && parts.stderr === undefined && (
+            <div className="tool-section">
+              <div className="tool-label">{call.isError ? 'error' : 'output'}</div>
+              <pre>{parts.raw || '(no output yet)'}</pre>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function KillBashCard({
+  call,
+  status
+}: {
+  call: PersistedToolCall
+  status: 'running' | 'success' | 'error'
+}) {
+  const id = shellIdFromInput(call.input)
+  return (
+    <div className={`tool-card ${statusClass(status)}`}>
+      <div className="tool-hd" style={{ cursor: 'default' }}>
+        <span className="tool-ic">
+          <Icon name="terminal" size={12} />
+        </span>
+        <span className="tool-name">{call.tool}</span>
+        <span className="tool-srv" title={id || undefined}>
+          {id ? `task · ${id}` : 'task'}
+        </span>
+        <span className="tool-status">
+          {status === 'running' && <span className="spinner" />}
+          {status === 'success' && (
+            <span
+              className="dot"
+              style={{
+                background: 'var(--err, #ea2261)',
+                borderRadius: '50%',
+                display: 'inline-block'
+              }}
+            />
+          )}
+          {status === 'success' ? 'killed' : status}
+        </span>
+      </div>
+    </div>
+  )
+}
+
 export function ToolCard({ call, sessionId }: ToolCardProps) {
   const [open, setOpen] = useState(false)
   const status: 'running' | 'success' | 'error' =
@@ -550,6 +879,18 @@ export function ToolCard({ call, sessionId }: ToolCardProps) {
   if (call.tool === 'Edit' || call.tool === 'Write' || call.tool === 'NotebookEdit') {
     const diffNode = renderDiffPanel(call)
     if (diffNode) return diffNode
+  }
+
+  if (call.tool === 'Bash' && isBackgroundBash(call.input)) {
+    return <BashBackgroundCard call={call} status={status} />
+  }
+
+  if (call.tool === 'TaskOutput' || call.tool === 'BashOutput') {
+    return <BashOutputCard call={call} status={status} />
+  }
+
+  if (call.tool === 'TaskStop' || call.tool === 'KillBash') {
+    return <KillBashCard call={call} status={status} />
   }
 
   if (call.tool === 'TodoWrite') {
