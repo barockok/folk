@@ -26,12 +26,13 @@ html[data-window-state="blurred"] .badge-ac {
     "updater updater";
   height: 100vh;
   background: var(--bg-sub);
+  transition: grid-template-columns 420ms cubic-bezier(.2, .8, .2, 1);
 }
 .shell > .topbar { grid-area: topbar; }
 .shell > .sb { grid-area: sidebar; }
 .shell > .main-body { grid-area: main; }
 .shell > .update-banner { grid-area: updater; }
-.shell.sb-closed { grid-template-columns: 56px 1fr; transition: grid-template-columns 220ms cubic-bezier(.2,.8,.2,1); }
+.shell.sb-closed { grid-template-columns: 56px 1fr; }
 
 /* Sidebar */
 .sb {
@@ -1242,18 +1243,30 @@ html[data-window-state="blurred"] .badge-ac {
 .plugin-meta { font-size: 12px; color: var(--fg-faint); font-family: var(--ff-mono); font-weight: 500; }
 
 /* Sessions layout — history rail + full-bleed main */
+/* Animatable custom property for the right-column width. Registering the
+   custom property is what lets `transition: --panel-w` actually
+   interpolate — without @property the var changes are stepwise. Driving
+   the grid via a single registered length keeps layout recalc cheap and
+   the chat side reflows smoothly while the panel slides in. */
+@property --panel-w {
+  syntax: '<length-percentage>';
+  inherits: false;
+  initial-value: 0px;
+}
 .sess-wrap {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr) var(--panel-w, 0px);
   height: 100%;
   min-height: 0;
+  --panel-w: 0px;
+  transition: --panel-w 420ms cubic-bezier(.2, .8, .2, 1);
 }
-.sess-wrap:has(.sess-todo-panel) { grid-template-columns: 1fr 320px; }
-[data-density="compact"] .sess-wrap:has(.sess-todo-panel) { grid-template-columns: 1fr 280px; }
+.sess-wrap:has(.sess-todo-panel) { --panel-w: 320px; }
+[data-density="compact"] .sess-wrap:has(.sess-todo-panel) { --panel-w: 280px; }
 /* File viewer takes a roomier 50/50 split with the chat — used when a
    user opens a file from the right rail. Right sidebar is suppressed
    while the viewer is mounted. */
-.sess-wrap:has(.file-viewer) { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.sess-wrap:has(.file-viewer) { --panel-w: 50%; }
 .sess-wrap > * { min-width: 0; }
 
 .sess-todo-panel {
@@ -1264,6 +1277,12 @@ html[data-window-state="blurred"] .badge-ac {
   overflow-y: auto;
   padding: 14px 16px;
   gap: 10px;
+  animation: panel-slide-in 460ms cubic-bezier(.2, .8, .2, 1) both;
+  border-left: var(--hair) solid var(--border);
+}
+@keyframes panel-slide-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 .sess-todo-hd {
   display: flex;
@@ -1428,6 +1447,7 @@ html[data-window-state="blurred"] .badge-ac {
   min-height: 0;
   background: var(--bg);
   border-left: var(--hair) solid var(--border);
+  animation: panel-slide-in 520ms cubic-bezier(.2, .8, .2, 1) both;
 }
 .fv-head {
   display: flex;
@@ -1520,6 +1540,7 @@ html[data-window-state="blurred"] .badge-ac {
 }
 .fv-meta { font-feature-settings: "tnum"; }
 .sctx-file[role="button"] { cursor: pointer; }
+.sctx-file.is-loading { opacity: 0.75; pointer-events: none; }
 
 /* Preview / Source segmented toggle in the file viewer header. */
 .fv-mode {
@@ -1968,6 +1989,9 @@ html[data-window-state="blurred"] .badge-ac {
 }
 @media (prefers-reduced-motion: reduce) {
   .sess-aurora-btm { animation: none !important; }
+  .sess-todo-panel,
+  .file-viewer { animation: none !important; }
+  .shell, .sess-wrap { transition: none !important; }
 }
 .sess-hero {
   flex: 1;

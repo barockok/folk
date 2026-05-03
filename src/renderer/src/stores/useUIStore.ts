@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import { INITIAL_SKILLS } from '../data'
 
+export type FilePreload = Awaited<ReturnType<typeof window.folk.files.read>>
+
 export type PageKey =
   | 'sessions'
   | 'mcp'
@@ -53,7 +55,14 @@ interface UIState {
   // right-panel Files list). When non-null, the SessionsPage layout
   // splits 50/50 with the viewer and the right-sidebar is suppressed.
   viewerFilePath: string | null
-  openFileViewer: (path: string) => void
+  // Path currently being prefetched. We only mount the viewer pane after
+  // files.read resolves, so the user doesn't watch a Loading… placeholder
+  // for half a second after the slide-in.
+  viewerLoadingPath: string | null
+  // Cached prefetch payload — FileViewer reads from this on first render
+  // instead of re-issuing the IPC.
+  viewerPreloaded: FilePreload | null
+  openFileViewer: (path: string) => Promise<void>
   closeFileViewer: () => void
   sidebarWidth: number
   setSidebarWidth: (px: number) => void
@@ -133,8 +142,28 @@ export const useUIStore = create<UIState>((set) => ({
   requestNewSession: () =>
     set((st) => ({ newSessionTick: st.newSessionTick + 1, page: 'sessions' })),
   viewerFilePath: null,
-  openFileViewer: (path) => set({ viewerFilePath: path, page: 'sessions' }),
-  closeFileViewer: () => set({ viewerFilePath: null }),
+  viewerLoadingPath: null,
+  viewerPreloaded: null,
+  openFileViewer: async (path) => {
+    // Mark loading immediately so the trigger row can show a spinner; the
+    // viewer pane stays unmounted until the file content is in hand.
+    set({ viewerLoadingPath: path, page: 'sessions' })
+    let result: FilePreload
+    try {
+      result = await window.folk.files.read(path)
+    } catch (err) {
+      result = { ok: false, error: (err as Error).message } as FilePreload
+    }
+    // If the user clicked a different file mid-flight, drop this result.
+    if (useUIStore.getState().viewerLoadingPath !== path) return
+    set({
+      viewerFilePath: path,
+      viewerLoadingPath: null,
+      viewerPreloaded: result
+    })
+  },
+  closeFileViewer: () =>
+    set({ viewerFilePath: null, viewerLoadingPath: null, viewerPreloaded: null }),
   sidebarWidth: (() => {
     const raw = Number(localStorage.getItem('folk.sidebarWidth'))
     if (!Number.isFinite(raw) || raw < SIDEBAR_MIN || raw > SIDEBAR_MAX) return SIDEBAR_DEFAULT

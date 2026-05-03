@@ -162,6 +162,7 @@ function dirname(p: string): string {
 export function TodoPanel({ session }: { session: Session | null }) {
   const messages = useSessionStore((s) => (session ? s.messages[session.id] ?? EMPTY : EMPTY))
   const openFileViewer = useUIStore((s) => s.openFileViewer)
+  const viewerLoadingPath = useUIStore((s) => s.viewerLoadingPath)
   if (!session) return null
   const stats = collect(messages)
   const totalToolCalls = stats.totalToolCalls
@@ -215,23 +216,25 @@ export function TodoPanel({ session }: { session: Session | null }) {
           <ul className="sctx-files">
             {topFiles.map((p) => {
               const icon = fileIconFor(p)
+              const isLoading = viewerLoadingPath === p
               return (
                 <li
                   key={p}
-                  className="sctx-file"
+                  className={`sctx-file${isLoading ? ' is-loading' : ''}`}
                   title={p}
                   role="button"
                   tabIndex={0}
-                  onClick={() => openFileViewer(p)}
+                  aria-busy={isLoading}
+                  onClick={() => { void openFileViewer(p) }}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       if (e.key === ' ') e.preventDefault()
-                      openFileViewer(p)
+                      void openFileViewer(p)
                     }
                   }}
                 >
                   <span className="sctx-file-icon" style={{ color: icon.color }}>
-                    <Icon name={icon.name} size={14} />
+                    {isLoading ? <span className="spinner" /> : <Icon name={icon.name} size={14} />}
                   </span>
                   <span className="sctx-file-text">
                     <span className="sctx-file-name trunc">{basename(p)}</span>

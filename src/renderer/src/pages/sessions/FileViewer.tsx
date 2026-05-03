@@ -46,17 +46,26 @@ function folkFileUrl(absPath: string): string {
 
 export function FileViewer({ path }: { path: string }) {
   const close = useUIStore((s) => s.closeFileViewer)
-  const [result, setResult] = useState<ReadResult | null>(null)
-  const [loading, setLoading] = useState(true)
-  // Renderable formats default to a rendered preview; everything else only
-  // has the source mode. Toggle persists per file (resets on path change).
+  // Most opens come pre-loaded — the store fetches the file BEFORE flipping
+  // viewerFilePath, so the pane mounts already populated. Re-mount cases
+  // (theme reload, etc.) fall back to fetching here.
+  const preloaded = useUIStore((s) => s.viewerPreloaded)
+  const [result, setResult] = useState<ReadResult | null>(
+    preloaded && preloaded.ok && preloaded.path === path ? preloaded : null
+  )
+  const [loading, setLoading] = useState(result === null)
   const [mode, setMode] = useState<Mode>(hasPreview(path) ? 'preview' : 'source')
 
   useEffect(() => {
+    setMode(hasPreview(path) ? 'preview' : 'source')
+    if (preloaded && preloaded.ok && preloaded.path === path) {
+      setResult(preloaded)
+      setLoading(false)
+      return
+    }
     let cancelled = false
     setLoading(true)
     setResult(null)
-    setMode(hasPreview(path) ? 'preview' : 'source')
     void window.folk.files.read(path).then((r) => {
       if (!cancelled) {
         setResult(r)
@@ -66,7 +75,7 @@ export function FileViewer({ path }: { path: string }) {
     return () => {
       cancelled = true
     }
-  }, [path])
+  }, [path, preloaded])
 
   const dir = dirname(path)
   const name = basename(path)
