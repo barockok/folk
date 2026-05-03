@@ -64,7 +64,9 @@ export function Composer({ session, onSend, onCancel, onClear, onConfigureNew, o
   const isDraftSession = !!session && session.id.startsWith('draft-')
   const [text, setText] = useState('')
   const [modelPopOpen, setModelPopOpen] = useState(false)
+  const [modelPopPlacement, setModelPopPlacement] = useState<'top' | 'bottom'>('top')
   const [permPopOpen, setPermPopOpen] = useState(false)
+  const [permPopPlacement, setPermPopPlacement] = useState<'top' | 'bottom'>('top')
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [isDragging, setIsDragging] = useState(false)
   const [slashIndex, setSlashIndex] = useState(0)
@@ -238,7 +240,10 @@ export function Composer({ session, onSend, onCancel, onClear, onConfigureNew, o
       newSession,
       exportTranscript,
       toast: (kind, t) => toast({ kind, text: t }),
-      openModelPopover: () => setModelPopOpen(true),
+      openModelPopover: () => {
+        measureModelPlacement()
+        setModelPopOpen(true)
+      },
       send: (t) => onSend(t),
       cancel: onCancel,
       clearContext: () => {
@@ -356,6 +361,22 @@ export function Composer({ session, onSend, onCancel, onClear, onConfigureNew, o
     if (!slashOpen) return
     setSlashIndex(0)
   }, [slashOpen, slashMatches.length])
+
+  const measureModelPlacement = useCallback(() => {
+    const el = popRef.current
+    if (!el) return
+    const r = el.getBoundingClientRect()
+    const triggerMid = (r.top + r.bottom) / 2
+    setModelPopPlacement(triggerMid < window.innerHeight / 2 ? 'bottom' : 'top')
+  }, [])
+
+  const measurePermPlacement = useCallback(() => {
+    const el = permPopRef.current
+    if (!el) return
+    const r = el.getBoundingClientRect()
+    const triggerMid = (r.top + r.bottom) / 2
+    setPermPopPlacement(triggerMid < window.innerHeight / 2 ? 'bottom' : 'top')
+  }, [])
 
   // Close popover on outside click
   useEffect(() => {
@@ -730,7 +751,10 @@ export function Composer({ session, onSend, onCancel, onClear, onConfigureNew, o
             <button
               className="btn btn-plain"
               style={{ fontSize: 12, fontFamily: 'var(--ff-mono)', gap: 4 }}
-              onClick={() => setModelPopOpen((o) => !o)}
+              onClick={() => {
+                if (!modelPopOpen) measureModelPlacement()
+                setModelPopOpen((o) => !o)
+              }}
               title="Switch model"
               type="button"
             >
@@ -738,7 +762,7 @@ export function Composer({ session, onSend, onCancel, onClear, onConfigureNew, o
             </button>
 
             {modelPopOpen && (
-              <div className="model-pop">
+              <div className={`model-pop model-pop--${modelPopPlacement}`}>
                 <div className="model-pop-hd">Model</div>
                 <div className="model-pop-list">
                   {Object.entries(byProvider).map(([provId, { providerName, models }]) => (
@@ -813,14 +837,17 @@ export function Composer({ session, onSend, onCancel, onClear, onConfigureNew, o
               <button
                 className="btn btn-plain"
                 style={{ fontSize: 12, fontFamily: 'var(--ff-mono)', gap: 4 }}
-                onClick={() => setPermPopOpen((o) => !o)}
+                onClick={() => {
+                  if (!permPopOpen) measurePermPlacement()
+                  setPermPopOpen((o) => !o)
+                }}
                 title={PERMISSION_LABELS[session.permissionMode].hint}
                 type="button"
               >
                 {PERMISSION_LABELS[session.permissionMode].label} ⌄
               </button>
               {permPopOpen && (
-                <div className="model-pop">
+                <div className={`model-pop model-pop--${permPopPlacement}`}>
                   <div className="model-pop-hd">Permission mode</div>
                   <div className="model-pop-list">
                     {(Object.keys(PERMISSION_LABELS) as PermissionMode[]).map((mode) => {

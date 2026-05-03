@@ -365,8 +365,22 @@ const MessageItem = memo(function MessageItem({
 // crowded by the composer; aligns right when the right edge would clip.
 function ThinkingAvatar({ live, text }: { live: boolean; text: string }) {
   const ref = useRef<HTMLDivElement | null>(null)
+  const bodyRef = useRef<HTMLDivElement | null>(null)
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [placement, setPlacement] = useState<'top' | 'bottom'>('bottom')
   const [align, setAlign] = useState<'start' | 'end'>('start')
+  const [open, setOpen] = useState(false)
+
+  useEffect(() => {
+    if (!live) return
+    const el = bodyRef.current
+    if (!el) return
+    el.scrollTop = el.scrollHeight
+  }, [text, live])
+
+  useEffect(() => () => {
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
+  }, [])
 
   const measure = () => {
     const el = ref.current
@@ -374,34 +388,52 @@ function ThinkingAvatar({ live, text }: { live: boolean; text: string }) {
     const r = el.getBoundingClientRect()
     const vh = window.innerHeight
     const vw = window.innerWidth
-    // Popover is at most 360px tall + 6px margin; pick top if there isn't
-    // enough room below or the bottom half of the viewport is crowded.
     const popH = 360 + 12
     const spaceBelow = vh - r.bottom
     const spaceAbove = r.top
     setPlacement(spaceBelow < popH && spaceAbove > spaceBelow ? 'top' : 'bottom')
-    // Width is min(420, 60vw). Right-align if spawning at left edge would
-    // overflow the right side of the viewport.
     const popW = Math.min(420, vw * 0.6)
     setAlign(r.left + popW > vw - 12 ? 'end' : 'start')
+  }
+
+  const cancelClose = () => {
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current)
+      closeTimerRef.current = null
+    }
+  }
+  const openNow = () => {
+    cancelClose()
+    measure()
+    setOpen(true)
+  }
+  // Delay close so the user can cross the 6px gap between avatar and popover
+  // (and stay there to scroll) without the popover yanking out from under them.
+  const scheduleClose = () => {
+    cancelClose()
+    closeTimerRef.current = setTimeout(() => setOpen(false), 220)
   }
 
   return (
     <div
       ref={ref}
-      className={`msg-avatar assist has-thinking${live ? ' thinking-live' : ''}`}
+      className={`msg-avatar assist has-thinking${live ? ' thinking-live' : ''}${open ? ' open' : ''}`}
       tabIndex={0}
       aria-label="Show reasoning"
-      onMouseEnter={measure}
-      onFocus={measure}
+      onMouseEnter={openNow}
+      onMouseLeave={scheduleClose}
+      onFocus={openNow}
+      onBlur={scheduleClose}
     >
       F
       <div
         className={`msg-thinking-pop msg-thinking-pop--${placement} msg-thinking-pop--${align}`}
         role="tooltip"
+        onMouseEnter={cancelClose}
+        onMouseLeave={scheduleClose}
       >
         <div className="msg-thinking-pop-hd">{live ? 'Thinking…' : 'Thought'}</div>
-        <div className="msg-thinking-pop-body">{text}</div>
+        <div className="msg-thinking-pop-body" ref={bodyRef}>{text}</div>
       </div>
     </div>
   )

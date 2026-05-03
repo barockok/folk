@@ -142,10 +142,19 @@ export function TodoPanel({ session }: { session: Session | null }) {
   const stats = collect(messages)
   const totalToolCalls = stats.totalToolCalls
   const hasAnything = !!stats.todos || stats.files.length > 0 || totalToolCalls > 0
-  // Empty sessions: don't open the rail at all — keeps a fresh chat from
-  // auto-pushing a panel users haven't asked for. The pane will appear on
-  // its own once the first todo / file / MCP call lands.
-  if (!hasAnything) return null
+  if (!hasAnything) {
+    return (
+      <aside className="sess-todo-panel">
+        <div className="sctx-empty">
+          <Icon name="sidebar" size={14} />
+          <div className="sctx-empty-title">No context yet</div>
+          <div className="sctx-empty-sub">
+            Todos, files, and MCP calls will appear here as the session runs.
+          </div>
+        </div>
+      </aside>
+    )
+  }
 
   const done = stats.todos?.filter((t) => t.status === 'completed').length ?? 0
   const topFiles = stats.files.slice(0, 12)

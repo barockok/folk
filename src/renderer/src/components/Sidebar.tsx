@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Icon } from './icons'
+import { TweaksPanel } from './TweaksPanel'
 import { useUIStore, SIDEBAR_MIN, SIDEBAR_MAX } from '../stores/useUIStore'
 import { useProfileStore } from '../stores/useProfileStore'
 import { useSessionStore } from '../stores/useSessionStore'
@@ -141,6 +142,26 @@ export function Sidebar() {
   const [hoverId, setHoverId] = useState<string | null>(null)
   const [menuId, setMenuId] = useState<string | null>(null)
   const [renameTarget, setRenameTarget] = useState<Session | null>(null)
+  const tweaksOpen = useUIStore((s) => s.tweaksOpen)
+  const setTweaksOpen = useUIStore((s) => s.setTweaksOpen)
+  const toggleTweaks = useUIStore((s) => s.toggleTweaks)
+  const tweaksWrapRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    if (!tweaksOpen) return
+    const onDown = (e: MouseEvent) => {
+      if (!tweaksWrapRef.current) return
+      if (!tweaksWrapRef.current.contains(e.target as Node)) setTweaksOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setTweaksOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [tweaksOpen, setTweaksOpen])
 
   // Close the row popover on outside click.
   useEffect(() => {
@@ -368,7 +389,32 @@ export function Sidebar() {
           <div className="sb-profile-name trunc">{displayName}</div>
           <div className="sb-profile-sub trunc">How folk refers to you</div>
         </div>
-        <Icon name="chevronRight" size={13} className="sb-profile-caret sb-fade" />
+        <div
+          className="tweaks-wrap tweaks-wrap-sb"
+          ref={tweaksWrapRef}
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+        >
+          <button
+            type="button"
+            className="btn btn-plain btn-icon sb-profile-tweaks"
+            onClick={(e) => {
+              e.stopPropagation()
+              toggleTweaks()
+            }}
+            title="Tweaks"
+            aria-label="Open tweaks"
+            aria-expanded={tweaksOpen}
+            aria-haspopup="true"
+          >
+            <Icon name="settings" size={14} />
+          </button>
+          {tweaksOpen && (
+            <div className="tweaks-popover" role="dialog" aria-label="Tweaks">
+              <TweaksPanel />
+            </div>
+          )}
+        </div>
       </div>
 
       {!collapsed && (

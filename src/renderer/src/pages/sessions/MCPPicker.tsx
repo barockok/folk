@@ -14,7 +14,16 @@ interface Props {
 // default), `[]` means none, anything else is an explicit allowlist.
 export function MCPPicker({ enabledMcpIds, eligibleMcps, onChange, labelPrefix = 'MCP' }: Props) {
   const [open, setOpen] = useState(false)
+  const [placement, setPlacement] = useState<'top' | 'bottom'>('top')
   const ref = useRef<HTMLDivElement>(null)
+
+  const measure = () => {
+    const el = ref.current
+    if (!el) return
+    const r = el.getBoundingClientRect()
+    const triggerMid = (r.top + r.bottom) / 2
+    setPlacement(triggerMid < window.innerHeight / 2 ? 'bottom' : 'top')
+  }
 
   useEffect(() => {
     if (!open) return
@@ -40,13 +49,16 @@ export function MCPPicker({ enabledMcpIds, eligibleMcps, onChange, labelPrefix =
         className="btn btn-plain"
         style={{ fontSize: 12, fontFamily: 'var(--ff-mono)', gap: 4 }}
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => {
+          if (!open) measure()
+          setOpen((o) => !o)
+        }}
         title="Change MCP servers for this session"
       >
         {labelPrefix} {label} ⌄
       </button>
       {open && (
-        <div className="model-pop">
+        <div className={`model-pop model-pop--${placement}`}>
           <div
             className="model-pop-hd"
             style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}

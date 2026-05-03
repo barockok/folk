@@ -52,6 +52,43 @@ export function TweaksPanel() {
     toast({ kind: 'info', text: 'Simulating update — watch the bottom-right card' })
   }
 
+  const simulateThinking = () => {
+    if (!activeSessionId) {
+      toast({ kind: 'err', text: 'Open a session first' })
+      return
+    }
+    const store = useSessionStore.getState()
+    store.markStreaming(activeSessionId)
+    const lines = [
+      'Looking at the request — user wants a simulated thinking trace.',
+      'Breaking it down: stream tokens in chunks so the live cursor stays visible.',
+      'Plan: emit ~12 chunks over 6 seconds, ramp speed so the tail keeps moving.',
+      'Edge cases: cancel mid-stream if the session unmounts; cleanup timer.',
+      'Drafting a few longer paragraphs to exercise the scroll fade and auto-scroll.',
+      'The ThinkingAvatar component pins scrollTop to scrollHeight while live=true,',
+      'so each appended chunk should keep the latest token in view.',
+      'Once the simulated thought finalizes, hovering should keep the popover open',
+      'with a 220ms delay close — verify cross-gap travel works without flicker.',
+      'Done. Marking idle and stopping the chunker.'
+    ]
+    let i = 0
+    const tick = () => {
+      if (i >= lines.length) {
+        useSessionStore.getState().markIdle(activeSessionId)
+        return
+      }
+      const chunk = lines[i] + '\n'
+      useSessionStore.getState().appendThinking({
+        sessionId: activeSessionId,
+        text: chunk
+      })
+      i++
+      setTimeout(tick, 380 + Math.random() * 180)
+    }
+    tick()
+    toast({ kind: 'info', text: 'Simulating thinking — hover the avatar' })
+  }
+
   const copySessionId = async () => {
     if (!activeSessionId) return
     try {
@@ -171,6 +208,31 @@ export function TweaksPanel() {
         >
           <Icon name="wand" size={13} />
           Simulate blank onboarding
+          <span
+            style={{
+              marginLeft: 'auto',
+              fontSize: 9,
+              letterSpacing: '0.06em',
+              textTransform: 'uppercase',
+              color: 'var(--fg-faint)'
+            }}
+          >
+            dev
+          </span>
+        </button>
+      </div>
+      )}
+
+      {/* Dev — Simulate thinking */}
+      {IS_DEV && (
+      <div className="tweaks-row">
+        <button
+          className="btn btn-plain"
+          style={{ fontSize: 12, width: '100%', justifyContent: 'flex-start', gap: 6 }}
+          onClick={simulateThinking}
+        >
+          <Icon name="sparkles" size={13} />
+          Simulate thinking
           <span
             style={{
               marginLeft: 'auto',

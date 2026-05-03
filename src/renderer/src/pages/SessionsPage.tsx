@@ -33,6 +33,7 @@ export function SessionsPage() {
   const setPage = useUIStore((s) => s.setPage)
   const rightSidebarCollapsed = useUIStore((s) => s.rightSidebarCollapsed)
   const viewerFilePath = useUIStore((s) => s.viewerFilePath)
+  const closeFileViewer = useUIStore((s) => s.closeFileViewer)
   // A draft is a configured-but-unsent session — purely renderer-side, never
   // persisted to SQLite, never visible in the sidebar. The user clicks "new"
   // → we synthesize a Session shape from the stored defaults, render the
@@ -50,6 +51,13 @@ export function SessionsPage() {
     }
   }, [activeId, sessions, draft])
   const active = draft?.session ?? sessions.find((s) => s.id === activeId) ?? null
+  // File viewer is global UI state; close it whenever the active session
+  // changes so a viewer opened in session A doesn't bleed into session B
+  // (or a freshly staged draft).
+  useEffect(() => {
+    closeFileViewer()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active?.id])
   const messages = useSessionStore((s) =>
     active ? s.messages[active.id] ?? EMPTY_MESSAGES : EMPTY_MESSAGES
   )

@@ -1,6 +1,4 @@
-import { useEffect, useRef } from 'react'
 import { Icon } from './icons'
-import { TweaksPanel } from './TweaksPanel'
 import { useUIStore } from '../stores/useUIStore'
 import { useSessionStore } from '../stores/useSessionStore'
 import type { PageKey } from '../stores/useUIStore'
@@ -28,28 +26,6 @@ export function Topbar() {
     const found = s.sessions.find((x) => x.id === s.activeId)
     return found?.title ?? null
   })
-
-  const tweaksOpen = useUIStore((s) => s.tweaksOpen)
-  const setTweaksOpen = useUIStore((s) => s.setTweaksOpen)
-  const toggleTweaks = useUIStore((s) => s.toggleTweaks)
-  const tweaksWrapRef = useRef<HTMLDivElement | null>(null)
-
-  useEffect(() => {
-    if (!tweaksOpen) return
-    const onDown = (e: MouseEvent) => {
-      if (!tweaksWrapRef.current) return
-      if (!tweaksWrapRef.current.contains(e.target as Node)) setTweaksOpen(false)
-    }
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setTweaksOpen(false)
-    }
-    document.addEventListener('mousedown', onDown)
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('mousedown', onDown)
-      document.removeEventListener('keydown', onKey)
-    }
-  }, [tweaksOpen, setTweaksOpen])
 
   const crumbs: string[] = ['folk', PAGE_LABELS[page]]
   if (page === 'sessions' && activeSessionTitle) {
@@ -99,23 +75,6 @@ export function Topbar() {
             <Icon name="sidebar" size={14} style={{ transform: 'scaleX(-1)' }} />
           </button>
         )}
-        <div className="tweaks-wrap" ref={tweaksWrapRef}>
-          <button
-            className="btn btn-plain btn-icon"
-            onClick={toggleTweaks}
-            title="Tweaks"
-            aria-label="Open tweaks"
-            aria-expanded={tweaksOpen}
-            aria-haspopup="true"
-          >
-            <Icon name="settings" size={14} />
-          </button>
-          {tweaksOpen && (
-            <div className="tweaks-popover" role="dialog" aria-label="Tweaks">
-              <TweaksPanel />
-            </div>
-          )}
-        </div>
       </div>
     </header>
   )
