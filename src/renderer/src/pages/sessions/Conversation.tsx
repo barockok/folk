@@ -254,19 +254,7 @@ const MessageItem = memo(function MessageItem({
           <span className="msg-rail-dot" />
         </div>
       ) : m.role === 'assistant' && thinkingText ? (
-        <div
-          className={`msg-avatar assist has-thinking${hasLiveThinking ? ' thinking-live' : ''}`}
-          tabIndex={0}
-          aria-label="Show reasoning"
-        >
-          F
-          <div className="msg-thinking-pop" role="tooltip">
-            <div className="msg-thinking-pop-hd">
-              {hasLiveThinking ? 'Thinking…' : 'Thought'}
-            </div>
-            <div className="msg-thinking-pop-body">{thinkingText}</div>
-          </div>
-        </div>
+        <ThinkingAvatar live={hasLiveThinking} text={thinkingText} />
       ) : (
         <div className={`msg-avatar ${m.role === 'user' ? 'user' : 'assist'}`}>
           {m.role === 'user' ? 'Y' : 'F'}
@@ -372,6 +360,53 @@ const MessageItem = memo(function MessageItem({
 // restart this lands as a giant user bubble — useful info, but not what the
 // user wants to scroll past every time. Detect it heuristically and render
 // as a collapsible stub.
+// Avatar + adaptive thinking popover. Measures available viewport space on
+// hover/focus and flips the popover above the avatar when the bottom is
+// crowded by the composer; aligns right when the right edge would clip.
+function ThinkingAvatar({ live, text }: { live: boolean; text: string }) {
+  const ref = useRef<HTMLDivElement | null>(null)
+  const [placement, setPlacement] = useState<'top' | 'bottom'>('bottom')
+  const [align, setAlign] = useState<'start' | 'end'>('start')
+
+  const measure = () => {
+    const el = ref.current
+    if (!el) return
+    const r = el.getBoundingClientRect()
+    const vh = window.innerHeight
+    const vw = window.innerWidth
+    // Popover is at most 360px tall + 6px margin; pick top if there isn't
+    // enough room below or the bottom half of the viewport is crowded.
+    const popH = 360 + 12
+    const spaceBelow = vh - r.bottom
+    const spaceAbove = r.top
+    setPlacement(spaceBelow < popH && spaceAbove > spaceBelow ? 'top' : 'bottom')
+    // Width is min(420, 60vw). Right-align if spawning at left edge would
+    // overflow the right side of the viewport.
+    const popW = Math.min(420, vw * 0.6)
+    setAlign(r.left + popW > vw - 12 ? 'end' : 'start')
+  }
+
+  return (
+    <div
+      ref={ref}
+      className={`msg-avatar assist has-thinking${live ? ' thinking-live' : ''}`}
+      tabIndex={0}
+      aria-label="Show reasoning"
+      onMouseEnter={measure}
+      onFocus={measure}
+    >
+      F
+      <div
+        className={`msg-thinking-pop msg-thinking-pop--${placement} msg-thinking-pop--${align}`}
+        role="tooltip"
+      >
+        <div className="msg-thinking-pop-hd">{live ? 'Thinking…' : 'Thought'}</div>
+        <div className="msg-thinking-pop-body">{text}</div>
+      </div>
+    </div>
+  )
+}
+
 const COMPACT_SUMMARY_PREFIX = 'This session is being continued from a previous conversation'
 function isCompactSummary(text: string | undefined): boolean {
   if (!text) return false

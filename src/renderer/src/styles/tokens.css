@@ -326,23 +326,19 @@ h1,h2,h3,h4 {
   background-clip: content-box;
   transition: background-color 240ms ease;
 }
-.is-scrolling::-webkit-scrollbar-thumb,
-*:hover::-webkit-scrollbar-thumb {
+.is-scrolling::-webkit-scrollbar-thumb {
   background: rgba(120, 120, 130, 0.32);
   background-clip: content-box;
 }
-*::-webkit-scrollbar-thumb:hover,
 .is-scrolling::-webkit-scrollbar-thumb:hover {
   background: rgba(120, 120, 130, 0.55);
   background-clip: content-box;
 }
 .is-scrolling { scrollbar-color: rgba(120, 120, 130, 0.32) transparent; }
-[data-theme="dark"] .is-scrolling::-webkit-scrollbar-thumb,
-[data-theme="dark"] *:hover::-webkit-scrollbar-thumb {
+[data-theme="dark"] .is-scrolling::-webkit-scrollbar-thumb {
   background: rgba(200, 200, 210, 0.22);
   background-clip: content-box;
 }
-[data-theme="dark"] *::-webkit-scrollbar-thumb:hover,
 [data-theme="dark"] .is-scrolling::-webkit-scrollbar-thumb:hover {
   background: rgba(200, 200, 210, 0.45);
   background-clip: content-box;

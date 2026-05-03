@@ -2589,9 +2589,6 @@ html[data-window-state="blurred"] .badge-ac {
 }
 .msg-thinking-pop {
   position: absolute;
-  top: 100%;
-  left: 0;
-  margin-top: 6px;
   z-index: 20;
   width: min(420px, 60vw);
   max-height: 360px;
@@ -2609,9 +2606,20 @@ html[data-window-state="blurred"] .badge-ac {
   word-break: break-word;
   opacity: 0;
   pointer-events: none;
-  transform: translateY(-4px);
   transition: opacity 140ms ease, transform 140ms ease;
 }
+.msg-thinking-pop--bottom {
+  top: 100%;
+  margin-top: 6px;
+  transform: translateY(-4px);
+}
+.msg-thinking-pop--top {
+  bottom: 100%;
+  margin-bottom: 6px;
+  transform: translateY(4px);
+}
+.msg-thinking-pop--start { left: 0; }
+.msg-thinking-pop--end { right: 0; }
 .msg-avatar.has-thinking:hover .msg-thinking-pop,
 .msg-avatar.has-thinking:focus-within .msg-thinking-pop {
   opacity: 1;
