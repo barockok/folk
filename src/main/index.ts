@@ -91,7 +91,14 @@ protocol.registerSchemesAsPrivileged([
 // protocol exists for inline images in chat markdown, not arbitrary file
 // access. Add more extensions if other safe media types are needed.
 const ALLOWED_EXT = new Set([
-  '.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp', '.ico', '.avif'
+  // Inline-image set used by markdown renderer (Conversation.tsx).
+  '.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp', '.ico', '.avif',
+  // Extra types served to the in-app FileViewer pane (HTML preview, PDF,
+  // audio/video). Same protocol so the iframe / video tags can stream the
+  // on-disk file directly without us having to read+inline the bytes.
+  '.html', '.htm', '.pdf',
+  '.mp4', '.webm', '.mov', '.m4v',
+  '.mp3', '.wav', '.ogg', '.m4a', '.flac'
 ])
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { Database } from './database'

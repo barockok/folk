@@ -76,6 +76,9 @@ const folk: FolkAPI = {
   shell: {
     openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url)
   },
+  files: {
+    read: (path) => ipcRenderer.invoke('files:read', path)
+  },
   app: {
     reportTheme: (theme) => ipcRenderer.send('app:theme', theme),
     version: () => ipcRenderer.invoke('app:version'),

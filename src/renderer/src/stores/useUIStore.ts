@@ -49,6 +49,12 @@ interface UIState {
   // sidebar "+ New" button or anywhere else that wants a new session.
   newSessionTick: number
   requestNewSession: () => void
+  // Path of a file the user opened in the in-app viewer (set from the
+  // right-panel Files list). When non-null, the SessionsPage layout
+  // splits 50/50 with the viewer and the right-sidebar is suppressed.
+  viewerFilePath: string | null
+  openFileViewer: (path: string) => void
+  closeFileViewer: () => void
   sidebarWidth: number
   setSidebarWidth: (px: number) => void
 }
@@ -126,6 +132,9 @@ export const useUIStore = create<UIState>((set) => ({
   newSessionTick: 0,
   requestNewSession: () =>
     set((st) => ({ newSessionTick: st.newSessionTick + 1, page: 'sessions' })),
+  viewerFilePath: null,
+  openFileViewer: (path) => set({ viewerFilePath: path, page: 'sessions' }),
+  closeFileViewer: () => set({ viewerFilePath: null }),
   sidebarWidth: (() => {
     const raw = Number(localStorage.getItem('folk.sidebarWidth'))
     if (!Number.isFinite(raw) || raw < SIDEBAR_MIN || raw > SIDEBAR_MAX) return SIDEBAR_DEFAULT

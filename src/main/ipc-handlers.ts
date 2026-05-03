@@ -142,6 +142,61 @@ export function registerIpc(
   ipcMain.handle('sessions:create', (_e, config: SessionConfig) => agent.createSession(config))
   ipcMain.handle('sessions:delete', (_e, id: string) => agent.deleteSession(id))
   ipcMain.handle('sessions:clear', (_e, id: string) => agent.clearSession(id))
+
+  // Read an absolute path for the in-app file viewer. Caps the size so a
+  // careless click on a 4GB blob doesn't blow up the renderer; binary files
+  // (image/video/etc) are signaled via the `kind` field instead of returning
+  // their bytes, since the renderer streams them via folk-file:// instead.
+  ipcMain.handle('files:read', async (_e, path: string) => {
+    const fs = await import('node:fs/promises')
+    const pathLib = await import('node:path')
+    if (!pathLib.isAbsolute(path)) {
+      return { ok: false, error: 'Path must be absolute' }
+    }
+    try {
+      const stat = await fs.stat(path)
+      const ext = pathLib.extname(path).toLowerCase()
+      const isImage = /^\.(png|jpg|jpeg|gif|webp|avif|svg|bmp|ico)$/.test(ext)
+      const isVideo = /^\.(mp4|webm|mov|m4v)$/.test(ext)
+      const isAudio = /^\.(mp3|wav|ogg|m4a|flac)$/.test(ext)
+      const isPdf = ext === '.pdf'
+      const MAX_TEXT_BYTES = 2_000_000 // 2 MB
+      if (isImage || isVideo || isAudio || isPdf) {
+        return {
+          ok: true,
+          path,
+          size: stat.size,
+          mtimeMs: stat.mtimeMs,
+          kind: isImage ? 'image' : isVideo ? 'video' : isAudio ? 'audio' : 'pdf',
+          content: null
+        } as const
+      }
+      if (stat.size > MAX_TEXT_BYTES) {
+        return {
+          ok: true,
+          path,
+          size: stat.size,
+          mtimeMs: stat.mtimeMs,
+          kind: 'too-large' as const,
+          content: null
+        }
+      }
+      const buf = await fs.readFile(path)
+      // Crude binary detection: if the first 8KB has a NUL byte, treat as binary.
+      const probe = buf.subarray(0, Math.min(8192, buf.length))
+      const looksBinary = probe.includes(0)
+      return {
+        ok: true,
+        path,
+        size: stat.size,
+        mtimeMs: stat.mtimeMs,
+        kind: looksBinary ? 'binary' : 'text',
+        content: looksBinary ? null : buf.toString('utf-8')
+      } as const
+    } catch (err) {
+      return { ok: false, error: (err as Error).message }
+    }
+  })
   ipcMain.handle('sessions:loadMessages', (_e, id: string) => agent.loadMessages(id))
   ipcMain.handle('sessions:backfillTitle', (_e, id: string) => agent.backfillTitle(id))
   ipcMain.handle('sessions:rename', (_e, id: string, title: string) =>

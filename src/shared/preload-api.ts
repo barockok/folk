@@ -120,6 +120,12 @@ export interface FolkAPI {
   shell: {
     openExternal: (url: string) => Promise<{ ok: boolean }>
   }
+  files: {
+    read: (path: string) => Promise<
+      | { ok: true; path: string; size: number; mtimeMs: number; kind: 'text' | 'binary' | 'image' | 'video' | 'audio' | 'pdf' | 'too-large'; content: string | null }
+      | { ok: false; error: string }
+    >
+  }
   app: {
     reportTheme: (theme: 'light' | 'dark') => void
     version: () => Promise<string>

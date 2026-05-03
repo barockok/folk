@@ -1,7 +1,9 @@
 import { useSessionStore } from '../../stores/useSessionStore'
+import { useUIStore } from '../../stores/useUIStore'
 import type { Session, PersistedToolCall, MessageBlock } from '@shared/types'
 import { extractTodos, humanizeToolName, type TodoItem } from './ToolCard'
 import { Icon } from '../../components/icons'
+import { fileIconFor } from '../../lib/fileIcon'
 
 const EMPTY: never[] = []
 
@@ -159,6 +161,7 @@ function dirname(p: string): string {
 
 export function TodoPanel({ session }: { session: Session | null }) {
   const messages = useSessionStore((s) => (session ? s.messages[session.id] ?? EMPTY : EMPTY))
+  const openFileViewer = useUIStore((s) => s.openFileViewer)
   if (!session) return null
   const stats = collect(messages)
   const totalToolCalls = stats.totalToolCalls
@@ -210,12 +213,33 @@ export function TodoPanel({ session }: { session: Session | null }) {
             <span className="sctx-count">{stats.files.length}</span>
           </div>
           <ul className="sctx-files">
-            {topFiles.map((p) => (
-              <li key={p} className="sctx-file" title={p}>
-                <span className="sctx-file-name trunc">{basename(p)}</span>
-                <span className="sctx-file-dir trunc">{dirname(p)}</span>
-              </li>
-            ))}
+            {topFiles.map((p) => {
+              const icon = fileIconFor(p)
+              return (
+                <li
+                  key={p}
+                  className="sctx-file"
+                  title={p}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => openFileViewer(p)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      if (e.key === ' ') e.preventDefault()
+                      openFileViewer(p)
+                    }
+                  }}
+                >
+                  <span className="sctx-file-icon" style={{ color: icon.color }}>
+                    <Icon name={icon.name} size={14} />
+                  </span>
+                  <span className="sctx-file-text">
+                    <span className="sctx-file-name trunc">{basename(p)}</span>
+                    <span className="sctx-file-dir trunc">{dirname(p)}</span>
+                  </span>
+                </li>
+              )
+            })}
             {stats.files.length > topFiles.length && (
               <li className="sctx-more">+{stats.files.length - topFiles.length} more</li>
             )}

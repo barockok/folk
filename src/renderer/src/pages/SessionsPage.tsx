@@ -6,6 +6,7 @@ import { useUIStore } from '../stores/useUIStore'
 import { Conversation } from './sessions/Conversation'
 import { Composer } from './sessions/Composer'
 import { TodoPanel } from './sessions/TodoPanel'
+import { FileViewer } from './sessions/FileViewer'
 import { HeroConfigBar } from './sessions/HeroConfigBar'
 import {
   loadDefaultSessionConfig,
@@ -31,6 +32,7 @@ export function SessionsPage() {
   const { enabledModels } = useProviders()
   const setPage = useUIStore((s) => s.setPage)
   const rightSidebarCollapsed = useUIStore((s) => s.rightSidebarCollapsed)
+  const viewerFilePath = useUIStore((s) => s.viewerFilePath)
   // A draft is a configured-but-unsent session — purely renderer-side, never
   // persisted to SQLite, never visible in the sidebar. The user clicks "new"
   // → we synthesize a Session shape from the stored defaults, render the
@@ -234,7 +236,12 @@ export function SessionsPage() {
           )
         )}
       </div>
-      {!isFresh && draftReady && !rightSidebarCollapsed && <TodoPanel session={active} />}
+      {!isFresh && draftReady && viewerFilePath && (
+        <FileViewer path={viewerFilePath} />
+      )}
+      {!isFresh && draftReady && !viewerFilePath && !rightSidebarCollapsed && (
+        <TodoPanel session={active} />
+      )}
     </div>
   )
 }
