@@ -3,6 +3,7 @@ import { useSessionStore } from '../../stores/useSessionStore'
 import type { Session, MessageBlock, PersistedToolCall } from '@shared/types'
 import { Icon } from '../../components/icons'
 import { useSessions } from '../../hooks/useSessions'
+import { FOLK_INTERNAL_MARK } from './Conversation'
 
 const EMPTY: never[] = []
 
@@ -348,7 +349,10 @@ function byteSize(s: string): string {
 export function hasShells(
   messages: ReadonlyArray<{ blocks: ReadonlyArray<MessageBlock>; createdAt: number }>
 ): boolean {
-  return collectShells(messages).length > 0
+  // Mirrors ShellPanel's render filter: sidebar only shows running shells.
+  // If a session has only finished shells, the panel renders nothing — so
+  // the rail's empty-state check should treat that as "no shells" too.
+  return collectShells(messages).some((s) => s.status === 'running')
 }
 
 // Per-session optimistic overrides. Keyed sessionId → bashId → status.
@@ -431,7 +435,9 @@ export function ShellPanel({ session }: { session: Session | null }) {
     if (isStreaming) return
     void send(
       session.id,
-      `Call the TaskOutput tool now with task_id="${id}" and block=false. Do not explain — just invoke the tool and report stdout/stderr/exit status.`
+      `${FOLK_INTERNAL_MARK}\nCall the TaskOutput tool now with task_id="${id}" and block=false. Do not explain — just invoke the tool and report stdout/stderr/exit status.`,
+      undefined,
+      { silent: true }
     )
   }
   const stop = (id: string) => {
@@ -440,7 +446,9 @@ export function ShellPanel({ session }: { session: Session | null }) {
     setTick((t) => t + 1)
     void send(
       session.id,
-      `Call the TaskStop tool now with task_id="${id}". This is a direct command — do not ask for confirmation, do not explain, just invoke TaskStop. After it returns, call TaskOutput once with task_id="${id}" and block=false to confirm the task is no longer running.`
+      `${FOLK_INTERNAL_MARK}\nCall the TaskStop tool now with task_id="${id}". This is a direct command — do not ask for confirmation, do not explain, just invoke TaskStop. After it returns, call TaskOutput once with task_id="${id}" and block=false to confirm the task is no longer running.`,
+      undefined,
+      { silent: true }
     )
   }
 
@@ -481,9 +489,7 @@ export function ShellPanel({ session }: { session: Session | null }) {
                   <span className="sh-caret" aria-hidden="true">
                     <Icon name="chevronRight" size={12} />
                   </span>
-                  <span className={`sh-dot sh-dot-${sh.status}`} aria-hidden="true">
-                    {sh.status === 'running' ? <span className="spinner" /> : null}
-                  </span>
+                  <span className={`sh-dot sh-dot-${sh.status}`} aria-hidden="true" />
                   <span className="sh-cmd trunc" title={sh.command || sh.bashId}>
                     {sh.command || sh.bashId}
                   </span>

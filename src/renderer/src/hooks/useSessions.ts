@@ -56,7 +56,12 @@ export function useSessions() {
       upsertSession(updated)
       return updated
     },
-    async send(sessionId: string, text: string, attachments?: Attachment[]) {
+    async send(
+      sessionId: string,
+      text: string,
+      attachments?: Attachment[],
+      opts?: { silent?: boolean }
+    ) {
       const st = useSessionStore.getState()
       // Mirror the user message the model will see: append image thumbnails
       // (data URI) and a list of non-image attachment names so the timeline
@@ -73,7 +78,7 @@ export function useSessions() {
               )
               .join('\n')}`.trim()
           : text
-      st.pushUserMessage(sessionId, optimisticText)
+      if (!opts?.silent) st.pushUserMessage(sessionId, optimisticText)
       st.pushPendingAssistant(sessionId)
       st.markStreaming(sessionId)
       const { folkSkillsEnabled } = useUIStore.getState()

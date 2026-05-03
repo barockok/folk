@@ -162,6 +162,11 @@ const STATIC_ASSISTANT_MD: Components = buildAssistantMdComponents({
 })
 
 const EMPTY_MESSAGES: never[] = []
+// Marker prefix on synth user prompts that the UI dispatches behind the
+// scenes (e.g. ShellPanel Refresh / Stop buttons). Messages starting with
+// this marker are hidden from the rendered transcript but still reach the
+// model. Keep in sync with FOLK_INTERNAL_MARK in ShellPanel.tsx.
+export const FOLK_INTERNAL_MARK = '<<folk-internal>>'
 const EMPTY_PERMS: PermissionRequest[] = []
 
 function collectCallIds(call: PersistedToolCall, into: Set<string>): void {
@@ -638,7 +643,20 @@ function contentLength(messages: ReadonlyArray<{ blocks: ReadonlyArray<{ kind: s
 }
 
 export function Conversation({ session }: { session: Session | null }) {
-  const messages = useSessionStore((s) => (session ? s.messages[session.id] ?? EMPTY_MESSAGES : EMPTY_MESSAGES))
+  const rawMessages = useSessionStore((s) => (session ? s.messages[session.id] ?? EMPTY_MESSAGES : EMPTY_MESSAGES))
+  // Strip folk-internal synth prompts (Refresh/Stop button dispatches) from
+  // the visible transcript. Their assistant tool-call response stays — only
+  // the user-side dispatch bubble is hidden.
+  const messages = useMemo(
+    () =>
+      rawMessages.filter((m) => {
+        if (m.role !== 'user') return true
+        const first = m.blocks?.[0]
+        if (first && first.kind === 'text' && first.text.startsWith(FOLK_INTERNAL_MARK)) return false
+        return true
+      }),
+    [rawMessages]
+  )
   const isStreaming = useSessionStore((s) => (session ? s.streamingSessions.has(session.id) : false))
   // When the agent emits a compact_boundary, hide everything above it behind
   // a single "context compacted — show" stub so the live transcript matches
