@@ -246,6 +246,9 @@ interface PendingElicitation {
 
 export class AgentManager extends EventEmitter {
   #live = new Map<string, LiveSession>()
+  // Detached cancel cleanup work keyed by sessionId — sendMessage awaits this
+  // before retrying so the CLI's per-session lock has time to clear.
+  #pendingTeardowns = new Map<string, Promise<void>>()
   #pendingPermissions = new Map<string, PendingPermission>()
   #pendingAsks = new Map<string, PendingAsk>()
   #pendingElicitations = new Map<string, PendingElicitation>()
@@ -1013,8 +1016,10 @@ export class AgentManager extends EventEmitter {
     // Background cleanup — pump may resolve quickly (clean abort) or hang
     // until the underlying tool finishes. Either way, do the transcript
     // balance once it settles. Errors swallowed; this runs detached from
-    // the IPC reply.
-    void live.pump
+    // the IPC reply, BUT we still track it so a follow-up sendMessage can
+    // await it before retrying — the CLI's per-session lock isn't released
+    // until the child process has fully exited.
+    const cleanup = live.pump
       .catch(() => {})
       .then(() => {
         if (session) return this.#balanceCancelledToolUses(session).catch(() => {})
@@ -1029,6 +1034,12 @@ export class AgentManager extends EventEmitter {
           }
         }
       })
+      .finally(() => {
+        if (this.#pendingTeardowns.get(sessionId) === cleanup) {
+          this.#pendingTeardowns.delete(sessionId)
+        }
+      })
+    this.#pendingTeardowns.set(sessionId, cleanup)
   }
 
   async #balanceCancelledToolUses(session: Session): Promise<void> {
@@ -1145,21 +1156,22 @@ export class AgentManager extends EventEmitter {
     // child process. #ensureLive resolves it again internally for env build.
     this.#resolveProvider(session.modelId)
 
+    // If a prior cancel left a detached cleanup chain pending, await it
+    // before trying to spawn — the CLI subprocess holds a per-session lock
+    // that isn't released until the child fully exits, and racing it gives
+    // "Session ID is already in use".
+    const pending = this.#pendingTeardowns.get(sessionId)
+    if (pending) {
+      await Promise.race([pending, new Promise((r) => setTimeout(r, 5000))])
+    }
+
     try {
       await this.#sendOnce(session, effectiveText, skillPrompts)
     } catch (err) {
       const msg = (err as Error)?.message ?? ''
-      // The bundled Claude Code CLI keeps a per-session lock; if the prior
-      // process hadn't fully released it (common right after a cancel), the
-      // new spawn dies with this exact line on stderr and exits code 1.
-      // Recover transparently: tear down any live state, wait for the lock
-      // to clear, retry once.
       const lockTaken = /is already in use/i.test(msg)
       const exit1 = /exited with code 1/i.test(msg)
-      // If we tried to resume but the CLI can't find the transcript (e.g.
-      // a prior turn was killed mid-flight by an MCP edit / restart and
-      // never finalized the jsonl, or the file was wiped), retry as a fresh
-      // init by clearing claudeStarted so #ensureLive uses sessionId mode.
+      // Resume against a missing on-disk transcript — retry as a fresh init.
       const resumeMissing =
         session.claudeStarted &&
         /no conversation|session.*not found|conversation.*not found|could not find session|invalid session/i.test(
@@ -1170,10 +1182,29 @@ export class AgentManager extends EventEmitter {
       if (resumeMissing) {
         this.db.updateSession(sessionId, { claudeStarted: false })
       }
-      await new Promise((r) => setTimeout(r, 600))
-      const refreshed = this.db.getSession(sessionId)
-      if (!refreshed) throw err
-      await this.#sendOnce(refreshed, effectiveText, skillPrompts)
+      // Up to 4 retries with exponential backoff. Cancel + relaunch cycles
+      // can take well over a second for the CLI lock to clear, especially
+      // when the prior turn was mid-tool. Each attempt re-awaits the
+      // tracked teardown promise so we don't sleep blindly.
+      const delays = [400, 800, 1600, 3000]
+      let lastErr: Error = err as Error
+      for (const ms of delays) {
+        const p = this.#pendingTeardowns.get(sessionId)
+        if (p) await Promise.race([p, new Promise((r) => setTimeout(r, ms))])
+        else await new Promise((r) => setTimeout(r, ms))
+        const refreshed = this.db.getSession(sessionId)
+        if (!refreshed) throw err
+        try {
+          await this.#sendOnce(refreshed, effectiveText, skillPrompts)
+          return
+        } catch (retryErr) {
+          lastErr = retryErr as Error
+          const retryMsg = lastErr.message ?? ''
+          // Only keep retrying for the same recoverable failure modes.
+          if (!/is already in use|exited with code 1/i.test(retryMsg)) throw retryErr
+        }
+      }
+      throw lastErr
     }
   }
 

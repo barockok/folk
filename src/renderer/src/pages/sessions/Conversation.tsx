@@ -357,9 +357,9 @@ const MessageItem = memo(function MessageItem({
           <div className="msg-error">{m.error.message}</div>
         )}
         {m.error && m.error.code === 'cancelled' && (
-          <div className="msg-cancelled" role="status" aria-label="Turn cancelled">
+          <div className="msg-cancelled" role="status" aria-label="Turn cancelled — awaiting next instruction">
             <span className="msg-cancelled-dot" />
-            Stopped by you
+            <span>Stopped — what should I do next?</span>
           </div>
         )}
       </div>

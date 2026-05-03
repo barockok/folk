@@ -30,6 +30,7 @@ export function SessionsPage() {
   const { sessions, activeId, setActive, create, send, cancel, clear } = useSessions()
   const { enabledModels } = useProviders()
   const setPage = useUIStore((s) => s.setPage)
+  const rightSidebarCollapsed = useUIStore((s) => s.rightSidebarCollapsed)
   // A draft is a configured-but-unsent session — purely renderer-side, never
   // persisted to SQLite, never visible in the sidebar. The user clicks "new"
   // → we synthesize a Session shape from the stored defaults, render the
@@ -233,7 +234,7 @@ export function SessionsPage() {
           )
         )}
       </div>
-      {!isFresh && draftReady && <TodoPanel session={active} />}
+      {!isFresh && draftReady && !rightSidebarCollapsed && <TodoPanel session={active} />}
     </div>
   )
 }

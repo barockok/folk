@@ -9,6 +9,74 @@ import type { Session, SessionStatus } from '@shared/types'
 
 const SIDEBAR_RECENTS_LIMIT = 14
 
+interface RenameSessionModalProps {
+  session: Session
+  onClose: () => void
+  onSubmit: (title: string) => Promise<void>
+}
+
+function RenameSessionModal({ session, onClose, onSubmit }: RenameSessionModalProps) {
+  const [title, setTitle] = useState(session.title)
+  const [busy, setBusy] = useState(false)
+  const inputRef = useRef<HTMLInputElement | null>(null)
+  useEffect(() => {
+    inputRef.current?.focus()
+    inputRef.current?.select()
+  }, [])
+  const submit = async () => {
+    const trimmed = title.trim()
+    if (!trimmed || trimmed === session.title) {
+      onClose()
+      return
+    }
+    setBusy(true)
+    try {
+      await onSubmit(trimmed)
+      onClose()
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <form
+        className="modal-card"
+        role="dialog"
+        aria-label="Rename session"
+        onClick={(e) => e.stopPropagation()}
+        onSubmit={(e) => {
+          e.preventDefault()
+          void submit()
+        }}
+      >
+        <div className="modal-hd">Rename session</div>
+        <input
+          ref={inputRef}
+          type="text"
+          className="input"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              e.preventDefault()
+              onClose()
+            }
+          }}
+          disabled={busy}
+        />
+        <div className="modal-foot">
+          <button className="btn btn-plain" type="button" onClick={onClose} disabled={busy}>
+            Cancel
+          </button>
+          <button className="btn btn-primary" type="submit" disabled={busy}>
+            {busy ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      </form>
+    </div>
+  )
+}
+
 function StatusDot({ status }: { status: SessionStatus }) {
   const color =
     status === 'running'
@@ -69,8 +137,23 @@ export function Sidebar() {
   const streamingSessions = useSessionStore((s) => s.streamingSessions)
   const requestNewSession = useUIStore((s) => s.requestNewSession)
   const setSidebarWidth = useUIStore((s) => s.setSidebarWidth)
-  const { delete: deleteSession, cancel } = useSessions()
+  const { delete: deleteSession, rename, cancel } = useSessions()
   const [hoverId, setHoverId] = useState<string | null>(null)
+  const [menuId, setMenuId] = useState<string | null>(null)
+  const [renameTarget, setRenameTarget] = useState<Session | null>(null)
+
+  // Close the row popover on outside click.
+  useEffect(() => {
+    if (!menuId) return
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as HTMLElement
+      if (!t.closest('.sb-session-menu') && !t.closest('.sb-session-act')) {
+        setMenuId(null)
+      }
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [menuId])
   const dragStateRef = useRef<{ startX: number; startWidth: number } | null>(null)
   const [dragging, setDragging] = useState(false)
 
@@ -200,7 +283,7 @@ export function Sidebar() {
                   >
                     <StatusDot status={s.status} />
                     <span className="sb-session-title trunc">{s.title || 'Untitled session'}</span>
-                    {isStreaming ? (
+                    {isStreaming && (
                       <button
                         type="button"
                         className="sb-session-act"
@@ -213,20 +296,55 @@ export function Sidebar() {
                       >
                         <Icon name="pause" size={11} />
                       </button>
-                    ) : hoverId === s.id ? (
+                    )}
+                    {!isStreaming && (hoverId === s.id || menuId === s.id) && (
                       <button
                         type="button"
-                        className="sb-session-act sb-session-act-danger"
-                        title="Delete session"
-                        aria-label={`Delete ${s.title}`}
+                        className="sb-session-act"
+                        title="More"
+                        aria-haspopup="menu"
+                        aria-expanded={menuId === s.id}
+                        aria-label={`Options for ${s.title}`}
                         onClick={(e) => {
                           e.stopPropagation()
-                          void handleDelete(s)
+                          setMenuId((cur) => (cur === s.id ? null : s.id))
                         }}
                       >
-                        <Icon name="trash" size={11} />
+                        <span style={{ fontSize: 14, lineHeight: 1 }}>⋯</span>
                       </button>
-                    ) : null}
+                    )}
+                    {menuId === s.id && (
+                      <div
+                        className="sb-session-menu"
+                        role="menu"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="sb-session-menu-item"
+                          onClick={() => {
+                            setMenuId(null)
+                            setRenameTarget(s)
+                          }}
+                        >
+                          <Icon name="edit" size={12} />
+                          <span>Rename</span>
+                        </button>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="sb-session-menu-item sb-session-menu-item-danger"
+                          onClick={() => {
+                            setMenuId(null)
+                            void handleDelete(s)
+                          }}
+                        >
+                          <Icon name="trash" size={12} />
+                          <span>Delete</span>
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )
               })}
@@ -278,6 +396,15 @@ export function Sidebar() {
             setDragging(true)
           }}
           onDoubleClick={() => setSidebarWidth(232)}
+        />
+      )}
+      {renameTarget && (
+        <RenameSessionModal
+          session={renameTarget}
+          onClose={() => setRenameTarget(null)}
+          onSubmit={async (title) => {
+            await rename(renameTarget.id, title)
+          }}
         />
       )}
     </aside>
