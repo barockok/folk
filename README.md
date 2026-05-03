@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="folk-icon-osx.jpg" width="160" alt="folk logo" />
+<img src="build/folk.iconset/icon_512x512.png" width="160" alt="folk logo" />
 
 # folk
 
