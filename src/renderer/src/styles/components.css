@@ -2822,9 +2822,9 @@ html[data-window-state="blurred"] .badge-ac {
 /* Live thinking: bright pulsing halo + expanding ripple ring + subtle scale.
    Prominent enough to read across the page that the model is mid-thought,
    not a near-invisible dashed border. */
-.msg-avatar.thinking-live {
-  animation: msg-think-bob 1.6s ease-in-out infinite;
-}
+/* Avatar pulse comes from the ::after glow + ::before ripple pseudos so the
+   thinking popover (a child of the avatar) does NOT inherit the motion. */
+.msg-avatar.thinking-live { /* no transform animation here */ }
 .msg-avatar.thinking-live::after {
   inset: -3px;
   border: 2px solid rgba(83, 58, 253, 0.85);
