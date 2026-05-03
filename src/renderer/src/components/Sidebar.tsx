@@ -204,17 +204,13 @@ export function Sidebar() {
         <div className="sb-logo" title={collapsed ? 'folk' : undefined}>
           <span>f</span>
         </div>
-        {!collapsed && (
-          <div className="sb-brand-name" style={{ flex: 1 }}>
-            folk
-          </div>
-        )}
+        <div className="sb-brand-name sb-fade" style={{ flex: 1 }}>folk</div>
       </div>
 
       <nav className="sb-nav scroll" aria-label="Main navigation">
         {NAV_GROUPS.map((g) => (
           <div key={g.group}>
-            {!collapsed && <div className="sb-group">{g.group}</div>}
+            <div className="sb-group sb-fade">{g.group}</div>
             {g.items.map((it) => {
               // The "New session" entry doubles as the sessions-page nav and
               // the create-session action — clicking it always stages a fresh
@@ -239,7 +235,7 @@ export function Sidebar() {
                   title={collapsed ? it.label : undefined}
                 >
                   <Icon name={it.icon} size={16} className="sb-ico" />
-                  {!collapsed && <span>{it.label}</span>}
+                  <span className="sb-fade">{it.label}</span>
                 </div>
               )
             })}
@@ -368,13 +364,11 @@ export function Sidebar() {
         title={collapsed ? `${displayName} — profile` : undefined}
       >
         <div className="sb-profile-av">{initial}</div>
-        {!collapsed && (
-          <div style={{ minWidth: 0, flex: 1 }}>
-            <div className="sb-profile-name trunc">{displayName}</div>
-            <div className="sb-profile-sub trunc">How folk refers to you</div>
-          </div>
-        )}
-        {!collapsed && <Icon name="chevronRight" size={13} className="sb-profile-caret" />}
+        <div className="sb-profile-text sb-fade" style={{ minWidth: 0, flex: 1 }}>
+          <div className="sb-profile-name trunc">{displayName}</div>
+          <div className="sb-profile-sub trunc">How folk refers to you</div>
+        </div>
+        <Icon name="chevronRight" size={13} className="sb-profile-caret sb-fade" />
       </div>
 
       {!collapsed && (

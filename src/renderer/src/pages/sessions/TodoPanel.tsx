@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useSessionStore } from '../../stores/useSessionStore'
 import { useUIStore } from '../../stores/useUIStore'
 import type { Session, PersistedToolCall, MessageBlock } from '@shared/types'
@@ -7,59 +8,27 @@ import { fileIconFor } from '../../lib/fileIcon'
 
 const EMPTY: never[] = []
 
-interface ToolCallSummary {
-  tool: string
-  detail: string | null
-}
-
 interface CallStats {
   todos: TodoItem[] | null
   totalToolCalls: number
-  recentCalls: ToolCallSummary[] // newest-first
+  // Tree shape: server → { total, tools: { toolName → count } }. Ordered
+  // by insertion (first-seen), so the most recently active server tends to
+  // sit at the top of the rail.
+  mcpByServer: Map<string, { total: number; tools: Map<string, number> }>
   files: string[] // ordered, latest-first, deduped
 }
 
-function summarizeInput(tool: string, input: unknown): string | null {
-  if (!input || typeof input !== 'object') return null
-  const o = input as Record<string, unknown>
-  if (tool === 'Skill') {
-    const name = typeof o.skill === 'string' ? o.skill : null
-    return name
-  }
-  if (tool === 'Bash') {
-    const cmd = typeof o.command === 'string' ? o.command : null
-    if (!cmd) return null
-    const flat = cmd.replace(/\s+/g, ' ').trim()
-    return flat.length > 60 ? flat.slice(0, 57) + '…' : flat
-  }
-  if (tool === 'Read' || tool === 'Write' || tool === 'Edit' || tool === 'MultiEdit' || tool === 'NotebookEdit') {
-    const p = (typeof o.file_path === 'string' && o.file_path) || (typeof o.notebook_path === 'string' && o.notebook_path)
-    if (typeof p === 'string') {
-      const idx = p.lastIndexOf('/')
-      return idx >= 0 ? p.slice(idx + 1) : p
-    }
-  }
-  if (tool === 'Glob') {
-    return typeof o.pattern === 'string' ? o.pattern : null
-  }
-  if (tool === 'Grep') {
-    return typeof o.pattern === 'string' ? o.pattern : null
-  }
-  if (tool === 'WebFetch' || tool === 'WebSearch') {
-    return typeof o.url === 'string' ? o.url : (typeof o.query === 'string' ? o.query : null)
-  }
-  if (tool === 'Task' || tool === 'Agent') {
-    return typeof o.description === 'string' ? o.description : (typeof o.subagent_type === 'string' ? o.subagent_type : null)
-  }
-  // Fallback: pick the first short string value.
-  for (const v of Object.values(o)) {
-    if (typeof v === 'string' && v && v.length < 80) return v
-  }
-  return null
+function splitMcpToolName(raw: string): { server: string; tool: string } | null {
+  const m = raw.match(/^mcp__[^_]+(?:[-_][^_]+)*?__(.+)$/)
+  if (!m) return null
+  const h = humanizeToolName(raw)
+  const server = h.server ?? 'mcp'
+  const tool = m[1].replace(/_/g, ' ')
+  return { server, tool }
 }
 
 function collect(messages: ReadonlyArray<{ blocks: ReadonlyArray<MessageBlock> }>): CallStats {
-  const stats: CallStats = { todos: null, totalToolCalls: 0, recentCalls: [], files: [] }
+  const stats: CallStats = { todos: null, totalToolCalls: 0, mcpByServer: new Map(), files: [] }
   const fileSet = new Set<string>()
   for (let i = messages.length - 1; i >= 0; i--) {
     const blocks = messages[i].blocks
@@ -115,7 +84,13 @@ function isMcpTool(name: string): boolean {
 function walkCall(call: PersistedToolCall, stats: CallStats, fileSet: Set<string>): void {
   if (isMcpTool(call.tool)) {
     stats.totalToolCalls += 1
-    stats.recentCalls.push({ tool: call.tool, detail: summarizeInput(call.tool, call.input) })
+    const split = splitMcpToolName(call.tool)
+    if (split) {
+      const entry = stats.mcpByServer.get(split.server) ?? { total: 0, tools: new Map<string, number>() }
+      entry.total += 1
+      entry.tools.set(split.tool, (entry.tools.get(split.tool) ?? 0) + 1)
+      stats.mcpByServer.set(split.server, entry)
+    }
   }
   if (call.tool === 'TodoWrite' && !stats.todos) {
     const t = extractTodos(call.input)
@@ -167,19 +142,14 @@ export function TodoPanel({ session }: { session: Session | null }) {
   const stats = collect(messages)
   const totalToolCalls = stats.totalToolCalls
   const hasAnything = !!stats.todos || stats.files.length > 0 || totalToolCalls > 0
-  if (!hasAnything) {
-    return (
-      <aside className="sess-todo-panel">
-        <div className="sctx-empty">
-          Tasks, files touched, and tools used will land here as the agent works.
-        </div>
-      </aside>
-    )
-  }
+  // Empty sessions: don't open the rail at all — keeps a fresh chat from
+  // auto-pushing a panel users haven't asked for. The pane will appear on
+  // its own once the first todo / file / MCP call lands.
+  if (!hasAnything) return null
 
   const done = stats.todos?.filter((t) => t.status === 'completed').length ?? 0
   const topFiles = stats.files.slice(0, 12)
-  const recentCalls = stats.recentCalls.slice(0, 12)
+  const mcpServers = Array.from(stats.mcpByServer.entries())
 
   return (
     <aside className="sess-todo-panel">
@@ -250,30 +220,59 @@ export function TodoPanel({ session }: { session: Session | null }) {
         </section>
       )}
 
-      {recentCalls.length > 0 && (
+      {mcpServers.length > 0 && (
         <section className="sctx-section">
           <div className="sctx-hd">
             <Icon name="server" size={11} />
             <span className="sctx-title">MCP</span>
             <span className="sctx-count">{totalToolCalls}</span>
           </div>
-          <ul className="sctx-tools">
-            {recentCalls.map((c, i) => (
-              <li key={i} className="sctx-tool" title={c.detail ?? c.tool}>
-                <span className="sctx-tool-name trunc">
-                  {humanizeToolName(c.tool).label}
-                </span>
-                {c.detail && (
-                  <span className="sctx-tool-detail trunc">{c.detail}</span>
-                )}
-              </li>
+          <ul className="sctx-mcp">
+            {mcpServers.map(([server, info]) => (
+              <McpServerNode key={server} server={server} total={info.total} tools={info.tools} />
             ))}
-            {stats.totalToolCalls > recentCalls.length && (
-              <li className="sctx-more">+{stats.totalToolCalls - recentCalls.length} earlier</li>
-            )}
           </ul>
         </section>
       )}
     </aside>
+  )
+}
+
+function McpServerNode({
+  server,
+  total,
+  tools
+}: {
+  server: string
+  total: number
+  tools: Map<string, number>
+}) {
+  const [open, setOpen] = useState(false)
+  const sorted = Array.from(tools.entries()).sort((a, b) => b[1] - a[1])
+  return (
+    <li className={`sctx-mcp-server${open ? ' open' : ''}`}>
+      <button
+        type="button"
+        className="sctx-mcp-row"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span className="sctx-mcp-caret" aria-hidden="true">
+          <Icon name="chevronRight" size={12} />
+        </span>
+        <span className="sctx-mcp-name trunc" title={server}>{server}</span>
+        <span className="sctx-mcp-count">{total}</span>
+      </button>
+      {open && (
+        <ul className="sctx-mcp-tools">
+          {sorted.map(([tool, count]) => (
+            <li key={tool} className="sctx-mcp-tool" title={tool}>
+              <span className="sctx-mcp-tool-name trunc">{tool}</span>
+              <span className="sctx-mcp-tool-count">{count}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </li>
   )
 }

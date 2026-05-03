@@ -75,10 +75,12 @@ html[data-window-state="blurred"] .badge-ac {
   align-items: center;
   gap: 10px;
   padding: 4px 14px 16px;
+  transition: gap 380ms cubic-bezier(.2, .8, .2, 1),
+              padding 380ms cubic-bezier(.2, .8, .2, 1);
 }
 .sb-collapsed .sb-brand {
-  padding: 4px 0 14px;
-  justify-content: center;
+  /* (56 − 30 logo) / 2 = 13px each side. */
+  padding: 4px 13px 14px;
 }
 
 /* Topbar-resident sidebar toggle, styled small and ghosted to read as a
@@ -132,6 +134,39 @@ html[data-window-state="blurred"] .badge-ac {
   transform: translate(-1px, -1px);
 }
 .sb-brand-name { font-weight: 500; font-size: 15px; letter-spacing: -0.01em; color: var(--heading); }
+
+/* Collapsing the sidebar fades + zero-widths every text node so the icon
+   rail stays put and labels glide out instead of vanishing in one frame.
+   The parent `.shell` already transitions grid-template-columns. */
+.sb-fade {
+  opacity: 1;
+  /* min-width: 0 lets flex actually compress the text — without it the
+     label's intrinsic min-content keeps the row wide until the parent
+     finishes shrinking, then everything snaps the last few frames. */
+  min-width: 0;
+  flex-shrink: 1;
+  transition: opacity 220ms cubic-bezier(.2, .8, .2, 1) 80ms,
+              max-width 380ms cubic-bezier(.2, .8, .2, 1),
+              margin-left 380ms cubic-bezier(.2, .8, .2, 1),
+              margin-right 380ms cubic-bezier(.2, .8, .2, 1);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.sb-collapsed .sb-fade {
+  opacity: 0;
+  max-width: 0 !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  /* Fade out faster than width collapses so labels disappear before the
+     rail is fully tight. */
+  transition: opacity 140ms cubic-bezier(.2, .8, .2, 1),
+              max-width 380ms cubic-bezier(.2, .8, .2, 1) 80ms,
+              margin-left 380ms cubic-bezier(.2, .8, .2, 1) 80ms,
+              margin-right 380ms cubic-bezier(.2, .8, .2, 1) 80ms;
+}
+/* Bound the expanded width so max-width: 0 has something to interpolate
+   from. 999px is the practical "auto-equivalent" cap. */
+.sb-fade { max-width: 999px; }
 .sb-brand-sub { font-size: 11px; color: var(--body); margin-top: 1px; }
 
 .sb-workspace {
@@ -178,6 +213,8 @@ html[data-window-state="blurred"] .badge-ac {
   gap: 10px;
   padding: 6px 10px;
   border-radius: var(--r);
+  transition: gap 380ms cubic-bezier(.2, .8, .2, 1),
+              padding 380ms cubic-bezier(.2, .8, .2, 1);
   font-size: 14px;
   color: var(--label);
   cursor: default;
@@ -297,16 +334,33 @@ html[data-window-state="blurred"] .badge-ac {
 .sb-session-menu-item-danger:hover { background: color-mix(in oklab, var(--err, #ea2261) 10%, transparent); color: var(--err, #ea2261); }
 
 .sb-collapsed .sb-nav { padding: 0 8px 12px; align-items: stretch; }
+/* Symmetric padding centers a 16px icon in the 40px inner-row width of the
+   collapsed rail (56px outer − 16px nav padding) without using
+   justify-content: center, which is a discrete property and would snap
+   the icon to the row centerline at frame 0 of the animation while the
+   column is still wide. Padding interpolates with the column width, so
+   the icon glides into place. */
 .sb-collapsed .sb-item {
-  justify-content: center;
-  padding: 9px 0;
+  padding: 9px 12px;
   gap: 0;
   border-radius: var(--r);
 }
 .sb-collapsed .sb-nav > div + div {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: var(--hair) solid var(--border);
+  margin-top: 4px;
+}
+/* Group labels (.sb-group) carry vertical padding that would still reserve
+   ~20px of empty space in collapsed mode even after the text fades. Zero
+   the box so the icons stack tight. Animated alongside the fade. */
+.sb-collapsed .sb-group {
+  max-height: 0;
+  padding: 0;
+  margin: 0;
+  border-width: 0;
+}
+.sb-group {
+  transition: max-height 380ms cubic-bezier(.2, .8, .2, 1),
+              padding 380ms cubic-bezier(.2, .8, .2, 1);
+  max-height: 40px;
 }
 
 /* Profile footer */
@@ -317,7 +371,9 @@ html[data-window-state="blurred"] .badge-ac {
   padding: 10px 14px;
   border-top: var(--hair) solid var(--border);
   cursor: pointer;
-  transition: background 120ms;
+  transition: background 120ms,
+              gap 380ms cubic-bezier(.2, .8, .2, 1),
+              padding 380ms cubic-bezier(.2, .8, .2, 1);
   min-height: 52px;
 }
 .sb-profile:hover { background: var(--bg-card); }
@@ -326,8 +382,8 @@ html[data-window-state="blurred"] .badge-ac {
   box-shadow: inset 2px 0 0 var(--stripe-purple);
 }
 .sb-collapsed .sb-profile {
-  padding: 10px 0;
-  justify-content: center;
+  /* (56 − 28 avatar) / 2 = 14px each side. */
+  padding: 10px 14px;
 }
 .sb-profile-av {
   width: 28px; height: 28px;
@@ -1400,33 +1456,83 @@ html[data-window-state="blurred"] .badge-ac {
   color: var(--fg-faint);
   padding: 2px 6px;
 }
-.sctx-tools {
+/* MCP tree — server rows expand to show per-tool call counts. */
+.sctx-mcp {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
 }
-.sctx-tool {
+.sctx-mcp-server { display: flex; flex-direction: column; }
+.sctx-mcp-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 4px 6px;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+  font: inherit;
+  color: var(--body);
+  text-align: left;
+}
+.sctx-mcp-row:hover { background: var(--bg-sub); color: var(--heading); }
+.sctx-mcp-caret {
+  display: inline-grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  color: var(--fg-faint);
+  transition: transform 160ms ease;
+  flex: none;
+}
+.sctx-mcp-server.open > .sctx-mcp-row .sctx-mcp-caret {
+  transform: rotate(90deg);
+  color: var(--heading);
+}
+.sctx-mcp-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  font-family: var(--ff-mono);
+}
+.sctx-mcp-count {
+  font-family: var(--ff-mono);
+  font-size: 11px;
+  color: var(--fg-faint);
+  font-feature-settings: "tnum";
+}
+.sctx-mcp-tools {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 4px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.sctx-mcp-tool {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 3px 6px;
   border-radius: 4px;
   font-size: 12px;
+  border-left: var(--hair) solid var(--border);
+  padding-left: 10px;
+  margin-left: -10px;
 }
-.sctx-tool:hover { background: var(--bg-sub); }
-.sctx-tool-name { color: var(--body); min-width: 0; flex-shrink: 0; }
-.sctx-tool-detail {
+.sctx-mcp-tool:hover { background: var(--bg-sub); }
+.sctx-mcp-tool-name {
   flex: 1;
   min-width: 0;
-  color: var(--fg-faint);
-  font-size: 11px;
+  color: var(--body);
   font-family: var(--ff-mono);
-  text-align: right;
 }
-.sctx-tool-count {
+.sctx-mcp-tool-count {
   font-family: var(--ff-mono);
   color: var(--fg-faint);
   font-size: 11px;
