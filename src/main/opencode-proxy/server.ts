@@ -379,13 +379,30 @@ export async function startProxy(): Promise<ProxyHandle> {
     }
 
     if (req.method === 'GET' && req.url === '/v1/models') {
-      // SDK occasionally probes /v1/models; return empty list so it doesn't 404.
-      res.statusCode = 200
-      res.setHeader('Content-Type', 'application/json')
-      res.end(JSON.stringify({ data: [] }))
+      log.info('models_probe', { auth: req.headers['authorization'] ? 'present' : 'absent' })
+      // Proxy to upstream so the SDK gets the real model list (empty list causes
+      // immediate session abort in some SDK versions).
+      const authHeader = req.headers['authorization'] as string | undefined
+      try {
+        const upstream = await fetch('https://opencode.ai/zen/v1/models', {
+          headers: {
+            Authorization: authHeader ?? 'Bearer public',
+            'x-opencode-client': 'desktop'
+          }
+        })
+        const body = await upstream.text()
+        res.statusCode = upstream.status
+        res.setHeader('Content-Type', 'application/json')
+        res.end(body)
+      } catch {
+        res.statusCode = 200
+        res.setHeader('Content-Type', 'application/json')
+        res.end(JSON.stringify({ data: [] }))
+      }
       return
     }
 
+    log.warn('unknown_request', { method: req.method, url: req.url })
     res.statusCode = 404
     res.end('not found')
   })
