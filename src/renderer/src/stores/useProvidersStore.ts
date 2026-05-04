@@ -13,8 +13,13 @@ export const useProvidersStore = create<ProvidersState>((set, get) => ({
   providers: [],
   hydrated: false,
   load: async () => {
-    const providers = await window.folk.providers.list()
-    set({ providers, hydrated: true })
+    try {
+      const providers = await window.folk.providers.list()
+      set({ providers, hydrated: true })
+    } catch (err) {
+      console.error('[providers] load failed:', err)
+      set({ hydrated: true })
+    }
   },
   save: async (p) => {
     await window.folk.providers.save(p)

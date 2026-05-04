@@ -359,7 +359,12 @@ export class Database {
     const updateStmt = this.db.prepare(`UPDATE providers SET api_key = ? WHERE id = ?`)
     return rows.map((r) => {
       const buf = r.api_key as Buffer
-      const apiKey = this.decryptSecret(buf)
+      let apiKey = ''
+      try {
+        apiKey = this.decryptSecret(buf)
+      } catch (err) {
+        console.error(`[database] decryptSecret failed for provider ${r.id as string}:`, (err as Error).message)
+      }
       // One-shot migration: in dev mode, re-encrypt any row that's still
       // wrapped in safeStorage so the next restart skips the macOS keychain
       // prompt entirely. Detect by checking for the dev-key magic prefix.
