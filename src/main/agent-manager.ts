@@ -159,15 +159,19 @@ function mapSessionMessages(
   return out
 }
 
-// In a packaged app, the SDK's require.resolve runs in an ESM context where
-// Electron's asar path patching may not redirect to app.asar.unpacked.
-// Bypass it entirely by resolving the binary ourselves via process.resourcesPath.
+// Resolve the bundled claude binary. In packaged builds the binary lives in
+// app.asar.unpacked (must be listed in asarUnpack). In dev builds we look it
+// up directly in node_modules so we always use the exact same binary that
+// ipc-handlers uses for `claude auth login` — avoids keychain-version skew.
 function resolveClaudeBinary(): string | undefined {
-  if (!app.isPackaged) return undefined
   const ext = process.platform === 'win32' ? '.exe' : ''
   const pkg = `@anthropic-ai/claude-agent-sdk-${process.platform}-${process.arch}`
-  const unpacked = join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', pkg, `claude${ext}`)
-  return existsSync(unpacked) ? unpacked : undefined
+  if (app.isPackaged) {
+    const unpacked = join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', pkg, `claude${ext}`)
+    return existsSync(unpacked) ? unpacked : undefined
+  }
+  const dev = join(app.getAppPath(), 'node_modules', pkg, `claude${ext}`)
+  return existsSync(dev) ? dev : undefined
 }
 
 function deriveTitle(text: string): string {

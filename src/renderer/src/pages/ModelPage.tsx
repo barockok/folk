@@ -4,6 +4,9 @@ import type { ProviderConfig, ProviderAuthMode, ModelConfig, ClaudeCodeAuthStatu
 import { useProvidersStore } from '../stores/useProvidersStore'
 import { useUIStore } from '../stores/useUIStore'
 import { Icon, ProviderLogo } from '../components/icons'
+import { PROVIDER_PRESETS, CUSTOM_PRESET_ID, presetFor } from './provider-presets'
+export type { ProviderPreset } from './provider-presets'
+export { PROVIDER_PRESETS, CUSTOM_PRESET_ID, presetFor } from './provider-presets'
 
 interface LoginState {
   loggingIn: boolean
@@ -138,85 +141,6 @@ function AddModelForm({ onAdd }: { onAdd: (id: string, label: string) => void })
       </button>
     </div>
   )
-}
-
-// ---------------------------------------------------------------------------
-// Preset data (verbatim from spec)
-// ---------------------------------------------------------------------------
-
-export interface ProviderPreset {
-  id: string
-  name: string
-  brand: 'anthropic' | 'openrouter' | 'opencode' | 'custom'
-  baseUrl: string | null
-  keyLabel: string
-  noAuth?: boolean
-  fetchable: boolean
-  description: string
-  // True when folk's local bridge proxy handles routing (opencode). The Base
-  // URL field is hidden in the UI and the saved baseUrl is null — the
-  // agent-manager rewrites ANTHROPIC_BASE_URL to the loopback proxy at
-  // runtime.
-  proxied?: boolean
-  // Informational endpoint string shown in the detail header in place of the
-  // editable Base URL field, so the user can still see where their requests
-  // ultimately go.
-  upstreamLabel?: string
-  models: Array<{ id: string; label: string }>
-}
-
-export const PROVIDER_PRESETS: ProviderPreset[] = [
-  {
-    id: 'anthropic',
-    name: 'Anthropic',
-    brand: 'anthropic',
-    baseUrl: null,
-    keyLabel: 'Anthropic API key',
-    fetchable: true,
-    description: 'Native Claude models. Models fetched from /v1/models.',
-    models: []
-  },
-  {
-    id: 'openrouter',
-    name: 'OpenRouter',
-    brand: 'openrouter',
-    baseUrl: 'https://openrouter.ai/api/v1',
-    keyLabel: 'OpenRouter API key',
-    fetchable: true,
-    description: 'Unified gateway to 200+ models. Bearer auth.',
-    models: []
-  },
-  {
-    id: 'opencode-free',
-    name: 'OpenCode (Free)',
-    brand: 'opencode',
-    baseUrl: null,
-    keyLabel: 'No key required',
-    noAuth: true,
-    fetchable: true,
-    proxied: true,
-    upstreamLabel: 'opencode.ai/zen (via folk bridge)',
-    description: 'Public free tier. Bearer public, models ending with -free.',
-    models: []
-  },
-  {
-    id: 'opencode-paid',
-    name: 'OpenCode (Paid)',
-    brand: 'opencode',
-    baseUrl: null,
-    keyLabel: 'OpenCode API key',
-    fetchable: true,
-    proxied: true,
-    upstreamLabel: 'opencode.ai/zen (via folk bridge)',
-    description: 'Paid tier. Bearer key from opencode.ai.',
-    models: []
-  }
-]
-
-export const CUSTOM_PRESET_ID = '__custom__'
-
-export function presetFor(id: string): ProviderPreset | undefined {
-  return PROVIDER_PRESETS.find((p) => p.id === id)
 }
 
 // ---------------------------------------------------------------------------
