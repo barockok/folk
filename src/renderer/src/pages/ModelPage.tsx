@@ -7,6 +7,14 @@ import { Icon, ProviderLogo } from '../components/icons'
 
 function ClaudeCodeStatusField() {
   const status = useClaudeCodeAuth(true)
+  const [loggingIn, setLoggingIn] = useState(false)
+
+  const handleLogin = async () => {
+    setLoggingIn(true)
+    await window.folk.auth.claudeLogin()
+    setLoggingIn(false)
+  }
+
   return (
     <div className="field">
       <label className="label">Claude Code status</label>
@@ -18,9 +26,16 @@ function ClaudeCodeStatusField() {
           {status.source === 'keychain' ? ' (macOS Keychain)' : ''}
           {status.email ? ` as ${status.email}` : ''}
         </div>
+      ) : loggingIn ? (
+        <div className="hint" style={{ color: 'var(--body)' }}>
+          Browser opened — complete login then return here…
+        </div>
       ) : (
-        <div className="hint" style={{ color: 'var(--warn)' }}>
-          Not logged in. Run <code className="mono">claude login</code> in a terminal.
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div className="hint" style={{ color: 'var(--warn)' }}>Not logged in.</div>
+          <button className="btn btn-sm btn-primary" type="button" onClick={handleLogin}>
+            Log in with Claude Code
+          </button>
         </div>
       )}
     </div>
@@ -32,11 +47,18 @@ function useClaudeCodeAuth(enabled: boolean): ClaudeCodeAuthStatus | null {
   useEffect(() => {
     if (!enabled) return
     let cancelled = false
-    void window.folk.auth.claudeCodeStatus().then((s) => {
-      if (!cancelled) setStatus(s)
-    })
+    const check = () => {
+      void window.folk.auth.claudeCodeStatus().then((s) => {
+        if (!cancelled) setStatus(s)
+      })
+    }
+    check()
+    // Poll every 3s so the UI updates automatically when the user logs in
+    // externally (terminal, browser OAuth flow, etc.)
+    const id = setInterval(check, 3000)
     return () => {
       cancelled = true
+      clearInterval(id)
     }
   }, [enabled])
   return status
@@ -394,8 +416,12 @@ function AddProviderModal({ usedIds, onAdd, onClose }: AddProviderModalProps) {
                       {ccStatus.email ? ` as ${ccStatus.email}` : ''}
                     </div>
                   ) : (
-                    <div className="hint" style={{ color: 'var(--warn)' }}>
-                      Not logged in. Run <code className="mono">claude login</code> in a terminal, then reopen this dialog.
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div className="hint" style={{ color: 'var(--warn)' }}>Not logged in.</div>
+                      <button className="btn btn-sm btn-primary" type="button"
+                        onClick={() => void window.folk.auth.claudeLogin()}>
+                        Log in
+                      </button>
                     </div>
                   )}
                 </div>

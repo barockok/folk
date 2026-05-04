@@ -68,7 +68,8 @@ const folk: FolkAPI = {
     save: (p) => ipcRenderer.invoke('profile:save', p)
   },
   auth: {
-    claudeCodeStatus: () => ipcRenderer.invoke('auth:claudeCodeStatus')
+    claudeCodeStatus: () => ipcRenderer.invoke('auth:claudeCodeStatus'),
+    claudeLogin: () => ipcRenderer.invoke('auth:claudeLogin')
   },
   dialog: {
     openFolder: (defaultPath) => ipcRenderer.invoke('dialog:openFolder', defaultPath)

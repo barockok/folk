@@ -1,6 +1,7 @@
-import { BrowserWindow, dialog, ipcMain, shell, type OpenDialogOptions } from 'electron'
-import { execFile } from 'node:child_process'
+import { app, BrowserWindow, dialog, ipcMain, shell, type OpenDialogOptions } from 'electron'
+import { execFile, spawn } from 'node:child_process'
 import { promisify } from 'node:util'
+import { existsSync } from 'node:fs'
 import { access, readFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
@@ -297,6 +298,39 @@ export function registerIpc(
   )
 
   ipcMain.handle('auth:claudeCodeStatus', () => detectClaudeCodeAuth())
+
+  // Spawn `claude login` and open the printed browser URL via shell.openExternal.
+  // Resolves with { ok, error? } when the process exits.
+  ipcMain.handle('auth:claudeLogin', () => {
+    return new Promise<{ ok: boolean; error?: string }>((resolve) => {
+      const ext = process.platform === 'win32' ? '.exe' : ''
+      const pkg = `@anthropic-ai/claude-agent-sdk-${process.platform}-${process.arch}`
+      const unpacked = join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', pkg, `claude${ext}`)
+      const bin = app.isPackaged && existsSync(unpacked) ? unpacked : 'claude'
+      const proc = spawn(bin, ['login'], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: { ...process.env }
+      })
+      const URL_RE = /https?:\/\/\S+/g
+      const onData = (data: Buffer) => {
+        const text = data.toString()
+        const urls = text.match(URL_RE)
+        if (urls) {
+          for (const url of urls) {
+            void shell.openExternal(url)
+          }
+        }
+      }
+      proc.stdout?.on('data', onData)
+      proc.stderr?.on('data', onData)
+      proc.on('close', (code) => {
+        resolve(code === 0 ? { ok: true } : { ok: false, error: `claude login exited with code ${code}` })
+      })
+      proc.on('error', (err) => {
+        resolve({ ok: false, error: err.message })
+      })
+    })
+  })
 
   ipcMain.handle('shell:openExternal', async (_e, url: string) => {
     if (typeof url !== 'string') return { ok: false }
