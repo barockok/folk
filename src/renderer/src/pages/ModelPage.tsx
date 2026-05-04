@@ -309,7 +309,7 @@ function AddProviderModal({ usedIds, onAdd, onClose }: AddProviderModalProps) {
             {available.map((p) => (
               <button
                 key={p.id}
-                className={'model-opt' + (selectedId === p.id ? ' selected' : '')}
+                className={'model-opt' + (selectedId === p.id ? ' on' : '')}
                 onClick={() => handlePresetChange(p.id)}
                 style={{ flexDirection: 'row', alignItems: 'center', gap: 14, textAlign: 'left', padding: 14 }}
               >
@@ -327,7 +327,7 @@ function AddProviderModal({ usedIds, onAdd, onClose }: AddProviderModalProps) {
             ))}
 
             <button
-              className={'model-opt' + (selectedId === CUSTOM_PRESET_ID ? ' selected' : '')}
+              className={'model-opt' + (selectedId === CUSTOM_PRESET_ID ? ' on' : '')}
               onClick={() => handlePresetChange(CUSTOM_PRESET_ID)}
               style={{ flexDirection: 'row', alignItems: 'center', gap: 14, textAlign: 'left', padding: 14 }}
             >
@@ -386,7 +386,7 @@ function AddProviderModal({ usedIds, onAdd, onClose }: AddProviderModalProps) {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                     <button
                       type="button"
-                      className={'model-opt' + (authMode === 'api-key' ? ' selected' : '')}
+                      className={'model-opt' + (authMode === 'api-key' ? ' on' : '')}
                       onClick={() => setAuthMode('api-key')}
                       style={{ padding: 12, textAlign: 'left' }}
                     >
@@ -397,7 +397,7 @@ function AddProviderModal({ usedIds, onAdd, onClose }: AddProviderModalProps) {
                     </button>
                     <button
                       type="button"
-                      className={'model-opt' + (authMode === 'claude-code' ? ' selected' : '')}
+                      className={'model-opt' + (authMode === 'claude-code' ? ' on' : '')}
                       onClick={() => {
                         setAuthMode('claude-code')
                         if (!ccStatus?.loggedIn) void login()
@@ -773,7 +773,7 @@ export function ModelPage() {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                   <button
                     type="button"
-                    className={'model-opt' + (draft.authMode !== 'claude-code' ? ' selected' : '')}
+                    className={'model-opt' + (draft.authMode !== 'claude-code' ? ' on' : '')}
                     onClick={() => updateDraft({ authMode: 'api-key' })}
                     style={{ padding: 12, textAlign: 'left' }}
                   >
@@ -784,7 +784,7 @@ export function ModelPage() {
                   </button>
                   <button
                     type="button"
-                    className={'model-opt' + (draft.authMode === 'claude-code' ? ' selected' : '')}
+                    className={'model-opt' + (draft.authMode === 'claude-code' ? ' on' : '')}
                     onClick={async () => {
                       const updated = { ...draft, authMode: 'claude-code' as const, apiKey: '' }
                       updateDraft({ authMode: 'claude-code', apiKey: '' })
