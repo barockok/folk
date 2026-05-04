@@ -4,6 +4,7 @@ import { useAgent } from './hooks/useAgent'
 import { useUpdater } from './hooks/useUpdater'
 import { useGlobalCancelHotkey } from './hooks/useGlobalCancelHotkey'
 import { useScrollFadeBars } from './hooks/useScrollFadeBars'
+import { useTelemetry } from './hooks/useTelemetry'
 import { useUIStore } from './stores/useUIStore'
 import { useProfileStore } from './stores/useProfileStore'
 import { useProvidersStore } from './stores/useProvidersStore'
@@ -23,6 +24,7 @@ export default function App() {
   useUpdater()
   useGlobalCancelHotkey()
   useScrollFadeBars()
+  useTelemetry()
   const { page, theme, density } = useUIStore()
 
   useEffect(() => {
