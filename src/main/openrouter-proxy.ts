@@ -48,7 +48,11 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
 
     const upstreamHeaders: Record<string, string> = {}
     upstream.headers.forEach((v, k) => {
-      if (k.toLowerCase() !== 'transfer-encoding') upstreamHeaders[k] = v
+      const lk = k.toLowerCase()
+      // Node fetch auto-decompresses gzip bodies. Forwarding content-encoding
+      // would cause the SDK to attempt a second decompression → ZlibError.
+      if (lk === 'transfer-encoding' || lk === 'content-encoding') return
+      upstreamHeaders[k] = v
     })
     res.writeHead(upstream.status, upstreamHeaders)
 
