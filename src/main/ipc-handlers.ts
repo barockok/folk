@@ -8,6 +8,7 @@ import { join } from 'node:path'
 import { Database } from './database'
 import { AgentManager } from './agent-manager'
 import { MCPManager, MCP_TEMPLATES } from './mcp-manager'
+import type { Telemetry } from './telemetry'
 import { discoverCommands, discoverPlugins, discoverSkills } from './disk-discovery'
 import {
   addMarketplaceFromDirectory,
@@ -142,9 +143,14 @@ async function detectClaudeCodeAuth(): Promise<ClaudeCodeAuthStatus> {
 export function registerIpc(
   db: Database,
   agent: AgentManager,
-  mcp: MCPManager
+  mcp: MCPManager,
+  telemetry: Telemetry
 ): void {
   ipcMain.handle('sessions:list', () => agent.listSessions())
+  ipcMain.handle('telemetry:getConfig', () => telemetry.getConfig())
+  ipcMain.handle('telemetry:setEnabled', (_e, enabled: boolean) => {
+    telemetry.setEnabled(enabled)
+  })
   ipcMain.handle('sessions:get', (_e, id: string) => agent.getSession(id))
   ipcMain.handle('sessions:create', (_e, config: SessionConfig) => agent.createSession(config))
   ipcMain.handle('sessions:delete', (_e, id: string) => agent.deleteSession(id))

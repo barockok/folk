@@ -6,8 +6,9 @@
 //
 // Skip in dev — autoUpdater rejects non-packaged builds with
 // "Could not get code signature for running application".
-import { ipcMain, type BrowserWindow } from 'electron'
+import { app, ipcMain, type BrowserWindow } from 'electron'
 import electronUpdater from 'electron-updater'
+import type { Telemetry } from './telemetry'
 
 const { autoUpdater } = electronUpdater
 
@@ -16,7 +17,7 @@ const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000
 let timer: NodeJS.Timeout | null = null
 let registered = false
 
-export function setupAutoUpdater(win: BrowserWindow): void {
+export function setupAutoUpdater(win: BrowserWindow, telemetry?: Telemetry): void {
   // Bail in dev — autoUpdater requires a packaged, signed app on macOS.
   if (!autoUpdater.isUpdaterActive || !autoUpdater.isUpdaterActive()) {
     return
@@ -30,13 +31,17 @@ export function setupAutoUpdater(win: BrowserWindow): void {
   }
 
   autoUpdater.on('checking-for-update', () => send('updater:checking', {}))
-  autoUpdater.on('update-available', (info) =>
+  autoUpdater.on('update-available', (info) => {
+    telemetry?.captureUpdateAvailable({
+      from_version: app.getVersion(),
+      to_version: info.version,
+    })
     send('updater:available', {
       version: info.version,
       releaseDate: info.releaseDate,
       releaseNotes: typeof info.releaseNotes === 'string' ? info.releaseNotes : null
     })
-  )
+  })
   autoUpdater.on('update-not-available', (info) =>
     send('updater:notAvailable', { version: info.version })
   )
@@ -48,9 +53,13 @@ export function setupAutoUpdater(win: BrowserWindow): void {
       total: p.total ?? 0
     })
   )
-  autoUpdater.on('update-downloaded', (info) =>
+  autoUpdater.on('update-downloaded', (info) => {
+    telemetry?.captureUpdateInstalled({
+      from_version: app.getVersion(),
+      to_version: info.version,
+    })
     send('updater:downloaded', { version: info.version })
-  )
+  })
   autoUpdater.on('error', (err) =>
     send('updater:error', { message: err?.message ?? String(err) })
   )

@@ -111,10 +111,13 @@ import { setProxyHandle } from './opencode-proxy/state'
 import { initLogger } from './opencode-proxy/logger'
 import { stopOpenRouterProxy } from './openrouter-proxy'
 import { setupAutoUpdater, teardownAutoUpdater } from './updater'
+import { Telemetry } from './telemetry'
 
 let db: Database
 let agentManager: AgentManager
 let mcpManager: MCPManager
+let telemetry: Telemetry
+let appLaunchedAt = 0
 let mainWindow: BrowserWindow | null = null
 let opencodeProxy: ProxyHandle | null = null
 let proxyShuttingDown = false
@@ -410,10 +413,40 @@ app.whenReady().then(() => {
     db,
     join(app.getPath('userData'), 'folk-managed-mcps.json')
   )
-  agentManager = new AgentManager(db, (id) => mcpManager.getAccessToken(id))
+  telemetry = new Telemetry({
+    userDataDir: app.getPath('userData'),
+    posthogKey: process.env.VITE_POSTHOG_KEY ?? '',
+    host: process.env.VITE_POSTHOG_HOST ?? 'https://us.i.posthog.com'
+  })
+  agentManager = new AgentManager(db, (id) => mcpManager.getAccessToken(id), telemetry)
   mcpManager.setBusyCheck(() => agentManager.hasLiveSessions())
   agentManager.setOnAllIdle(() => mcpManager.flushDeferredSync())
-  registerIpc(db, agentManager, mcpManager)
+  appLaunchedAt = Date.now()
+  telemetry.captureAppLaunched({
+    app_version: app.getVersion(),
+    platform: process.platform,
+    arch: process.arch
+  })
+  // Best-effort crash telemetry. We log only the source channel — no stack,
+  // message, or path, so the privacy contract holds. The process still exits
+  // on uncaughtException as Electron's default handler runs after ours.
+  process.on('uncaughtException', (err) => {
+    try {
+      telemetry?.captureCrash({ source: 'uncaught' })
+    } catch {
+      /* swallow */
+    }
+    console.error('[main] uncaughtException:', err)
+  })
+  process.on('unhandledRejection', (reason) => {
+    try {
+      telemetry?.captureCrash({ source: 'unhandled-rejection' })
+    } catch {
+      /* swallow */
+    }
+    console.error('[main] unhandledRejection:', reason)
+  })
+  registerIpc(db, agentManager, mcpManager, telemetry)
 
   if (mainWindow) {
     wireStreaming(agentManager, mainWindow)
@@ -426,7 +459,7 @@ app.whenReady().then(() => {
     initLogger(join(app.getPath('userData'), 'folk-opencode-proxy.log'))
     void bootProxyWithRetry()
     void mcpManager.syncToClaudeCode()
-    if (mainWindow && !is.dev) setupAutoUpdater(mainWindow)
+    if (mainWindow && !is.dev) setupAutoUpdater(mainWindow, telemetry)
     // Parse the most recent transcripts into AgentManager's LRU so the
     // renderer's first sidebar click hits memory instead of a 1-30MB JSONL
     // parse. Best-effort, errors swallowed inside.
@@ -459,10 +492,14 @@ app.on('before-quit', (e) => {
       await stopOpenRouterProxy().catch(() => {})
       agentManager?.dispose()
       db?.close()
+      telemetry?.captureAppQuit({ uptime_ms: Date.now() - appLaunchedAt })
+      await telemetry?.shutdown()
       app.exit(0)
     })()
     return
   }
   agentManager?.dispose()
   db?.close()
+  telemetry?.captureAppQuit({ uptime_ms: Date.now() - appLaunchedAt })
+  void telemetry?.shutdown()
 })

@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { MCPServer, ToolInfo } from '@shared/types'
+import { captureRenderer } from '../lib/telemetry'
 
 interface MCPState {
   servers: MCPServer[]
@@ -19,8 +20,12 @@ export const useMCPStore = create<MCPState>((set, get) => ({
     set({ servers, hydrated: true })
   },
   save: async (s) => {
+    const isNew = !get().servers.some((existing) => existing.id === s.id)
     await window.folk.mcp.save(s)
     await get().load()
+    if (isNew) {
+      captureRenderer('mcp_added')
+    }
   },
   setEnabled: async (id, enabled) => {
     const target = get().servers.find((s) => s.id === id)
@@ -31,8 +36,12 @@ export const useMCPStore = create<MCPState>((set, get) => ({
     await get().load()
   },
   remove: async (id) => {
+    const existed = get().servers.some((s) => s.id === id)
     await window.folk.mcp.delete(id)
     await get().load()
+    if (existed) {
+      captureRenderer('mcp_removed')
+    }
   },
   test: async (id) => {
     const res = await window.folk.mcp.test(id)

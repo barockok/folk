@@ -11,6 +11,7 @@ import { useProfileStore } from '../stores/useProfileStore'
 import { useProvidersStore } from '../stores/useProvidersStore'
 import { useUIStore } from '../stores/useUIStore'
 import { Icon, ProviderLogo } from '../components/icons'
+import { captureRenderer, setRendererEnabled } from '../lib/telemetry'
 
 // ---------------------------------------------------------------------------
 // Provider presets — kept in sync with ModelPage.tsx
@@ -105,6 +106,7 @@ export function FirstRunOnboarding({ force = false }: { force?: boolean } = {}) 
   const setForceOnboarding = useUIStore((s) => s.setForceOnboarding)
 
   const [step, setStep] = useState(0)
+  const [analyticsOptIn, setAnalyticsOptIn] = useState(true)
 
   // Step 1 — profile draft
   const [nickname, setNickname] = useState('')
@@ -191,6 +193,9 @@ export function FirstRunOnboarding({ force = false }: { force?: boolean } = {}) 
       return
     }
     await persistProfile()
+    await window.folk.telemetry.setEnabled(analyticsOptIn)
+    setRendererEnabled(analyticsOptIn)
+    captureRenderer('onboarding_skipped', { step_reached: step })
     localStorage.setItem('folk.onboarded', '1')
     toast({ kind: 'ok', text: 'Skipped — add a provider any time from Models & Providers' })
     location.reload()
@@ -242,6 +247,9 @@ export function FirstRunOnboarding({ force = false }: { force?: boolean } = {}) 
       }
       await saveProvider(provider)
     }
+    await window.folk.telemetry.setEnabled(analyticsOptIn)
+    setRendererEnabled(analyticsOptIn)
+    captureRenderer('onboarding_completed', { step_reached: step })
     localStorage.setItem('folk.onboarded', '1')
     toast({ kind: 'ok', text: 'Welcome to folk' })
     location.reload()
@@ -338,6 +346,37 @@ export function FirstRunOnboarding({ force = false }: { force?: boolean } = {}) 
                   </div>
                 </div>
               </div>
+              <label
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: 8,
+                  marginTop: 16,
+                  fontSize: 12,
+                  color: 'var(--fg-faint)',
+                  cursor: 'pointer',
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={analyticsOptIn}
+                  onChange={(e) => setAnalyticsOptIn(e.target.checked)}
+                  style={{ marginTop: 2 }}
+                />
+                <span>
+                  Help improve folk by sending anonymous usage data. No chat content ever
+                  leaves your device.{' '}
+                  <a
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      void window.folk.shell.openExternal('https://posthog.com/privacy')
+                    }}
+                  >
+                    Learn more
+                  </a>
+                </span>
+              </label>
             </div>
           )}
 

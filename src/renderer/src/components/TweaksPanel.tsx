@@ -5,6 +5,7 @@ import { useUIStore } from '../stores/useUIStore'
 import { useSessionStore } from '../stores/useSessionStore'
 import { useUpdateStore } from '../stores/useUpdateStore'
 import { Icon } from './icons'
+import { captureRenderer, setRendererEnabled } from '../lib/telemetry'
 
 const IS_DEV = import.meta.env.DEV
 
@@ -14,6 +15,15 @@ export function TweaksPanel() {
     let cancelled = false
     void window.folk.app.version().then((v) => {
       if (!cancelled) setAppVersion(v)
+    })
+    return () => { cancelled = true }
+  }, [])
+
+  const [analyticsEnabled, setAnalyticsEnabled] = useState<boolean | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    void window.folk.telemetry.getConfig().then((cfg) => {
+      if (!cancelled) setAnalyticsEnabled(cfg.enabled)
     })
     return () => { cancelled = true }
   }, [])
@@ -101,6 +111,36 @@ export function TweaksPanel() {
 
   return (
     <div className="tweaks-panel">
+      {/* Analytics */}
+      {analyticsEnabled !== null && (
+        <div className="tweaks-row">
+          <div className="tweaks-row-label">
+            <Icon name="lock" size={13} />
+            <span>Analytics</span>
+          </div>
+          <button
+            role="switch"
+            aria-checked={analyticsEnabled}
+            className="tweaks-toggle"
+            data-on={analyticsEnabled ? '1' : '0'}
+            onClick={async () => {
+              const next = !analyticsEnabled
+              setAnalyticsEnabled(next)
+              await window.folk.telemetry.setEnabled(next)
+              if (next) {
+                setRendererEnabled(true)
+                captureRenderer('telemetry_opt_in')
+              } else {
+                captureRenderer('telemetry_opt_out')
+                setRendererEnabled(false)
+              }
+            }}
+          >
+            <i />
+          </button>
+        </div>
+      )}
+
       {/* Dark mode */}
       <div className="tweaks-row">
         <div className="tweaks-row-label">

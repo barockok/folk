@@ -160,6 +160,10 @@ const folk: FolkAPI = {
   },
   plugins: {
     uninstall: (target) => ipcRenderer.invoke('plugins:uninstall', target)
+  },
+  telemetry: {
+    getConfig: () => ipcRenderer.invoke('telemetry:getConfig'),
+    setEnabled: (enabled: boolean) => ipcRenderer.invoke('telemetry:setEnabled', enabled)
   }
 }
 
