@@ -1,6 +1,6 @@
 {
   "name": "folk",
-  "version": "0.1.17",
+  "version": "0.1.18",
   "private": true,
   "description": "folk — a local-first Claude Code desktop app",
   "main": "out/main/index.js",
@@ -22,7 +22,7 @@
     "release:mac": "npm run build && electron-builder --mac --config electron-builder.yml --publish always"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.119",
+    "@anthropic-ai/claude-agent-sdk": "0.2.119",
     "@anthropic-ai/sdk": "^0.85.0",
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",

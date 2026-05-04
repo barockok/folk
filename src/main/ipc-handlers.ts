@@ -44,6 +44,8 @@ interface RawModelEntry {
   context_length?: number
   context_window?: number
   pricing?: { prompt?: string; completion?: string }
+  architecture?: { output_modalities?: string[] }
+  supported_parameters?: string[]
 }
 
 function toModelConfig(m: RawModelEntry, fallbackId: string): ModelConfig {
@@ -78,7 +80,11 @@ async function fetchModelsForPreset(input: FetchModelsInput): Promise<ModelConfi
     const res = await fetch(url, { headers })
     if (!res.ok) throw new Error(`HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`)
     const json = (await res.json()) as { data?: RawModelEntry[] }
-    return (json.data ?? []).map((m) => toModelConfig(m, m.id ?? ''))
+    // Only include models that support tool calls — Claude Code relies on tools
+    // for every session. Models without tools support will fail at runtime.
+    return (json.data ?? [])
+      .filter((m) => m.supported_parameters?.includes('tools') ?? false)
+      .map((m) => toModelConfig(m, m.id ?? ''))
   }
 
   if (presetId === 'opencode-free' || presetId === 'opencode-paid') {

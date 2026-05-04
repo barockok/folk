@@ -16,6 +16,7 @@ import { randomUUID } from 'node:crypto'
 import { Database } from './database'
 import { FOLK_PRESENTATION_PROMPT, formatProfilePrompt } from './system-prompt'
 import { waitForProxyPort } from './opencode-proxy/state'
+import { startOpenRouterProxy } from './openrouter-proxy'
 import { discoverLocalMCPs } from './mcp-local-discovery'
 import type {
   Session,
@@ -353,6 +354,10 @@ export class AgentManager extends EventEmitter {
         baseUrlOverride = `http://127.0.0.1:${port}`
         const token = provider.id === 'opencode-free' ? 'public' : provider.apiKey
         envOverlay.ANTHROPIC_AUTH_TOKEN = token
+      } else if (provider.id === 'openrouter') {
+        const proxyPort = await startOpenRouterProxy()
+        baseUrlOverride = `http://127.0.0.1:${proxyPort}`
+        envOverlay.ANTHROPIC_AUTH_TOKEN = provider.apiKey
       } else if (usesBearer) {
         envOverlay.ANTHROPIC_AUTH_TOKEN = provider.apiKey
       } else {

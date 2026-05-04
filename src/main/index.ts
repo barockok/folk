@@ -109,6 +109,7 @@ import { wireStreaming } from './ipc-streaming'
 import { startProxy, ProxyHandle } from './opencode-proxy/server'
 import { setProxyHandle } from './opencode-proxy/state'
 import { initLogger } from './opencode-proxy/logger'
+import { stopOpenRouterProxy } from './openrouter-proxy'
 import { setupAutoUpdater, teardownAutoUpdater } from './updater'
 
 let db: Database
@@ -455,6 +456,7 @@ app.on('before-quit', (e) => {
       }
       opencodeProxy = null
       setProxyHandle(null)
+      await stopOpenRouterProxy().catch(() => {})
       agentManager?.dispose()
       db?.close()
       app.exit(0)
