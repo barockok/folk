@@ -169,4 +169,8 @@ export interface FolkAPI {
       projectPath?: string
     }) => Promise<{ ok: boolean; error?: string }>
   }
+  telemetry: {
+    getConfig: () => Promise<{ distinctId: string; enabled: boolean }>
+    setEnabled: (enabled: boolean) => Promise<void>
+  }
 }

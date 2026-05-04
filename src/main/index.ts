@@ -111,10 +111,13 @@ import { setProxyHandle } from './opencode-proxy/state'
 import { initLogger } from './opencode-proxy/logger'
 import { stopOpenRouterProxy } from './openrouter-proxy'
 import { setupAutoUpdater, teardownAutoUpdater } from './updater'
+import { Telemetry } from './telemetry'
 
 let db: Database
 let agentManager: AgentManager
 let mcpManager: MCPManager
+let telemetry: Telemetry
+let appLaunchedAt = 0
 let mainWindow: BrowserWindow | null = null
 let opencodeProxy: ProxyHandle | null = null
 let proxyShuttingDown = false
@@ -413,7 +416,18 @@ app.whenReady().then(() => {
   agentManager = new AgentManager(db, (id) => mcpManager.getAccessToken(id))
   mcpManager.setBusyCheck(() => agentManager.hasLiveSessions())
   agentManager.setOnAllIdle(() => mcpManager.flushDeferredSync())
-  registerIpc(db, agentManager, mcpManager)
+  telemetry = new Telemetry({
+    userDataDir: app.getPath('userData'),
+    posthogKey: process.env.VITE_POSTHOG_KEY ?? '',
+    host: process.env.VITE_POSTHOG_HOST ?? 'https://us.i.posthog.com'
+  })
+  appLaunchedAt = Date.now()
+  telemetry.captureAppLaunched({
+    app_version: app.getVersion(),
+    platform: process.platform,
+    arch: process.arch
+  })
+  registerIpc(db, agentManager, mcpManager, telemetry)
 
   if (mainWindow) {
     wireStreaming(agentManager, mainWindow)
@@ -459,10 +473,14 @@ app.on('before-quit', (e) => {
       await stopOpenRouterProxy().catch(() => {})
       agentManager?.dispose()
       db?.close()
+      telemetry?.captureAppQuit({ uptime_ms: Date.now() - appLaunchedAt })
+      await telemetry?.shutdown()
       app.exit(0)
     })()
     return
   }
   agentManager?.dispose()
   db?.close()
+  telemetry?.captureAppQuit({ uptime_ms: Date.now() - appLaunchedAt })
+  void telemetry?.shutdown()
 })
