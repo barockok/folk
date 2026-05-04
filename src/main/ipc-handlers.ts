@@ -304,45 +304,61 @@ export function registerIpc(
   // Returns { ok, output, error? } so the renderer can display what happened.
   ipcMain.handle('auth:claudeLogin', (_e) => {
     const win = BrowserWindow.getFocusedWindow()
+    const send = (text: string) => win?.webContents.send('auth:loginOutput', text)
     return new Promise<{ ok: boolean; output: string; error?: string }>((resolve) => {
       const ext = process.platform === 'win32' ? '.exe' : ''
       const pkg = `@anthropic-ai/claude-agent-sdk-${process.platform}-${process.arch}`
-      const unpacked = join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', pkg, `claude${ext}`)
-      const bin = app.isPackaged && existsSync(unpacked) ? unpacked : 'claude'
+      const unpackedProd = join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', pkg, `claude${ext}`)
+      const unpackedDev = join(app.getAppPath(), 'node_modules', pkg, `claude${ext}`)
+      let bin: string
+      if (app.isPackaged && existsSync(unpackedProd)) bin = unpackedProd
+      else if (existsSync(unpackedDev)) bin = unpackedDev
+      else bin = 'claude'
+      const binExists = existsSync(bin)
+
+      // Diagnostic: show exactly what binary is used
+      send(`[folk] binary: ${bin}\n[folk] exists: ${binExists}\n[folk] packaged: ${app.isPackaged}\n\n`)
+
       const outputLines: string[] = []
-      // Strip ANSI escape codes before URL matching
-      const ANSI_RE = /\x1B\[[0-9;]*[A-Za-z]/g
-      const URL_RE = /https?:\/\/[^\s"'<>]+/g
+      const ANSI_RE = /\x1B(?:[@-Z\\-_]|\[[0-9;]*[ -/]*[@-~])/g
+      // Allow trailing punctuation strip from URLs
+      const URL_RE = /https?:\/\/[^\s"'<>()[\]]+/g
       let urlOpened = false
-      const proc = spawn(bin, ['login'], {
-        // pipe stdin so we can send newline for any "press enter" prompts
+
+      const proc = spawn(bin, ['auth', 'login'], {
         stdio: ['pipe', 'pipe', 'pipe'],
         env: { ...process.env }
       })
-      // Auto-confirm any prompts by sending newline after a short delay
-      setTimeout(() => proc.stdin?.end('\n'), 500)
+
+      // Send newline to bypass "press Enter" prompts; don't close stdin so process keeps running
+      setTimeout(() => proc.stdin?.write('\n'), 800)
+
       const onData = (data: Buffer) => {
         const raw = data.toString()
-        const clean = raw.replace(ANSI_RE, '')
-        outputLines.push(clean.trim())
-        // Forward output to renderer for display
-        win?.webContents.send('auth:loginOutput', clean)
-        // Open first URL found
-        const urls = clean.match(URL_RE)
-        if (urls && !urlOpened) {
-          for (const url of urls) {
-            urlOpened = true
-            void shell.openExternal(url)
-          }
+        const clean = raw.replace(ANSI_RE, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+        outputLines.push(clean)
+        send(clean)
+
+        // Strip trailing punctuation that might be appended to URL
+        const urls = (clean.match(URL_RE) ?? []).map((u) => u.replace(/[.,;:!?)]+$/, ''))
+        if (urls.length > 0 && !urlOpened) {
+          urlOpened = true
+          send(`\n[folk] opening: ${urls[0]}\n`)
+          void shell.openExternal(urls[0]).catch((e: Error) => {
+            send(`[folk] shell.openExternal error: ${e.message}\n`)
+          })
         }
       }
       proc.stdout?.on('data', onData)
       proc.stderr?.on('data', onData)
       proc.on('close', (code) => {
-        const output = outputLines.join('\n')
+        send(`\n[folk] exited with code ${code}\n`)
+        const output = outputLines.join('')
+        if (!urlOpened) send('[folk] no URL detected in output\n')
         resolve(code === 0 ? { ok: true, output } : { ok: false, output, error: `Exit code ${code}` })
       })
       proc.on('error', (err) => {
+        send(`[folk] spawn error: ${err.message}\n`)
         resolve({ ok: false, output: '', error: err.message })
       })
     })
