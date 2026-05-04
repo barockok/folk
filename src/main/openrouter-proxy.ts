@@ -29,10 +29,13 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
   const headers: Record<string, string> = {}
   for (const [k, v] of Object.entries(req.headers)) {
     const lk = k.toLowerCase()
-    // Skip host (wrong for upstream) and accept-encoding: Node fetch auto-decompresses,
-    // so if we forward accept-encoding the upstream compresses, Node decompresses while
-    // reading, then we forward the content-encoding header and the SDK double-decompresses.
-    if (lk === 'host' || lk === 'accept-encoding') continue
+    // host: wrong for upstream
+    // accept-encoding: Node fetch auto-decompresses; forwarding it causes
+    //   upstream to compress, Node decompresses on read, then content-encoding
+    //   header causes the SDK to double-decompress → ZlibError.
+    // anthropic-beta: OpenRouter's compat API doesn't support beta headers
+    //   and may return a 200 error body when it sees unknown beta flags.
+    if (lk === 'host' || lk === 'accept-encoding' || lk === 'anthropic-beta') continue
     if (typeof v === 'string') headers[k] = v
     else if (Array.isArray(v)) headers[k] = v[0] ?? ''
   }
@@ -54,6 +57,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
       if (lk === 'transfer-encoding' || lk === 'content-encoding') return
       upstreamHeaders[k] = v
     })
+    console.log(`[openrouter-proxy] upstream ${upstream.status} content-type=${upstream.headers.get('content-type')} url=${url}`)
     res.writeHead(upstream.status, upstreamHeaders)
 
     if (upstream.body) {
