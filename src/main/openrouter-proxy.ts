@@ -11,7 +11,7 @@
 import { createServer, IncomingMessage, ServerResponse, Server } from 'node:http'
 import { AddressInfo } from 'node:net'
 
-const OPENROUTER_BASE = 'https://openrouter.ai/api/v1'
+const OPENROUTER_BASE = 'https://openrouter.ai/api'
 
 let server: Server | null = null
 let port: number | null = null
