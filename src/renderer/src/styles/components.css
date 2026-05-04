@@ -4008,7 +4008,7 @@ html[data-window-state="blurred"] .badge-ac {
   font-size: 13px;
   color: var(--heading);
 }
-.model-pop-item:hover { background: var(--bg-sub); }
+.model-pop-item:hover, .model-pop-item.hi { background: var(--bg-sub); }
 .model-pop-item.on {
   background: rgba(83,58,253,0.08);
   color: var(--stripe-purple);

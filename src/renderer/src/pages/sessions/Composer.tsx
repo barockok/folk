@@ -66,6 +66,7 @@ export function Composer({ session, onSend, onCancel, onClear, onConfigureNew, o
   const [modelPopOpen, setModelPopOpen] = useState(false)
   const [modelPopPlacement, setModelPopPlacement] = useState<'top' | 'bottom'>('top')
   const [modelSearch, setModelSearch] = useState('')
+  const [modelCursor, setModelCursor] = useState(-1)
   const modelSearchRef = useRef<HTMLInputElement>(null)
   const [permPopOpen, setPermPopOpen] = useState(false)
   const [permPopPlacement, setPermPopPlacement] = useState<'top' | 'bottom'>('top')
@@ -384,6 +385,7 @@ export function Composer({ session, onSend, onCancel, onClear, onConfigureNew, o
   useEffect(() => {
     if (!modelPopOpen) {
       setModelSearch('')
+      setModelCursor(-1)
       return
     }
     setTimeout(() => modelSearchRef.current?.focus(), 30)
@@ -497,6 +499,9 @@ export function Composer({ session, onSend, onCancel, onClear, onConfigureNew, o
     },
     {}
   )
+
+  // Flat list of filtered models for keyboard navigation
+  const flatFilteredModels = Object.values(filteredByProvider).flatMap((g) => g.models)
 
   const isRunning = session?.status === 'running'
 
@@ -792,15 +797,39 @@ export function Composer({ session, onSend, onCancel, onClear, onConfigureNew, o
                     className="model-pop-search"
                     placeholder="Search models…"
                     value={modelSearch}
-                    onChange={(e) => setModelSearch(e.target.value)}
+                    onChange={(e) => { setModelSearch(e.target.value); setModelCursor(-1) }}
                     onKeyDown={(e) => {
-                      if (e.key === 'Escape') setModelPopOpen(false)
+                      if (e.key === 'Escape') { setModelPopOpen(false); return }
+                      if (e.key === 'ArrowDown') {
+                        e.preventDefault()
+                        setModelCursor((c) => Math.min(c + 1, flatFilteredModels.length - 1))
+                      } else if (e.key === 'ArrowUp') {
+                        e.preventDefault()
+                        setModelCursor((c) => Math.max(c - 1, 0))
+                      } else if (e.key === 'Enter') {
+                        e.preventDefault()
+                        const m = flatFilteredModels[modelCursor] ?? flatFilteredModels[0]
+                        if (!m) return
+                        setModelPopOpen(false)
+                        if (!session || session.modelId === m.id) return
+                        if (isDraftSession) {
+                          onDraftPatch?.({ modelId: m.id })
+                          toast({ kind: 'ok', text: `Model: ${m.label ?? m.id}` })
+                          return
+                        }
+                        void window.folk.sessions.setModel(session.id, m.id).then((updated) => {
+                          useSessionStore.getState().upsertSession(updated)
+                          toast({ kind: 'ok', text: `Model: ${m.label ?? m.id}` })
+                        }).catch((err: Error) => toast({ kind: 'err', text: err.message }))
+                      }
                     }}
                     type="text"
                   />
                 </div>
                 <div className="model-pop-list">
-                  {Object.entries(filteredByProvider).map(([provId, { providerName, models }]) => (
+                  {(() => {
+                    let idx = 0
+                    return Object.entries(filteredByProvider).map(([provId, { providerName, models }]) => (
                     <div key={provId}>
                       <div className="model-pop-group">
                         <span
@@ -812,11 +841,13 @@ export function Composer({ session, onSend, onCancel, onClear, onConfigureNew, o
                         {providerName}
                       </div>
                       {models.map((m) => {
+                        const itemIdx = idx++
                         const isOn = session?.modelId === m.id
+                        const isHi = modelCursor === itemIdx
                         return (
                           <button
                             key={m.id}
-                            className={`model-pop-item ${isOn ? 'on' : ''}`}
+                            className={`model-pop-item ${isOn ? 'on' : ''} ${isHi ? 'hi' : ''}`}
                             onClick={async () => {
                               setModelPopOpen(false)
                               if (!session || session.modelId === m.id) return
@@ -855,7 +886,8 @@ export function Composer({ session, onSend, onCancel, onClear, onConfigureNew, o
                         )
                       })}
                     </div>
-                  ))}
+                  ))
+                  })()}
                   {enabledModels.length === 0 && (
                     <div style={{ padding: '12px', fontSize: 12, color: 'var(--body)' }}>
                       No models configured. Add one in Model &amp; API.
