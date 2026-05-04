@@ -9,7 +9,13 @@ export default defineConfig({
       alias: {
         '@shared': resolve('src/shared')
       }
-    }
+    },
+    define: {
+      'process.env.VITE_POSTHOG_KEY': JSON.stringify(process.env.VITE_POSTHOG_KEY ?? ''),
+      'process.env.VITE_POSTHOG_HOST': JSON.stringify(
+        process.env.VITE_POSTHOG_HOST ?? 'https://us.i.posthog.com'
+      ),
+    },
   },
   preload: {
     plugins: [externalizeDepsPlugin()],
