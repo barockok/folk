@@ -14,6 +14,7 @@ import type {
 } from '@anthropic-ai/claude-agent-sdk'
 import { randomUUID } from 'node:crypto'
 import { Database } from './database'
+import type { Telemetry, ProviderType, ErrorCode } from './telemetry'
 import { FOLK_PRESENTATION_PROMPT, formatProfilePrompt } from './system-prompt'
 import { waitForProxyPort } from './opencode-proxy/state'
 import { startOpenRouterProxy } from './openrouter-proxy'
@@ -36,7 +37,8 @@ import type {
   MCPElicitationResponse,
   PersistedMessage,
   PersistedToolCall,
-  MessageBlock
+  MessageBlock,
+  ProviderConfig
 } from '@shared/types'
 
 // Walk the SDK's flat SessionMessage[] list and fold it into folk's chat
@@ -271,11 +273,13 @@ export class AgentManager extends EventEmitter {
   // back while the SDK had a live stream (the bundled CLI watches that file
   // and aborts in-flight turns when it changes).
   #onIdle?: () => void
+  #sessionStarts = new Map<string, { startedAt: number; provider: ProviderConfig }>()
   constructor(
     private db: Database,
     // Optional: when provided, agent-manager will refresh OAuth tokens for
     // HTTP MCP servers right before each session starts.
-    private resolveMcpAccessToken?: (id: string) => Promise<string | null>
+    private resolveMcpAccessToken?: (id: string) => Promise<string | null>,
+    private telemetry?: Telemetry
   ) {
     super()
     // Sessions whose status was 'running' when the previous app process died
@@ -633,6 +637,16 @@ export class AgentManager extends EventEmitter {
         const agentErr = mapError(session.id, err as Error & { code?: string })
         live.turnError?.(err as Error)
         this.emit('error', agentErr)
+        {
+          const start = this.#sessionStarts.get(session.id)
+          const allowed: ErrorCode[] = ['auth', 'quota', 'offline', 'cancelled', 'crash', 'unknown']
+          const code = (agentErr.code ?? 'unknown') as ErrorCode
+          this.telemetry?.captureSessionError({
+            error_code: allowed.includes(code) ? code : 'unknown',
+            provider_type: start ? providerTypeOf(start.provider) : 'openai-compatible'
+          })
+          this.#sessionStarts.delete(session.id)
+        }
         this.db.updateSession(session.id, {
           status: agentErr.code === 'cancelled' ? 'cancelled' : 'error'
         })
@@ -998,6 +1012,14 @@ export class AgentManager extends EventEmitter {
       message: 'Cancelled',
       retryable: false
     })
+    {
+      const start = this.#sessionStarts.get(sessionId)
+      this.telemetry?.captureSessionError({
+        error_code: 'cancelled',
+        provider_type: start ? providerTypeOf(start.provider) : 'openai-compatible'
+      })
+      this.#sessionStarts.delete(sessionId)
+    }
     if (!live) return
     // Fire abort and remove from #live synchronously so further dispatches
     // for this session are dropped (see #dispatchMessage early-return).
@@ -1238,6 +1260,21 @@ export class AgentManager extends EventEmitter {
   }
 
   async #sendOnce(session: Session, text: string, skillPrompts?: string[]): Promise<void> {
+    const provider = this.#resolveProvider(session.modelId)
+    const enabledMcps = session.enabledMcpIds ?? null
+    const mcpCount = (enabledMcps
+      ? this.db.listMCPs().filter((m) => m.isEnabled && enabledMcps.includes(m.id))
+      : this.db.listMCPs().filter((m) => m.isEnabled)
+    ).length
+
+    this.telemetry?.captureSessionStarted({
+      provider_type: providerTypeOf(provider),
+      permission_mode: session.permissionMode ?? 'default',
+      is_incognito: !!session.incognito,
+      mcp_count: mcpCount
+    })
+    this.#sessionStarts.set(session.id, { startedAt: Date.now(), provider })
+
     // LRU eviction: if we're at the cap and this session isn't already live,
     // evict the oldest live session. Fire-and-forget — the dying session
     // tears down in the background while we lazy-start the new one.
@@ -1397,7 +1434,16 @@ export class AgentManager extends EventEmitter {
       }
     } else if (m.type === 'result') {
       if (m.subtype === 'error' || m.is_error) {
-        this.emit('error', mapError(sessionId, new Error(m.result ?? 'agent error')))
+        const err = mapError(sessionId, new Error(m.result ?? 'agent error'))
+        this.emit('error', err)
+        const startErr = this.#sessionStarts.get(sessionId)
+        const allowed: ErrorCode[] = ['auth', 'quota', 'offline', 'cancelled', 'crash', 'unknown']
+        const code = (err.code ?? 'unknown') as ErrorCode
+        this.telemetry?.captureSessionError({
+          error_code: allowed.includes(code) ? code : 'unknown',
+          provider_type: startErr ? providerTypeOf(startErr.provider) : 'openai-compatible'
+        })
+        this.#sessionStarts.delete(sessionId)
       }
       const r = msg as {
         total_cost_usd?: number
@@ -1436,6 +1482,16 @@ export class AgentManager extends EventEmitter {
       // Transcript on disk just grew with this turn — drop any cached parse
       // so the next loadMessages re-reads (or stays evicted until requested).
       this.#invalidateMessages(sessionId)
+      const startCompleted = this.#sessionStarts.get(sessionId)
+      if (startCompleted) {
+        this.telemetry?.captureSessionCompleted({
+          provider_type: providerTypeOf(startCompleted.provider),
+          turn_count: r.num_turns ?? 0,
+          cost_usd: r.total_cost_usd ?? 0,
+          duration_ms: r.duration_ms ?? Date.now() - startCompleted.startedAt
+        })
+        this.#sessionStarts.delete(sessionId)
+      }
       this.emit('done', { sessionId })
     } else if (m.type === 'tool_progress') {
       const r = msg as { tool_use_id?: string; elapsed_time_seconds?: number }
@@ -1731,5 +1787,18 @@ export class AgentManager extends EventEmitter {
         })
         return
     }
+  }
+}
+
+function providerTypeOf(provider: ProviderConfig): ProviderType {
+  switch (provider.id) {
+    case 'anthropic':
+      return 'anthropic'
+    case 'openai':
+      return 'openai'
+    case 'google':
+      return 'google'
+    default:
+      return 'openai-compatible'
   }
 }

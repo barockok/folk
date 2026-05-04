@@ -413,14 +413,14 @@ app.whenReady().then(() => {
     db,
     join(app.getPath('userData'), 'folk-managed-mcps.json')
   )
-  agentManager = new AgentManager(db, (id) => mcpManager.getAccessToken(id))
-  mcpManager.setBusyCheck(() => agentManager.hasLiveSessions())
-  agentManager.setOnAllIdle(() => mcpManager.flushDeferredSync())
   telemetry = new Telemetry({
     userDataDir: app.getPath('userData'),
     posthogKey: process.env.VITE_POSTHOG_KEY ?? '',
     host: process.env.VITE_POSTHOG_HOST ?? 'https://us.i.posthog.com'
   })
+  agentManager = new AgentManager(db, (id) => mcpManager.getAccessToken(id), telemetry)
+  mcpManager.setBusyCheck(() => agentManager.hasLiveSessions())
+  agentManager.setOnAllIdle(() => mcpManager.flushDeferredSync())
   appLaunchedAt = Date.now()
   telemetry.captureAppLaunched({
     app_version: app.getVersion(),
