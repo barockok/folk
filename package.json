@@ -1,6 +1,6 @@
 {
   "name": "folk",
-  "version": "0.1.24",
+  "version": "0.1.25",
   "private": true,
   "description": "folk — a local-first Claude Code desktop app",
   "main": "out/main/index.js",

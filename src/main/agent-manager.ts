@@ -228,6 +228,7 @@ interface LiveSession {
   turnError: ((e: Error) => void) | null
   streamedMessages: Set<string>
   lastUsedAt: number
+  silent?: boolean
 }
 
 interface PendingPermission {
@@ -636,20 +637,26 @@ export class AgentManager extends EventEmitter {
       } catch (err) {
         const agentErr = mapError(session.id, err as Error & { code?: string })
         live.turnError?.(err as Error)
-        this.emit('error', agentErr)
-        {
-          const start = this.#sessionStarts.get(session.id)
-          const allowed: ErrorCode[] = ['auth', 'quota', 'offline', 'cancelled', 'crash', 'unknown']
-          const code = (agentErr.code ?? 'unknown') as ErrorCode
-          this.telemetry?.captureSessionError({
-            error_code: allowed.includes(code) ? code : 'unknown',
-            provider_type: start ? providerTypeOf(start.provider) : 'openai-compatible'
-          })
+        if (live.silent && agentErr.code === 'cancelled') {
+          // Silent teardown (e.g., MCP/model/permission change). Don't surface
+          // the cancelled banner or flip session status — caller will resume.
           this.#sessionStarts.delete(session.id)
+        } else {
+          this.emit('error', agentErr)
+          {
+            const start = this.#sessionStarts.get(session.id)
+            const allowed: ErrorCode[] = ['auth', 'quota', 'offline', 'cancelled', 'crash', 'unknown']
+            const code = (agentErr.code ?? 'unknown') as ErrorCode
+            this.telemetry?.captureSessionError({
+              error_code: allowed.includes(code) ? code : 'unknown',
+              provider_type: start ? providerTypeOf(start.provider) : 'openai-compatible'
+            })
+            this.#sessionStarts.delete(session.id)
+          }
+          this.db.updateSession(session.id, {
+            status: agentErr.code === 'cancelled' ? 'cancelled' : 'error'
+          })
         }
-        this.db.updateSession(session.id, {
-          status: agentErr.code === 'cancelled' ? 'cancelled' : 'error'
-        })
       } finally {
         if (live.idleTimer) clearTimeout(live.idleTimer)
         this.#live.delete(session.id)
@@ -671,10 +678,11 @@ export class AgentManager extends EventEmitter {
 
   async #teardown(
     sessionId: string,
-    reason: 'idle' | 'cancel' | 'delete' | 'dispose' | 'lru'
+    reason: 'idle' | 'cancel' | 'delete' | 'dispose' | 'lru' | 'silent'
   ): Promise<void> {
     const live = this.#live.get(sessionId)
     if (!live) return
+    if (reason === 'silent') live.silent = true
     // Delete from the map BEFORE awaiting — a concurrent sendMessage that
     // arrives during teardown must not see the dying LiveSession; it should
     // lazy-start a fresh one.
@@ -700,7 +708,7 @@ export class AgentManager extends EventEmitter {
       }
     }
 
-    if (reason === 'cancel' || reason === 'delete') {
+    if (reason === 'cancel' || reason === 'delete' || reason === 'silent') {
       live.abort.abort()
     } else {
       live.close()
@@ -917,7 +925,10 @@ export class AgentManager extends EventEmitter {
     const existing = this.db.getSession(id)
     if (!existing) throw new Error(`session ${id} not found`)
     if (this.#live.has(id)) {
-      await this.#teardown(id, 'cancel')
+      // Silent teardown — settings change, not a user-initiated cancel. The
+      // next sendMessage will lazy-start a fresh LiveSession with the new MCP
+      // allowlist; UI shouldn't show the cancelled banner.
+      await this.#teardown(id, 'silent')
     }
     this.db.updateSession(id, { enabledMcpIds: mcpIds })
     return this.db.getSession(id)!
