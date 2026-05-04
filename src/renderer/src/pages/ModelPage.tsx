@@ -5,13 +5,19 @@ import { useProvidersStore } from '../stores/useProvidersStore'
 import { useUIStore } from '../stores/useUIStore'
 import { Icon, ProviderLogo } from '../components/icons'
 
-function ClaudeCodeStatusField() {
-  const status = useClaudeCodeAuth(true)
+interface LoginState {
+  loggingIn: boolean
+  loginOutput: string[]
+  loginError: string | null
+}
+
+function useClaudeLogin() {
   const [loggingIn, setLoggingIn] = useState(false)
   const [loginOutput, setLoginOutput] = useState<string[]>([])
   const [loginError, setLoginError] = useState<string | null>(null)
 
-  const handleLogin = async () => {
+  const login = async () => {
+    if (loggingIn) return
     setLoggingIn(true)
     setLoginOutput([])
     setLoginError(null)
@@ -24,6 +30,13 @@ function ClaudeCodeStatusField() {
     if (!result.ok) setLoginError(result.error ?? 'Login failed')
   }
 
+  return { loggingIn, loginOutput, loginError, login }
+}
+
+function ClaudeCodeStatusField({ loggingIn, loginOutput, loginError }: LoginState) {
+  const status = useClaudeCodeAuth(true)
+  const isDev = import.meta.env.DEV
+
   return (
     <div className="field">
       <label className="label">Claude Code status</label>
@@ -35,23 +48,20 @@ function ClaudeCodeStatusField() {
           {status.source === 'keychain' ? ' (macOS Keychain)' : ''}
           {status.email ? ` as ${status.email}` : ''}
         </div>
+      ) : loggingIn ? (
+        <div className="hint" style={{ color: 'var(--fg-faint)' }}>Opening browser…</div>
       ) : (
-        <>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: loggingIn || loginOutput.length ? 6 : 0 }}>
-            <div className="hint" style={{ color: 'var(--warn)' }}>Not logged in.</div>
-            <button className="btn btn-sm btn-primary" type="button" onClick={handleLogin} disabled={loggingIn}>
-              {loggingIn ? 'Opening browser…' : 'Log in with Claude Code'}
-            </button>
-          </div>
-          {loginOutput.length > 0 && (
-            <pre style={{ fontSize: 11, color: 'var(--body)', background: 'var(--bg-sub)', padding: '6px 8px', borderRadius: 4, margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
-              {loginOutput.join('')}
-            </pre>
-          )}
-          {loginError && (
-            <div className="hint" style={{ color: 'var(--err)', marginTop: 4 }}>{loginError}</div>
-          )}
-        </>
+        <div className="hint" style={{ color: 'var(--warn)' }}>
+          Not logged in — select "Use Claude Code login" above to authenticate.
+        </div>
+      )}
+      {isDev && loginOutput.length > 0 && (
+        <pre style={{ fontSize: 11, color: 'var(--body)', background: 'var(--bg-sub)', padding: '6px 8px', borderRadius: 4, margin: '4px 0 0', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+          {loginOutput.join('')}
+        </pre>
+      )}
+      {loginError && (
+        <div className="hint" style={{ color: 'var(--err)', marginTop: 4 }}>{loginError}</div>
       )}
     </div>
   )
@@ -226,6 +236,7 @@ function AddProviderModal({ usedIds, onAdd, onClose }: AddProviderModalProps) {
   const [apiKey, setApiKey] = useState('')
   const [authMode, setAuthMode] = useState<ProviderAuthMode>('api-key')
   const [saving, setSaving] = useState(false)
+  const { loggingIn, loginOutput, loginError, login } = useClaudeLogin()
   const ccStatus = useClaudeCodeAuth(selectedId === 'anthropic' && authMode === 'claude-code')
 
   const available = PROVIDER_PRESETS.filter((p) => !usedIds.includes(p.id))
@@ -387,7 +398,10 @@ function AddProviderModal({ usedIds, onAdd, onClose }: AddProviderModalProps) {
                     <button
                       type="button"
                       className={'model-opt' + (authMode === 'claude-code' ? ' selected' : '')}
-                      onClick={() => setAuthMode('claude-code')}
+                      onClick={() => {
+                        setAuthMode('claude-code')
+                        if (!ccStatus?.loggedIn) void login()
+                      }}
                       style={{ padding: 12, textAlign: 'left' }}
                     >
                       <span className="name" style={{ fontSize: 13 }}>Use Claude Code login</span>
@@ -420,26 +434,7 @@ function AddProviderModal({ usedIds, onAdd, onClose }: AddProviderModalProps) {
                   <div className="hint">Stored locally. Never synced.</div>
                 </div>
               ) : (
-                <div className="field">
-                  <label className="label">Claude Code status</label>
-                  {ccStatus == null ? (
-                    <div className="hint">Checking…</div>
-                  ) : ccStatus.loggedIn ? (
-                    <div className="hint" style={{ color: 'var(--ok)' }}>
-                      <Icon name="check" size={12} /> Logged in
-                      {ccStatus.source === 'keychain' ? ' (macOS Keychain)' : ''}
-                      {ccStatus.email ? ` as ${ccStatus.email}` : ''}
-                    </div>
-                  ) : (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <div className="hint" style={{ color: 'var(--warn)' }}>Not logged in.</div>
-                      <button className="btn btn-sm btn-primary" type="button"
-                        onClick={() => void window.folk.auth.claudeLogin()}>
-                        Log in
-                      </button>
-                    </div>
-                  )}
-                </div>
+                <ClaudeCodeStatusField loggingIn={loggingIn} loginOutput={loginOutput} loginError={loginError} />
               )}
             </>
           )}
@@ -471,9 +466,12 @@ export function ModelPage() {
   const [reveal, setReveal] = useState(false)
   const [testing, setTesting] = useState(false)
   const [fetchingModels, setFetchingModels] = useState(false)
+  const { loggingIn, loginOutput, loginError, login } = useClaudeLogin()
 
   // Draft edits for the active provider
   const [draft, setDraft] = useState<ProviderConfig | null>(null)
+
+  const ccStatus = useClaudeCodeAuth(draft?.authMode === 'claude-code')
 
   useEffect(() => {
     if (!hydrated) load()
@@ -773,7 +771,10 @@ export function ModelPage() {
                   <button
                     type="button"
                     className={'model-opt' + (draft.authMode === 'claude-code' ? ' selected' : '')}
-                    onClick={() => updateDraft({ authMode: 'claude-code', apiKey: '' })}
+                    onClick={() => {
+                      updateDraft({ authMode: 'claude-code', apiKey: '' })
+                      if (!ccStatus?.loggedIn) void login()
+                    }}
                     style={{ padding: 12, textAlign: 'left' }}
                   >
                     <span className="name" style={{ fontSize: 13 }}>Use Claude Code login</span>
@@ -786,7 +787,7 @@ export function ModelPage() {
             )}
 
             {draft.authMode === 'claude-code' ? (
-              <ClaudeCodeStatusField />
+              <ClaudeCodeStatusField loggingIn={loggingIn} loginOutput={loginOutput} loginError={loginError} />
             ) : preset?.noAuth ? (
               <div className="field">
                 <label className="label">Authentication</label>
