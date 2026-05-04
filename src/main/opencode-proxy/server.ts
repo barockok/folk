@@ -137,7 +137,7 @@ async function handleMessages(
     clientClosed = true
     if (!abort.signal.aborted) {
       abort.abort()
-      log.info('client_closed', { reqId, ms: Date.now() - startedAt })
+      log.info('client_closed', { reqId, ms: Date.now() - startedAt, req_complete: req.complete })
     }
   })
 
@@ -347,6 +347,7 @@ export async function startProxy(): Promise<ProxyHandle> {
 
   const server: Server = createServer(async (req, res) => {
     const reqId = randomUUID().slice(0, 8)
+    log.info('incoming', { reqId, method: req.method, url: req.url })
 
     if (req.method === 'POST' && req.url && req.url.startsWith('/v1/messages')) {
       inFlight.add(res)
