@@ -91,6 +91,9 @@ interface SessionState {
   addElicitationRequest: (e: MCPElicitationRequest) => void
   removeElicitationRequest: (sessionId: string, requestId: string) => void
   setError: (e: AgentError) => void
+  composerDrafts: Record<string, string>
+  setComposerDraft: (sessionId: string, text: string) => void
+  clearComposerDraft: (sessionId: string) => void
 }
 
 const ensureAssistant = (messages: ChatMessage[]): ChatMessage[] => {
@@ -202,6 +205,15 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   promptSuggestions: {},
   streamingSessions: new Set<string>(),
   lifecycleTicker: {},
+  composerDrafts: {},
+  setComposerDraft: (sessionId, text) =>
+    set((st) => ({ composerDrafts: { ...st.composerDrafts, [sessionId]: text } })),
+  clearComposerDraft: (sessionId) =>
+    set((st) => {
+      const next = { ...st.composerDrafts }
+      delete next[sessionId]
+      return { composerDrafts: next }
+    }),
   markStreaming: (sessionId) =>
     set((st) => {
       if (st.streamingSessions.has(sessionId)) return st

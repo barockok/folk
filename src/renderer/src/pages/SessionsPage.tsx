@@ -166,25 +166,28 @@ export function SessionsPage() {
   }
 
   // Absorb config tweaks made against a draft into the staged config + the
-  // synthesized Session so they survive the eventual create call.
+  // synthesized Session so they survive the eventual create call. Also
+  // persists immediately so page navigation doesn't lose the selection.
   function patchDraft(patch: Partial<Session>) {
     setDraft((prev) => {
       if (!prev) return prev
+      const nextConfig = {
+        ...prev.config,
+        modelId: patch.modelId ?? prev.config.modelId,
+        workingDir: patch.workingDir ?? prev.config.workingDir,
+        goal: patch.goal === null ? undefined : patch.goal ?? prev.config.goal,
+        flags: patch.flags === null ? undefined : patch.flags ?? prev.config.flags,
+        permissionMode: patch.permissionMode ?? prev.config.permissionMode,
+        incognito: patch.incognito ?? prev.config.incognito,
+        enabledMcpIds:
+          patch.enabledMcpIds !== undefined
+            ? patch.enabledMcpIds
+            : prev.config.enabledMcpIds
+      }
+      saveDefaultSessionConfig(nextConfig)
       return {
         session: { ...prev.session, ...patch, updatedAt: Date.now() },
-        config: {
-          ...prev.config,
-          modelId: patch.modelId ?? prev.config.modelId,
-          workingDir: patch.workingDir ?? prev.config.workingDir,
-          goal: patch.goal === null ? undefined : patch.goal ?? prev.config.goal,
-          flags: patch.flags === null ? undefined : patch.flags ?? prev.config.flags,
-          permissionMode: patch.permissionMode ?? prev.config.permissionMode,
-          incognito: patch.incognito ?? prev.config.incognito,
-          enabledMcpIds:
-            patch.enabledMcpIds !== undefined
-              ? patch.enabledMcpIds
-              : prev.config.enabledMcpIds
-        }
+        config: nextConfig
       }
     })
   }

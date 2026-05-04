@@ -62,7 +62,12 @@ function formatBytes(bytes: number): string {
 
 export function Composer({ session, onSend, onCancel, onClear, onConfigureNew, onDraftPatch }: ComposerProps) {
   const isDraftSession = !!session && session.id.startsWith('draft-')
-  const [text, setText] = useState('')
+  // Draft sessions get new random IDs on every mount — use a stable key so text
+  // survives page navigation.
+  const draftKey = session ? (isDraftSession ? '__draft__' : session.id) : null
+  const [text, setText] = useState(() =>
+    draftKey ? (useSessionStore.getState().composerDrafts[draftKey] ?? '') : ''
+  )
   const [modelPopOpen, setModelPopOpen] = useState(false)
   const [modelPopPlacement, setModelPopPlacement] = useState<'top' | 'bottom'>('top')
   const [modelSearch, setModelSearch] = useState('')
@@ -80,6 +85,29 @@ export function Composer({ session, onSend, onCancel, onClear, onConfigureNew, o
   const { enabledModels } = useProviders()
   const mcpServers = useMCPStore((s) => s.servers)
   const eligibleMcps = mcpServers.filter((s) => s.isEnabled)
+  const setComposerDraft = useSessionStore((s) => s.setComposerDraft)
+  const clearComposerDraft = useSessionStore((s) => s.clearComposerDraft)
+
+  // Restore draft when active session changes.
+  useEffect(() => {
+    const saved = draftKey ? (useSessionStore.getState().composerDrafts[draftKey] ?? '') : ''
+    setText(saved)
+    if (textareaRef.current) textareaRef.current.style.height = 'auto'
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftKey])
+
+  // Persist draft only when component unmounts (page navigation) or session
+  // switches — zero per-keystroke overhead.
+  const draftTextRef = useRef(text)
+  draftTextRef.current = text
+  const draftKeyRef = useRef(draftKey)
+  draftKeyRef.current = draftKey
+  useEffect(() => {
+    return () => {
+      if (!draftKeyRef.current) return
+      setComposerDraft(draftKeyRef.current, draftTextRef.current)
+    }
+  }, [setComposerDraft])
 
   // Discover user/project commands from ~/.claude/commands and project dir.
   // These extend the built-in slash registry as `prompt`-kind entries: when
@@ -298,6 +326,7 @@ export function Composer({ session, onSend, onCancel, onClear, onConfigureNew, o
     }
     onSend(trimmed, attachments.length > 0 ? attachments : undefined)
     if (session) clearPromptSuggestions(session.id)
+    if (draftKey) clearComposerDraft(draftKey)
     setText('')
     setAttachments([])
     if (textareaRef.current) {
