@@ -406,7 +406,17 @@ function AddProviderModal({ usedIds, onAdd, onClose }: AddProviderModalProps) {
                     >
                       <span className="name" style={{ fontSize: 13 }}>Use Claude Code login</span>
                       <span className="desc" style={{ fontSize: 11, marginTop: 2 }}>
-                        Reuse your existing subscription
+                        {authMode === 'claude-code'
+                          ? ccStatus == null
+                            ? 'Checking status…'
+                            : ccStatus.loggedIn
+                              ? `Logged in${ccStatus.email ? ` as ${ccStatus.email}` : ''}`
+                              : loggingIn
+                                ? 'Opening browser…'
+                                : loginError
+                                  ? `Error: ${loginError}`
+                                  : 'Not logged in'
+                          : 'Reuse your existing subscription'}
                       </span>
                     </button>
                   </div>
@@ -434,7 +444,11 @@ function AddProviderModal({ usedIds, onAdd, onClose }: AddProviderModalProps) {
                   <div className="hint">Stored locally. Never synced.</div>
                 </div>
               ) : (
-                <ClaudeCodeStatusField loggingIn={loggingIn} loginOutput={loginOutput} loginError={loginError} />
+                import.meta.env.DEV && loginOutput.length > 0 ? (
+                  <pre style={{ fontSize: 11, color: 'var(--body)', background: 'var(--bg-sub)', padding: '6px 8px', borderRadius: 4, margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                    {loginOutput.join('')}
+                  </pre>
+                ) : null
               )}
             </>
           )}
@@ -771,24 +785,40 @@ export function ModelPage() {
                   <button
                     type="button"
                     className={'model-opt' + (draft.authMode === 'claude-code' ? ' selected' : '')}
-                    onClick={() => {
+                    onClick={async () => {
+                      const updated = { ...draft, authMode: 'claude-code' as const, apiKey: '' }
                       updateDraft({ authMode: 'claude-code', apiKey: '' })
+                      await save(updated)
                       if (!ccStatus?.loggedIn) void login()
                     }}
                     style={{ padding: 12, textAlign: 'left' }}
                   >
                     <span className="name" style={{ fontSize: 13 }}>Use Claude Code login</span>
                     <span className="desc" style={{ fontSize: 11, marginTop: 2 }}>
-                      Reuse your existing subscription
+                      {draft.authMode === 'claude-code'
+                        ? ccStatus == null
+                          ? 'Checking status…'
+                          : ccStatus.loggedIn
+                            ? `Logged in${ccStatus.email ? ` as ${ccStatus.email}` : ''}`
+                            : loggingIn
+                              ? 'Opening browser…'
+                              : loginError
+                                ? `Error: ${loginError}`
+                                : 'Not logged in'
+                        : 'Reuse your existing subscription'}
                     </span>
                   </button>
                 </div>
               </div>
             )}
 
-            {draft.authMode === 'claude-code' ? (
-              <ClaudeCodeStatusField loggingIn={loggingIn} loginOutput={loginOutput} loginError={loginError} />
-            ) : preset?.noAuth ? (
+            {draft.authMode === 'claude-code' && import.meta.env.DEV && loginOutput.length > 0 && (
+              <pre style={{ fontSize: 11, color: 'var(--body)', background: 'var(--bg-sub)', padding: '6px 8px', borderRadius: 4, margin: '0 0 8px', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                {loginOutput.join('')}
+              </pre>
+            )}
+
+            {draft.authMode === 'claude-code' ? null : preset?.noAuth ? (
               <div className="field">
                 <label className="label">Authentication</label>
                 <div className="hint">
