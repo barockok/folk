@@ -299,24 +299,39 @@ export function registerIpc(
 
   ipcMain.handle('auth:claudeCodeStatus', () => detectClaudeCodeAuth())
 
-  // Spawn `claude login` and open the printed browser URL via shell.openExternal.
-  // Resolves with { ok, error? } when the process exits.
-  ipcMain.handle('auth:claudeLogin', () => {
-    return new Promise<{ ok: boolean; error?: string }>((resolve) => {
+  // Spawn `claude login`, forward output back to the renderer so the user
+  // can see the URL, and also open any detected URL via shell.openExternal.
+  // Returns { ok, output, error? } so the renderer can display what happened.
+  ipcMain.handle('auth:claudeLogin', (_e) => {
+    const win = BrowserWindow.getFocusedWindow()
+    return new Promise<{ ok: boolean; output: string; error?: string }>((resolve) => {
       const ext = process.platform === 'win32' ? '.exe' : ''
       const pkg = `@anthropic-ai/claude-agent-sdk-${process.platform}-${process.arch}`
       const unpacked = join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', pkg, `claude${ext}`)
       const bin = app.isPackaged && existsSync(unpacked) ? unpacked : 'claude'
+      const outputLines: string[] = []
+      // Strip ANSI escape codes before URL matching
+      const ANSI_RE = /\x1B\[[0-9;]*[A-Za-z]/g
+      const URL_RE = /https?:\/\/[^\s"'<>]+/g
+      let urlOpened = false
       const proc = spawn(bin, ['login'], {
-        stdio: ['ignore', 'pipe', 'pipe'],
+        // pipe stdin so we can send newline for any "press enter" prompts
+        stdio: ['pipe', 'pipe', 'pipe'],
         env: { ...process.env }
       })
-      const URL_RE = /https?:\/\/\S+/g
+      // Auto-confirm any prompts by sending newline after a short delay
+      setTimeout(() => proc.stdin?.end('\n'), 500)
       const onData = (data: Buffer) => {
-        const text = data.toString()
-        const urls = text.match(URL_RE)
-        if (urls) {
+        const raw = data.toString()
+        const clean = raw.replace(ANSI_RE, '')
+        outputLines.push(clean.trim())
+        // Forward output to renderer for display
+        win?.webContents.send('auth:loginOutput', clean)
+        // Open first URL found
+        const urls = clean.match(URL_RE)
+        if (urls && !urlOpened) {
           for (const url of urls) {
+            urlOpened = true
             void shell.openExternal(url)
           }
         }
@@ -324,10 +339,11 @@ export function registerIpc(
       proc.stdout?.on('data', onData)
       proc.stderr?.on('data', onData)
       proc.on('close', (code) => {
-        resolve(code === 0 ? { ok: true } : { ok: false, error: `claude login exited with code ${code}` })
+        const output = outputLines.join('\n')
+        resolve(code === 0 ? { ok: true, output } : { ok: false, output, error: `Exit code ${code}` })
       })
       proc.on('error', (err) => {
-        resolve({ ok: false, error: err.message })
+        resolve({ ok: false, output: '', error: err.message })
       })
     })
   })

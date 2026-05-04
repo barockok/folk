@@ -8,11 +8,20 @@ import { Icon, ProviderLogo } from '../components/icons'
 function ClaudeCodeStatusField() {
   const status = useClaudeCodeAuth(true)
   const [loggingIn, setLoggingIn] = useState(false)
+  const [loginOutput, setLoginOutput] = useState<string[]>([])
+  const [loginError, setLoginError] = useState<string | null>(null)
 
   const handleLogin = async () => {
     setLoggingIn(true)
-    await window.folk.auth.claudeLogin()
+    setLoginOutput([])
+    setLoginError(null)
+    const off = window.folk.auth.onLoginOutput((text) => {
+      setLoginOutput((prev) => [...prev, text])
+    })
+    const result = await window.folk.auth.claudeLogin()
+    off()
     setLoggingIn(false)
+    if (!result.ok) setLoginError(result.error ?? 'Login failed')
   }
 
   return (
@@ -26,17 +35,23 @@ function ClaudeCodeStatusField() {
           {status.source === 'keychain' ? ' (macOS Keychain)' : ''}
           {status.email ? ` as ${status.email}` : ''}
         </div>
-      ) : loggingIn ? (
-        <div className="hint" style={{ color: 'var(--body)' }}>
-          Browser opened — complete login then return here…
-        </div>
       ) : (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div className="hint" style={{ color: 'var(--warn)' }}>Not logged in.</div>
-          <button className="btn btn-sm btn-primary" type="button" onClick={handleLogin}>
-            Log in with Claude Code
-          </button>
-        </div>
+        <>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: loggingIn || loginOutput.length ? 6 : 0 }}>
+            <div className="hint" style={{ color: 'var(--warn)' }}>Not logged in.</div>
+            <button className="btn btn-sm btn-primary" type="button" onClick={handleLogin} disabled={loggingIn}>
+              {loggingIn ? 'Opening browser…' : 'Log in with Claude Code'}
+            </button>
+          </div>
+          {loginOutput.length > 0 && (
+            <pre style={{ fontSize: 11, color: 'var(--body)', background: 'var(--bg-sub)', padding: '6px 8px', borderRadius: 4, margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+              {loginOutput.join('')}
+            </pre>
+          )}
+          {loginError && (
+            <div className="hint" style={{ color: 'var(--err)', marginTop: 4 }}>{loginError}</div>
+          )}
+        </>
       )}
     </div>
   )

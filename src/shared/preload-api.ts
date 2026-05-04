@@ -113,7 +113,8 @@ export interface FolkAPI {
   }
   auth: {
     claudeCodeStatus: () => Promise<ClaudeCodeAuthStatus>
-    claudeLogin: () => Promise<{ ok: boolean; error?: string }>
+    claudeLogin: () => Promise<{ ok: boolean; output: string; error?: string }>
+    onLoginOutput: (fn: (text: string) => void) => () => void
   }
   dialog: {
     openFolder: (defaultPath?: string) => Promise<string | null>

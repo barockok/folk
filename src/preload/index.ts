@@ -69,7 +69,12 @@ const folk: FolkAPI = {
   },
   auth: {
     claudeCodeStatus: () => ipcRenderer.invoke('auth:claudeCodeStatus'),
-    claudeLogin: () => ipcRenderer.invoke('auth:claudeLogin')
+    claudeLogin: () => ipcRenderer.invoke('auth:claudeLogin'),
+    onLoginOutput: (fn) => {
+      const handler = (_e: Electron.IpcRendererEvent, text: string) => fn(text)
+      ipcRenderer.on('auth:loginOutput', handler)
+      return () => ipcRenderer.off('auth:loginOutput', handler)
+    }
   },
   dialog: {
     openFolder: (defaultPath) => ipcRenderer.invoke('dialog:openFolder', defaultPath)
