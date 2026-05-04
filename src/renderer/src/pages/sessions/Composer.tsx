@@ -65,6 +65,8 @@ export function Composer({ session, onSend, onCancel, onClear, onConfigureNew, o
   const [text, setText] = useState('')
   const [modelPopOpen, setModelPopOpen] = useState(false)
   const [modelPopPlacement, setModelPopPlacement] = useState<'top' | 'bottom'>('top')
+  const [modelSearch, setModelSearch] = useState('')
+  const modelSearchRef = useRef<HTMLInputElement>(null)
   const [permPopOpen, setPermPopOpen] = useState(false)
   const [permPopPlacement, setPermPopPlacement] = useState<'top' | 'bottom'>('top')
   const [attachments, setAttachments] = useState<Attachment[]>([])
@@ -378,9 +380,13 @@ export function Composer({ session, onSend, onCancel, onClear, onConfigureNew, o
     setPermPopPlacement(triggerMid < window.innerHeight / 2 ? 'bottom' : 'top')
   }, [])
 
-  // Close popover on outside click
+  // Close popover on outside click; auto-focus search + clear on open/close
   useEffect(() => {
-    if (!modelPopOpen) return
+    if (!modelPopOpen) {
+      setModelSearch('')
+      return
+    }
+    setTimeout(() => modelSearchRef.current?.focus(), 30)
     const handler = (e: MouseEvent) => {
       if (popRef.current && !popRef.current.contains(e.target as Node)) {
         setModelPopOpen(false)
@@ -464,7 +470,7 @@ export function Composer({ session, onSend, onCancel, onClear, onConfigureNew, o
     ? activeModel.label ?? activeModel.id
     : session?.modelId ?? 'No model'
 
-  // Group models by provider
+  // Group models by provider, filtered by search query
   const byProvider = enabledModels.reduce<
     Record<string, { providerName: string; models: typeof enabledModels }>
   >((acc, m) => {
@@ -474,6 +480,23 @@ export function Composer({ session, onSend, onCancel, onClear, onConfigureNew, o
     acc[m.providerId].models.push(m)
     return acc
   }, {})
+
+  const filteredByProvider = Object.entries(byProvider).reduce<typeof byProvider>(
+    (acc, [provId, { providerName, models }]) => {
+      const q = modelSearch.trim().toLowerCase()
+      const filtered = q
+        ? models.filter(
+            (m) =>
+              (m.label ?? m.id).toLowerCase().includes(q) ||
+              m.id.toLowerCase().includes(q) ||
+              providerName.toLowerCase().includes(q)
+          )
+        : models
+      if (filtered.length > 0) acc[provId] = { providerName, models: filtered }
+      return acc
+    },
+    {}
+  )
 
   const isRunning = session?.status === 'running'
 
@@ -763,9 +786,21 @@ export function Composer({ session, onSend, onCancel, onClear, onConfigureNew, o
 
             {modelPopOpen && (
               <div className={`model-pop model-pop--${modelPopPlacement}`}>
-                <div className="model-pop-hd">Model</div>
+                <div className="model-pop-hd">
+                  <input
+                    ref={modelSearchRef}
+                    className="model-pop-search"
+                    placeholder="Search models…"
+                    value={modelSearch}
+                    onChange={(e) => setModelSearch(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') setModelPopOpen(false)
+                    }}
+                    type="text"
+                  />
+                </div>
                 <div className="model-pop-list">
-                  {Object.entries(byProvider).map(([provId, { providerName, models }]) => (
+                  {Object.entries(filteredByProvider).map(([provId, { providerName, models }]) => (
                     <div key={provId}>
                       <div className="model-pop-group">
                         <span
@@ -824,6 +859,11 @@ export function Composer({ session, onSend, onCancel, onClear, onConfigureNew, o
                   {enabledModels.length === 0 && (
                     <div style={{ padding: '12px', fontSize: 12, color: 'var(--body)' }}>
                       No models configured. Add one in Model &amp; API.
+                    </div>
+                  )}
+                  {enabledModels.length > 0 && Object.keys(filteredByProvider).length === 0 && (
+                    <div style={{ padding: '12px', fontSize: 12, color: 'var(--fg-faint)' }}>
+                      No models match "{modelSearch}"
                     </div>
                   )}
                 </div>

@@ -3968,8 +3968,13 @@ html[data-window-state="blurred"] .badge-ac {
   overflow: hidden;
   animation: fadeIn .12s ease-out;
 }
+.model-pop-search {
+  width: 100%; border: none; outline: none; background: transparent;
+  font-size: 12px; color: var(--heading); font-family: var(--ff-sans);
+}
+.model-pop-search::placeholder { color: var(--fg-faint); }
 .model-pop-hd {
-  padding: 10px 12px;
+  padding: 8px 12px;
   border-bottom: var(--hair) solid var(--border);
   display: flex; align-items: center; gap: 8px;
   font-size: 11px; color: var(--body);
