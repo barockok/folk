@@ -203,12 +203,12 @@ async function handleMessages(
     )
   } catch (err) {
     if (clientClosed || (err as Error).name === 'AbortError') {
-      // Nothing to send back — caller is gone.
       log.info('upstream_aborted', { reqId, ms: Date.now() - startedAt })
-      try {
-        res.end()
-      } catch {
-        // socket already closed
+      // Only close the response if headers were already sent (mid-stream abort).
+      // Calling res.end() with no headers sends an implicit HTTP 200 + empty body
+      // which the SDK misreads as "empty or malformed response (HTTP 200)".
+      if (res.headersSent) {
+        try { res.end() } catch { /* socket already closed */ }
       }
       return
     }
