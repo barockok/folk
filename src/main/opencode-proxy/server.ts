@@ -134,10 +134,24 @@ async function handleMessages(
   const abort = new AbortController()
   let clientClosed = false
   req.on('close', () => {
+    // req.complete=true means the client finished sending the full request body
+    // (HTTP/1.1 Connection:close half-close). The client is still reading the
+    // response — do NOT abort the upstream fetch. Only abort on genuine
+    // premature disconnect (req.complete=false).
+    if (req.complete) return
     clientClosed = true
     if (!abort.signal.aborted) {
       abort.abort()
-      log.info('client_closed', { reqId, ms: Date.now() - startedAt, req_complete: req.complete })
+      log.info('client_closed', { reqId, ms: Date.now() - startedAt })
+    }
+  })
+
+  // Detect mid-stream client disconnect (after headers are sent, client drops).
+  res.on('close', () => {
+    if (!clientClosed && !abort.signal.aborted && res.headersSent) {
+      clientClosed = true
+      abort.abort()
+      log.info('client_closed_mid_stream', { reqId, ms: Date.now() - startedAt })
     }
   })
 
@@ -372,10 +386,10 @@ export async function startProxy(): Promise<ProxyHandle> {
       return
     }
 
-    if (req.method === 'GET' && req.url === '/health') {
+    if ((req.method === 'GET' || req.method === 'HEAD') && (req.url === '/health' || req.url === '/')) {
       res.statusCode = 200
       res.setHeader('Content-Type', 'application/json')
-      res.end(JSON.stringify({ ok: true, inFlight: inFlight.size }))
+      res.end(req.method === 'HEAD' ? '' : JSON.stringify({ ok: true, inFlight: inFlight.size }))
       return
     }
 
