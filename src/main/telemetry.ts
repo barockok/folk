@@ -119,6 +119,10 @@ export class Telemetry {
     this._capture('session_error', p)
   }
 
+  captureCrash(p: { source: 'uncaught' | 'unhandled-rejection' }): void {
+    this._capture('app_crash', p)
+  }
+
   captureUpdateAvailable(p: { from_version: string; to_version: string }): void {
     this._capture('update_available', p)
   }

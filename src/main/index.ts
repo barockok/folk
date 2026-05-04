@@ -427,6 +427,25 @@ app.whenReady().then(() => {
     platform: process.platform,
     arch: process.arch
   })
+  // Best-effort crash telemetry. We log only the source channel — no stack,
+  // message, or path, so the privacy contract holds. The process still exits
+  // on uncaughtException as Electron's default handler runs after ours.
+  process.on('uncaughtException', (err) => {
+    try {
+      telemetry?.captureCrash({ source: 'uncaught' })
+    } catch {
+      /* swallow */
+    }
+    console.error('[main] uncaughtException:', err)
+  })
+  process.on('unhandledRejection', (reason) => {
+    try {
+      telemetry?.captureCrash({ source: 'unhandled-rejection' })
+    } catch {
+      /* swallow */
+    }
+    console.error('[main] unhandledRejection:', reason)
+  })
   registerIpc(db, agentManager, mcpManager, telemetry)
 
   if (mainWindow) {
