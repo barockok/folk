@@ -165,6 +165,34 @@ For native module changes (rare): `npx @electron/rebuild -w better-sqlite3` afte
 
 ---
 
+## Releases
+
+**Builds run in GitHub Actions, not locally.** `.github/workflows/release.yml` builds, signs, notarizes, and publishes to GitHub Releases on every `v*` tag push. Don't run `npm run release:mac` on your machine — local codesigning fails on the duplicate "Developer ID Application" certs (login + System keychain ambiguity), and the workflow already has the .p12 + notarization secrets wired.
+
+Release flow:
+
+```bash
+# Bump version (syncs package.json + package-lock.json)
+npm version <patch|minor|major> --no-git-tag-version
+
+# Commit + push + tag
+git add package.json package-lock.json <other files>
+git commit -m "..."
+git push origin main
+git tag v$(node -p "require('./package.json').version")
+git push origin v$(node -p "require('./package.json').version")
+
+# Watch CI
+gh run list --workflow=release.yml --limit 1
+gh run watch
+```
+
+Manual re-run on existing tag: `gh workflow run release.yml --ref v0.1.X`.
+
+Required repo secrets (already configured): `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`, `CSC_LINK`, `CSC_KEY_PASSWORD`. `GH_TOKEN` is the workflow-provided `GITHUB_TOKEN`.
+
+---
+
 ## Gotchas (lessons learned — extend as we hit more)
 
 - **`better-sqlite3` ABI mismatch after `npm install`**: error reads `NODE_MODULE_VERSION 141 vs 133`. Fix: `npx @electron/rebuild -w better-sqlite3`. The system-Node vitest tests are pre-existing-broken because of this — they need the system-Node binding, not the Electron one. Don't try to "fix" them by changing Electron versions.
@@ -178,6 +206,7 @@ For native module changes (rare): `npx @electron/rebuild -w better-sqlite3` afte
 - **The `claude.md` file is the same file as `CLAUDE.md`** on macOS HFS+/APFS (case-insensitive). Editing one edits both.
 - **`claude auth login` not `claude login`.** The top-level `login` arg is treated as a prompt and starts an interactive session that hangs forever. Correct subcommand: `claude auth login`. Binary resolution in dev mode: check `node_modules/@anthropic-ai/claude-agent-sdk-<platform>-<arch>/claude` first — `existsSync('claude')` only checks CWD, not PATH.
 - **Stale macOS Keychain OAuth credentials cause 401 on all providers.** The Claude CLI binary reads `Claude Code-credentials` from Keychain and uses those session credentials *over* `ANTHROPIC_API_KEY` env var. When they expire (after reauth elsewhere, token rotation, etc.), every session gets `authentication_error 401` — even with a valid API key set. Not a code bug. Fix: `claude auth login` in a terminal to refresh the Keychain entry.
+- **Don't run `npm run release:mac` locally.** macOS keychain has two valid "Developer ID Application: Zidni Mubarok (5XGDG79CJX)" certs (one in login, one in System), so `codesign` aborts with `ambiguous`. Even passing the SHA1 via `--config.mac.identity=<hash>` doesn't help — electron-builder forwards the *name* to codesign, not the hash. Releases run in `.github/workflows/release.yml` instead. See **Releases** section.
 - **Inline artifact auto-fix loop.** `InlineVisual` iframe captures runtime errors (`error` + `unhandledrejection`) and posts `folkVisualError` back to the parent. The component forwards via `onError` only when the artifact lives in the latest assistant message. `Conversation.tsx` builds per-message MD components via `buildAssistantMdComponents({sessionId, messageId, isLast})` so the closure sees those flags; the compact-summary path uses a static factory result (`STATIC_ASSISTANT_MD`, `isLast: false`) to suppress fixes when re-rendering history. Dedup is module-level (`autoFixedArtifacts: Set<string>` keyed by `sessionId:messageId:errorMessage`) — never refires for the same error and skipped while the session is already streaming.
 
 ---
