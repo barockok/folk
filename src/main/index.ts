@@ -440,7 +440,7 @@ app.whenReady().then(() => {
     initLogger(join(app.getPath('userData'), 'folk-opencode-proxy.log'))
     void bootProxyWithRetry()
     void mcpManager.syncToClaudeCode()
-    if (mainWindow && !is.dev) setupAutoUpdater(mainWindow)
+    if (mainWindow && !is.dev) setupAutoUpdater(mainWindow, telemetry)
     // Parse the most recent transcripts into AgentManager's LRU so the
     // renderer's first sidebar click hits memory instead of a 1-30MB JSONL
     // parse. Best-effort, errors swallowed inside.
