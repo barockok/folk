@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
+import { useSessions } from '../hooks/useSessions'
 import { useSessionStore } from '../stores/useSessionStore'
 import { useUIStore } from '../stores/useUIStore'
 import { Conversation } from '../pages/sessions/Conversation'
 import { Composer } from '../pages/sessions/Composer'
+import { TodoPanel } from '../pages/sessions/TodoPanel'
 import { Icon } from './icons'
 import type { Session } from '@shared/types'
 
@@ -50,14 +52,14 @@ const popoutStyles = {
     flex: 1,
     display: 'flex',
     flexDirection: 'column' as const,
-    overflow: 'hidden'
+    overflow: 'hidden',
+    minWidth: 0
   }
 }
 
 export function PopoutShell({ sessionId }: { sessionId: string }) {
   const [session, setSession] = useState<Session | null>(null)
-  const setActive = useSessionStore((s) => s.setActive)
-  const hydrateMessages = useSessionStore((s) => s.hydrateMessages)
+  const { setActive, send, cancel } = useSessions()
   const rightSidebarCollapsed = useUIStore((s) => s.rightSidebarCollapsed)
   const toggleRightSidebar = useUIStore((s) => s.toggleRightSidebar)
 
@@ -67,25 +69,16 @@ export function PopoutShell({ sessionId }: { sessionId: string }) {
       if (s) {
         setSession(s)
         setActive(s.id)
-        await hydrateMessages(s.id)
       }
     })()
-  }, [sessionId, setActive, hydrateMessages])
+  }, [sessionId, setActive])
 
-  async function handleSend(text: string) {
-    if (!session) return
-    await window.folk.agent.sendMessage(session.id, text)
-  }
-
-  async function handleCancel() {
-    if (!session) return
-    await window.folk.agent.cancel(session.id)
-  }
+  const active = useSessionStore((s) => s.sessions.find((x) => x.id === sessionId) ?? session)
 
   return (
     <div style={popoutStyles.root}>
       <div style={popoutStyles.titlebar}>
-        <span style={popoutStyles.title}>{session?.title ?? 'Loading…'}</span>
+        <span style={popoutStyles.title}>{active?.title ?? session?.title ?? 'Loading…'}</span>
         <button
           type="button"
           style={popoutStyles.panelToggle}
@@ -97,13 +90,16 @@ export function PopoutShell({ sessionId }: { sessionId: string }) {
       </div>
       <div style={popoutStyles.body}>
         <div style={popoutStyles.main}>
-          <Conversation session={session} />
+          <Conversation session={active ?? null} />
           <Composer
-            session={session}
-            onSend={handleSend}
-            onCancel={handleCancel}
+            session={active ?? null}
+            onSend={(text, atts) => void send(sessionId, text, atts)}
+            onCancel={() => void cancel(sessionId)}
           />
         </div>
+        {!rightSidebarCollapsed && (
+          <TodoPanel session={active ?? null} />
+        )}
       </div>
     </div>
   )
