@@ -136,6 +136,7 @@ export function Sidebar() {
   const activeId = useSessionStore((s) => s.activeId)
   const setActive = useSessionStore((s) => s.setActive)
   const streamingSessions = useSessionStore((s) => s.streamingSessions)
+  const popoutIds = useUIStore((s) => s.popoutIds)
   const requestNewSession = useUIStore((s) => s.requestNewSession)
   const setSidebarWidth = useUIStore((s) => s.setSidebarWidth)
   const { delete: deleteSession, rename, cancel } = useSessions()
@@ -210,6 +211,10 @@ export function Sidebar() {
   const recents = sessions.slice(0, SIDEBAR_RECENTS_LIMIT)
 
   const openSession = (id: string) => {
+    if (popoutIds.has(id)) {
+      void window.folk.window.popout(id)
+      return
+    }
     setActive(id)
     setPage('sessions')
   }
