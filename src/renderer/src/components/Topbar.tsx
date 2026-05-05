@@ -27,6 +27,7 @@ export function Topbar() {
     return found?.title ?? null
   })
   const activeId = useSessionStore((s) => s.activeId)
+  const setActive = useSessionStore((s) => s.setActive)
   const popoutIds = useUIStore((s) => s.popoutIds)
 
   const crumbs: string[] = ['folk', PAGE_LABELS[page]]
@@ -69,7 +70,7 @@ export function Topbar() {
           <button
             type="button"
             className="btn btn-plain btn-icon"
-            onClick={() => void window.folk.window.popout(activeId)}
+            onClick={() => { void window.folk.window.popout(activeId); setActive(null) }}
             title="Pop out session"
             aria-label="Pop out session into its own window"
           >
