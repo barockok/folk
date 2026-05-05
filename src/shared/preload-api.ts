@@ -173,4 +173,9 @@ export interface FolkAPI {
     getConfig: () => Promise<{ distinctId: string; enabled: boolean }>
     setEnabled: (enabled: boolean) => Promise<void>
   }
+  window: {
+    popout: (sessionId: string) => Promise<void>
+    getPopouts: () => Promise<string[]>
+    onPopoutsChanged: (fn: (ids: string[]) => void) => () => void
+  }
 }

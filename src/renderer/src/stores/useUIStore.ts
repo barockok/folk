@@ -29,6 +29,8 @@ interface UIState {
   tweaksOpen: boolean
   windowBlurred: boolean
   forceOnboarding: boolean
+  popoutIds: Set<string>
+  setPopoutIds: (ids: string[]) => void
   folkSkillsEnabled: Record<string, boolean>
   lightboxSrc: string | null
   toggleFolkSkill: (id: string) => void
@@ -83,6 +85,8 @@ export const useUIStore = create<UIState>((set) => ({
   tweaksOpen: false,
   windowBlurred: false,
   forceOnboarding: false,
+  popoutIds: new Set<string>(),
+  setPopoutIds: (ids) => set({ popoutIds: new Set(ids) }),
   lightboxSrc: null,
   folkSkillsEnabled: (() => {
     const saved = localStorage.getItem('folk.folkSkills')

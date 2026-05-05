@@ -1,10 +1,17 @@
-import { BrowserWindow } from 'electron'
+import type { BrowserWindow } from 'electron'
 import { AgentManager } from './agent-manager'
 
-export function wireStreaming(agent: AgentManager, win: BrowserWindow): void {
+export function wireStreaming(agent: AgentManager, getWindows: () => BrowserWindow[]): void {
   const send = (channel: string, payload: unknown): void => {
-    if (win.isDestroyed()) return
-    win.webContents.send(channel, payload)
+    for (const win of getWindows()) {
+      if (!win.isDestroyed()) {
+        try {
+          win.webContents.send(channel, payload)
+        } catch {
+          // window may be in a transitional state; skip it
+        }
+      }
+    }
   }
   agent.on('chunk', (e) => send('agent:chunk', e))
   agent.on('thinking', (e) => send('agent:thinking', e))

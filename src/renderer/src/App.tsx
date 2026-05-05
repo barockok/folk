@@ -6,9 +6,11 @@ import { useGlobalCancelHotkey } from './hooks/useGlobalCancelHotkey'
 import { useScrollFadeBars } from './hooks/useScrollFadeBars'
 import { useTelemetry } from './hooks/useTelemetry'
 import { useUIStore } from './stores/useUIStore'
+import { useSessionStore } from './stores/useSessionStore'
 import { useProfileStore } from './stores/useProfileStore'
 import { useProvidersStore } from './stores/useProvidersStore'
 import { useMCPStore } from './stores/useMCPStore'
+import { PopoutShell } from './components/PopoutShell'
 import { FirstRunOnboarding } from './onboarding/FirstRunOnboarding'
 import { Lightbox } from './components/Lightbox'
 import { SessionsPage } from './pages/SessionsPage'
@@ -61,8 +63,42 @@ export default function App() {
     }
   }, [])
 
+  useEffect(() => {
+    const api = window.folk?.window
+    if (!api) return
+    void api.getPopouts().then((ids) => useUIStore.getState().setPopoutIds(ids))
+    const off = api.onPopoutsChanged((ids) => useUIStore.getState().setPopoutIds(ids))
+    return off
+  }, [])
+
+  // Sync theme/density changes written by another window (e.g. main window
+  // changes theme → popup picks it up via the Web storage event, which fires
+  // in all OTHER windows when localStorage is updated).
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === 'folk.theme' && (e.newValue === 'light' || e.newValue === 'dark')) {
+        useUIStore.getState().setTheme(e.newValue)
+      }
+      if (e.key === 'folk.density' && (e.newValue === 'compact' || e.newValue === 'regular')) {
+        useUIStore.getState().setDensity(e.newValue)
+      }
+      if (e.key === 'folk.activateSession' && e.newValue) {
+        useSessionStore.getState().setActive(e.newValue)
+        useUIStore.getState().setPage('sessions')
+        localStorage.removeItem('folk.activateSession')
+      }
+    }
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
+  }, [])
+
   const onboarded = localStorage.getItem('folk.onboarded') === '1'
   const forceOnboarding = useUIStore((s) => s.forceOnboarding)
+
+  const popoutMatch = /^#?popout\/(.+)$/.exec(window.location.hash)
+  if (popoutMatch) {
+    return <PopoutShell sessionId={popoutMatch[1]} />
+  }
 
   return (
     <>
