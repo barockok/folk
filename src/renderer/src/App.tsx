@@ -6,6 +6,7 @@ import { useGlobalCancelHotkey } from './hooks/useGlobalCancelHotkey'
 import { useScrollFadeBars } from './hooks/useScrollFadeBars'
 import { useTelemetry } from './hooks/useTelemetry'
 import { useUIStore } from './stores/useUIStore'
+import { useSessionStore } from './stores/useSessionStore'
 import { useProfileStore } from './stores/useProfileStore'
 import { useProvidersStore } from './stores/useProvidersStore'
 import { useMCPStore } from './stores/useMCPStore'
@@ -80,6 +81,11 @@ export default function App() {
       }
       if (e.key === 'folk.density' && (e.newValue === 'compact' || e.newValue === 'regular')) {
         useUIStore.getState().setDensity(e.newValue)
+      }
+      if (e.key === 'folk.activateSession' && e.newValue) {
+        useSessionStore.getState().setActive(e.newValue)
+        useUIStore.getState().setPage('sessions')
+        localStorage.removeItem('folk.activateSession')
       }
     }
     window.addEventListener('storage', onStorage)

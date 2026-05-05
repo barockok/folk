@@ -52,9 +52,18 @@ export function CommandPalette() {
     closeCmdk()
   }
 
+  const isPopout = /^#?popout\//.test(window.location.hash)
+
   const openSession = (id: string) => {
     if (popoutIds.has(id)) {
       void window.folk.window.popout(id)
+      closeCmdk()
+      return
+    }
+    if (isPopout) {
+      // Signal the main window to activate this session via storage event.
+      // Popup stores are isolated — direct setActive only affects this window.
+      localStorage.setItem('folk.activateSession', id)
       closeCmdk()
       return
     }
