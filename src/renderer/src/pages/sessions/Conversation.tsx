@@ -1,4 +1,4 @@
-import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import type { Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -33,6 +33,24 @@ function hastText(node: HastNode): string {
 
 type HastNode = { type: string; children?: HastNode[] }
 type HastElement = HastNode & { tagName?: string; properties?: Record<string, unknown> }
+
+function CodeBlock({ code, children }: { code: string; children: ReactNode }) {
+  const [copied, setCopied] = useState(false)
+  const copy = () => {
+    void navigator.clipboard.writeText(code).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    })
+  }
+  return (
+    <div className="md-pre-wrap">
+      <pre>{children}</pre>
+      <button type="button" className="md-pre-copy" onClick={copy} aria-label="Copy code">
+        {copied ? 'Copied!' : 'Copy'}
+      </button>
+    </div>
+  )
+}
 
 const USER_MD_COMPONENTS: Components = {
   img: ({ src, alt }) => {
@@ -117,8 +135,8 @@ function buildAssistantMdComponents(ctx: MdContext): Components {
       const classes = (codeChild.properties?.className ?? []) as string[]
       const langClass = classes.find((c) => /^language-/.test(c)) ?? ''
       const lang = /language-(html|svg)/.exec(langClass)?.[1] as 'html' | 'svg' | undefined
+      const code = hastText(codeChild).replace(/\n$/, '')
       if (lang) {
-        const code = hastText(codeChild).replace(/\n$/, '')
         const onError = ctx.isLast
           ? (err: { message: string; line: number }) => {
               void dispatchArtifactAutoFix(ctx.sessionId, ctx.messageId, err, code, lang)
@@ -126,6 +144,7 @@ function buildAssistantMdComponents(ctx: MdContext): Components {
           : undefined
         return <InlineVisual code={code} lang={lang} onError={onError} />
       }
+      return <CodeBlock code={code}>{children}</CodeBlock>
     }
     return <pre>{children}</pre>
   },

@@ -3081,6 +3081,31 @@ html[data-window-state="blurred"] .badge-ac {
   color: #0a2540;
 }
 [data-theme="dark"] .md code { color: #e4ebf3; background: rgba(255,255,255,0.05); }
+.md-pre-wrap {
+  position: relative;
+  margin: 8px 0 12px;
+}
+.md-pre-wrap pre {
+  margin: 0;
+}
+.md-pre-copy {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 2px 8px;
+  font-family: var(--ff-sans);
+  font-size: 11px;
+  background: rgba(255,255,255,0.08);
+  color: #9ab0c8;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s;
+  line-height: 1.6;
+}
+.md-pre-wrap:hover .md-pre-copy { opacity: 1; }
+.md-pre-copy:hover { background: rgba(255,255,255,0.14); color: #e4ebf3; }
 .md pre {
   background: #0a2540;
   color: #e4ebf3;
