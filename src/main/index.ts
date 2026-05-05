@@ -426,7 +426,10 @@ app.whenReady().then(() => {
     host: process.env.VITE_POSTHOG_HOST ?? 'https://us.i.posthog.com'
   })
   agentManager = new AgentManager(db, (id) => mcpManager.getAccessToken(id), telemetry)
-  windowManager = new WindowManager()
+  windowManager = new WindowManager(() => {
+    const t = readPersistedTheme()
+    return (t ? t === 'dark' : nativeTheme.shouldUseDarkColors) ? '#0a0f1e' : '#ffffff'
+  })
   mcpManager.setBusyCheck(() => agentManager.hasLiveSessions())
   agentManager.setOnAllIdle(() => mcpManager.flushDeferredSync())
   appLaunchedAt = Date.now()

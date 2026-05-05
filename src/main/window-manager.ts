@@ -4,6 +4,11 @@ import { join } from 'node:path'
 export class WindowManager {
   private map = new Map<string, BrowserWindow>()
   private listeners: Array<(ids: string[]) => void> = []
+  private getInitialBg: () => string
+
+  constructor(getInitialBg: () => string) {
+    this.getInitialBg = getInitialBg
+  }
 
   popout(sessionId: string): void {
     const existing = this.map.get(sessionId)
@@ -17,6 +22,8 @@ export class WindowManager {
       height: 720,
       minWidth: 600,
       minHeight: 400,
+      show: false,
+      backgroundColor: this.getInitialBg(),
       titleBarStyle: 'hiddenInset',
       trafficLightPosition: { x: 16, y: 12 },
       webPreferences: {
@@ -27,6 +34,7 @@ export class WindowManager {
       }
     })
 
+    win.on('ready-to-show', () => { win.show() })
     win.on('blur', () => { win.webContents.send('app:windowState', 'blurred') })
     win.on('focus', () => { win.webContents.send('app:windowState', 'focused') })
 
