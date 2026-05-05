@@ -12,6 +12,10 @@ import {
 import type { Attachment, DiscoveredCommand, PermissionMode, Session } from '@shared/types'
 import { Icon } from '../../components/icons'
 import { MCPPicker } from './MCPPicker'
+import {
+  MarkdownComposerInput,
+  type MarkdownComposerInputHandle
+} from './MarkdownComposerInput'
 
 const PERMISSION_LABELS: Record<PermissionMode, { label: string; hint: string }> = {
   default: { label: 'Ask', hint: 'Prompt before risky tools' },
@@ -78,7 +82,7 @@ export function Composer({ session, onSend, onCancel, onClear, onConfigureNew, o
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [isDragging, setIsDragging] = useState(false)
   const [slashIndex, setSlashIndex] = useState(0)
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const textareaRef = useRef<MarkdownComposerInputHandle>(null)
   const popRef = useRef<HTMLDivElement>(null)
   const permPopRef = useRef<HTMLDivElement>(null)
   const dragCounterRef = useRef(0)
@@ -92,7 +96,7 @@ export function Composer({ session, onSend, onCancel, onClear, onConfigureNew, o
   useEffect(() => {
     const saved = draftKey ? (useSessionStore.getState().composerDrafts[draftKey] ?? '') : ''
     setText(saved)
-    if (textareaRef.current) textareaRef.current.style.height = 'auto'
+    textareaRef.current?.resetHeight()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draftKey])
 
@@ -163,14 +167,6 @@ export function Composer({ session, onSend, onCancel, onClear, onConfigureNew, o
   }, [slashOpen, text, diskAsSlash])
 
   const disabled = !session
-
-  // Auto-grow textarea
-  const handleInput = useCallback(() => {
-    const el = textareaRef.current
-    if (!el) return
-    el.style.height = 'auto'
-    el.style.height = Math.min(el.scrollHeight, 180) + 'px'
-  }, [])
 
   const setPage = useUIStore((s) => s.setPage)
   const toast = useUIStore((s) => s.toast)
@@ -297,7 +293,7 @@ export function Composer({ session, onSend, onCancel, onClear, onConfigureNew, o
   const runSlash = useCallback(
     async (cmd: SlashCommand) => {
       setText('')
-      if (textareaRef.current) textareaRef.current.style.height = 'auto'
+      textareaRef.current?.resetHeight()
       if (cmd.kind === 'prompt' && cmd.promptText) {
         onSend(cmd.promptText)
         return
@@ -329,9 +325,7 @@ export function Composer({ session, onSend, onCancel, onClear, onConfigureNew, o
     if (draftKey) clearComposerDraft(draftKey)
     setText('')
     setAttachments([])
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto'
-    }
+    textareaRef.current?.resetHeight()
   }, [text, disabled, onSend, attachments, runSlash, diskAsSlash, session, clearPromptSuggestions])
 
   const handleKeyDown = useCallback(
@@ -378,11 +372,29 @@ export function Composer({ session, onSend, onCancel, onClear, onConfigureNew, o
           return
         }
       }
-      // Enter sends. Shift+Enter inserts a newline (default behavior).
-      // IME composition (e.nativeEvent.isComposing) must not trigger send.
-      if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+      // Cmd/Ctrl+Enter always sends (escape hatch when inside a list).
+      if (
+        e.key === 'Enter' &&
+        (e.metaKey || e.ctrlKey) &&
+        !e.nativeEvent.isComposing
+      ) {
         e.preventDefault()
         handleSend()
+        return
+      }
+      // Enter sends. Shift+Enter inserts newline. Inside lists (TipTap),
+      // Enter splits the list item — let the editor handle it.
+      // IME composition (e.nativeEvent.isComposing) must not trigger send.
+      if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+        const editor = textareaRef.current?.getEditor() ?? null
+        const inList =
+          editor?.isActive('listItem') ||
+          editor?.isActive('bulletList') ||
+          editor?.isActive('orderedList')
+        if (!inList) {
+          e.preventDefault()
+          handleSend()
+        }
       }
     },
     [handleSend, slashOpen, slashMatches, slashIndex, runSlash, session?.status, onCancel]
@@ -791,16 +803,14 @@ export function Composer({ session, onSend, onCancel, onClear, onConfigureNew, o
             ))}
           </div>
         )}
-        <textarea
+        <MarkdownComposerInput
           ref={textareaRef}
           value={text}
-          onChange={(e) => setText(e.target.value)}
-          onInput={handleInput}
+          onChange={setText}
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
           placeholder={disabled ? 'Select a session to start…' : 'Ask folk anything…'}
           disabled={disabled}
-          rows={1}
         />
         <div className="composer-row">
           {/* Model chip + popover */}
