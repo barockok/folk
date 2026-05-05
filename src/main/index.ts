@@ -152,6 +152,11 @@ async function bootProxyWithRetry(): Promise<void> {
 function buildApplicationMenu(): void {
   const isMac = process.platform === 'darwin'
   const sendToRenderer = (channel: string): void => {
+    const focused = BrowserWindow.getFocusedWindow()
+    if (focused && !focused.isDestroyed()) {
+      focused.webContents.send(channel)
+      return
+    }
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel)
   }
 
