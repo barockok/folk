@@ -104,6 +104,7 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { Database } from './database'
 import { AgentManager } from './agent-manager'
 import { MCPManager } from './mcp-manager'
+import { WindowManager } from './window-manager'
 import { registerIpc } from './ipc-handlers'
 import { wireStreaming } from './ipc-streaming'
 import { startProxy, ProxyHandle } from './opencode-proxy/server'
@@ -119,6 +120,7 @@ let mcpManager: MCPManager
 let telemetry: Telemetry
 let appLaunchedAt = 0
 let mainWindow: BrowserWindow | null = null
+let windowManager: WindowManager
 let opencodeProxy: ProxyHandle | null = null
 let proxyShuttingDown = false
 let proxyRestartAttempts = 0
@@ -419,6 +421,7 @@ app.whenReady().then(() => {
     host: process.env.VITE_POSTHOG_HOST ?? 'https://us.i.posthog.com'
   })
   agentManager = new AgentManager(db, (id) => mcpManager.getAccessToken(id), telemetry)
+  windowManager = new WindowManager()
   mcpManager.setBusyCheck(() => agentManager.hasLiveSessions())
   agentManager.setOnAllIdle(() => mcpManager.flushDeferredSync())
   appLaunchedAt = Date.now()
@@ -446,11 +449,15 @@ app.whenReady().then(() => {
     }
     console.error('[main] unhandledRejection:', reason)
   })
-  registerIpc(db, agentManager, mcpManager, telemetry)
+  registerIpc(db, agentManager, mcpManager, telemetry, windowManager)
 
-  if (mainWindow) {
-    wireStreaming(agentManager, mainWindow)
-  }
+  const getStreamTargets = (): BrowserWindow[] =>
+    [mainWindow, ...windowManager.getAllWindows()].filter((w): w is BrowserWindow => !!w && !w.isDestroyed())
+  wireStreaming(agentManager, getStreamTargets)
+  windowManager.onPopoutsChanged(() => {
+    const targets = [mainWindow, ...windowManager.getAllWindows()].filter((w): w is BrowserWindow => !!w && !w.isDestroyed())
+    windowManager.broadcastTo(targets)
+  })
 
   // Defer everything non-critical to first paint: proxy boot (port bind +
   // retries), MCP→ClaudeCode sync, and the auto-updater. Running these inline
