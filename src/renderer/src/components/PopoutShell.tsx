@@ -5,6 +5,7 @@ import { useUIStore } from '../stores/useUIStore'
 import { Conversation } from '../pages/sessions/Conversation'
 import { Composer } from '../pages/sessions/Composer'
 import { TodoPanel } from '../pages/sessions/TodoPanel'
+import { FileViewer } from '../pages/sessions/FileViewer'
 import { Icon } from './icons'
 import type { Session } from '@shared/types'
 
@@ -43,17 +44,9 @@ const popoutStyles = {
     padding: '4px 6px',
     color: 'var(--fg-faint)'
   },
-  body: {
+  wrap: {
     flex: 1,
-    display: 'flex',
-    overflow: 'hidden'
-  },
-  main: {
-    flex: 1,
-    display: 'flex',
-    flexDirection: 'column' as const,
-    overflow: 'hidden',
-    minWidth: 0
+    minHeight: 0
   }
 }
 
@@ -62,6 +55,7 @@ export function PopoutShell({ sessionId }: { sessionId: string }) {
   const { setActive, send, cancel } = useSessions()
   const rightSidebarCollapsed = useUIStore((s) => s.rightSidebarCollapsed)
   const toggleRightSidebar = useUIStore((s) => s.toggleRightSidebar)
+  const viewerFilePath = useUIStore((s) => s.viewerFilePath)
 
   useEffect(() => {
     void (async () => {
@@ -89,17 +83,21 @@ export function PopoutShell({ sessionId }: { sessionId: string }) {
           <Icon name="sidebar" size={14} style={{ transform: 'scaleX(-1)' }} />
         </button>
       </div>
-      <div style={popoutStyles.body}>
-        <div style={popoutStyles.main}>
-          <Conversation session={active ?? null} />
+      <div className="sess-wrap" style={popoutStyles.wrap}>
+        <div className="sess-main">
+          <div className="sess-body-wrap">
+            <Conversation key={sessionId} session={active ?? null} />
+          </div>
           <Composer
             session={active ?? null}
             onSend={(text, atts) => void send(sessionId, text, atts)}
             onCancel={() => void cancel(sessionId)}
           />
         </div>
-        {!rightSidebarCollapsed && (
-          <TodoPanel session={active ?? null} />
+        {viewerFilePath ? (
+          <FileViewer path={viewerFilePath} />
+        ) : (
+          !rightSidebarCollapsed && <TodoPanel session={active ?? null} />
         )}
       </div>
     </div>
