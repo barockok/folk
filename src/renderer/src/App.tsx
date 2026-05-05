@@ -9,6 +9,7 @@ import { useUIStore } from './stores/useUIStore'
 import { useProfileStore } from './stores/useProfileStore'
 import { useProvidersStore } from './stores/useProvidersStore'
 import { useMCPStore } from './stores/useMCPStore'
+import { PopoutShell } from './components/PopoutShell'
 import { FirstRunOnboarding } from './onboarding/FirstRunOnboarding'
 import { Lightbox } from './components/Lightbox'
 import { SessionsPage } from './pages/SessionsPage'
@@ -61,8 +62,21 @@ export default function App() {
     }
   }, [])
 
+  useEffect(() => {
+    const api = window.folk?.window
+    if (!api) return
+    void api.getPopouts().then((ids) => useUIStore.getState().setPopoutIds(ids))
+    const off = api.onPopoutsChanged((ids) => useUIStore.getState().setPopoutIds(ids))
+    return off
+  }, [])
+
   const onboarded = localStorage.getItem('folk.onboarded') === '1'
   const forceOnboarding = useUIStore((s) => s.forceOnboarding)
+
+  const popoutMatch = /^#?popout\/(.+)$/.exec(window.location.hash)
+  if (popoutMatch) {
+    return <PopoutShell sessionId={popoutMatch[1]} />
+  }
 
   return (
     <>
