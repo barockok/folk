@@ -40,6 +40,7 @@ export class WindowManager {
     this.broadcast()
 
     win.on('closed', () => {
+      if (!this.map.has(sessionId)) return
       this.map.delete(sessionId)
       this.broadcast()
     })
