@@ -455,8 +455,7 @@ app.whenReady().then(() => {
     [mainWindow, ...windowManager.getAllWindows()].filter((w): w is BrowserWindow => !!w && !w.isDestroyed())
   wireStreaming(agentManager, getStreamTargets)
   windowManager.onPopoutsChanged(() => {
-    const targets = [mainWindow, ...windowManager.getAllWindows()].filter((w): w is BrowserWindow => !!w && !w.isDestroyed())
-    windowManager.broadcastTo(targets)
+    windowManager.broadcastTo(getStreamTargets())
   })
 
   // Defer everything non-critical to first paint: proxy boot (port bind +

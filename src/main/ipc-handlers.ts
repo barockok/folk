@@ -1,4 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, shell, type OpenDialogOptions } from 'electron'
+import { WindowManager } from './window-manager'
 import { execFile, spawn } from 'node:child_process'
 import { promisify } from 'node:util'
 import { existsSync } from 'node:fs'
@@ -144,7 +145,8 @@ export function registerIpc(
   db: Database,
   agent: AgentManager,
   mcp: MCPManager,
-  telemetry: Telemetry
+  telemetry: Telemetry,
+  windowManager: WindowManager
 ): void {
   ipcMain.handle('sessions:list', () => agent.listSessions())
   ipcMain.handle('telemetry:getConfig', () => telemetry.getConfig())
@@ -153,7 +155,14 @@ export function registerIpc(
   })
   ipcMain.handle('sessions:get', (_e, id: string) => agent.getSession(id))
   ipcMain.handle('sessions:create', (_e, config: SessionConfig) => agent.createSession(config))
-  ipcMain.handle('sessions:delete', (_e, id: string) => agent.deleteSession(id))
+  ipcMain.handle('sessions:delete', (_e, id: string) => {
+    windowManager.close(id)
+    return agent.deleteSession(id)
+  })
+  ipcMain.handle('window:popout', (_e, sessionId: string) => {
+    windowManager.popout(sessionId)
+  })
+  ipcMain.handle('window:getPopouts', () => windowManager.getPopoutIds())
   ipcMain.handle('sessions:clear', (_e, id: string) => agent.clearSession(id))
 
   // Read an absolute path for the in-app file viewer. Caps the size so a
