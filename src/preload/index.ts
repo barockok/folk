@@ -164,6 +164,11 @@ const folk: FolkAPI = {
   telemetry: {
     getConfig: () => ipcRenderer.invoke('telemetry:getConfig'),
     setEnabled: (enabled: boolean) => ipcRenderer.invoke('telemetry:setEnabled', enabled)
+  },
+  window: {
+    popout: (sessionId) => ipcRenderer.invoke('window:popout', sessionId),
+    getPopouts: () => ipcRenderer.invoke('window:getPopouts'),
+    onPopoutsChanged: (fn) => listen<string[]>('window:popouts', fn)
   }
 }
 
