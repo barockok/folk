@@ -26,6 +26,8 @@ export function Topbar() {
     const found = s.sessions.find((x) => x.id === s.activeId)
     return found?.title ?? null
   })
+  const activeId = useSessionStore((s) => s.activeId)
+  const popoutIds = useUIStore((s) => s.popoutIds)
 
   const crumbs: string[] = ['folk', PAGE_LABELS[page]]
   if (page === 'sessions' && activeSessionTitle) {
@@ -63,6 +65,17 @@ export function Topbar() {
           <Icon name="search" size={14} />
           <span className="kbd">⌘K</span>
         </button>
+        {page === 'sessions' && activeId && !popoutIds.has(activeId) && (
+          <button
+            type="button"
+            className="btn btn-plain btn-icon"
+            onClick={() => void window.folk.window.popout(activeId)}
+            title="Pop out session"
+            aria-label="Pop out session into its own window"
+          >
+            <Icon name="external" size={14} />
+          </button>
+        )}
         {page === 'sessions' && (
           <button
             type="button"
