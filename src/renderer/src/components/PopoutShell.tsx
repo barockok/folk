@@ -73,12 +73,13 @@ export function PopoutShell({ sessionId }: { sessionId: string }) {
     })()
   }, [sessionId, setActive])
 
-  const active = useSessionStore((s) => s.sessions.find((x) => x.id === sessionId) ?? session)
+  const storeSession = useSessionStore((s) => s.sessions.find((x) => x.id === sessionId) ?? null)
+  const active = storeSession ?? session
 
   return (
     <div style={popoutStyles.root}>
       <div style={popoutStyles.titlebar}>
-        <span style={popoutStyles.title}>{active?.title ?? session?.title ?? 'Loading…'}</span>
+        <span style={popoutStyles.title}>{active?.title ?? 'Loading…'}</span>
         <button
           type="button"
           style={popoutStyles.panelToggle}
