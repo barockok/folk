@@ -6,6 +6,7 @@ import { Conversation } from '../pages/sessions/Conversation'
 import { Composer } from '../pages/sessions/Composer'
 import { TodoPanel } from '../pages/sessions/TodoPanel'
 import { FileViewer } from '../pages/sessions/FileViewer'
+import { CommandPalette } from './CommandPalette'
 import { Icon } from './icons'
 import type { Session } from '@shared/types'
 
@@ -72,6 +73,7 @@ export function PopoutShell({ sessionId }: { sessionId: string }) {
 
   return (
     <div style={popoutStyles.root}>
+      <CommandPalette />
       <div style={popoutStyles.titlebar}>
         <span style={popoutStyles.title}>{active?.title ?? 'Loading…'}</span>
         <button
