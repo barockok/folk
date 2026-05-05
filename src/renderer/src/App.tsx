@@ -70,6 +70,22 @@ export default function App() {
     return off
   }, [])
 
+  // Sync theme/density changes written by another window (e.g. main window
+  // changes theme → popup picks it up via the Web storage event, which fires
+  // in all OTHER windows when localStorage is updated).
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === 'folk.theme' && (e.newValue === 'light' || e.newValue === 'dark')) {
+        useUIStore.getState().setTheme(e.newValue)
+      }
+      if (e.key === 'folk.density' && (e.newValue === 'compact' || e.newValue === 'regular')) {
+        useUIStore.getState().setDensity(e.newValue)
+      }
+    }
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
+  }, [])
+
   const onboarded = localStorage.getItem('folk.onboarded') === '1'
   const forceOnboarding = useUIStore((s) => s.forceOnboarding)
 
