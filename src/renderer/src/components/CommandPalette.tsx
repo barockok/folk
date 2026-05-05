@@ -20,6 +20,7 @@ export function CommandPalette() {
   const setPage = useUIStore((s) => s.setPage)
   const sessions = useSessionStore((s) => s.sessions)
   const setActive = useSessionStore((s) => s.setActive)
+  const popoutIds = useUIStore((s) => s.popoutIds)
 
   const [q, setQ] = useState('')
   const [sel, setSel] = useState(0)
@@ -52,6 +53,11 @@ export function CommandPalette() {
   }
 
   const openSession = (id: string) => {
+    if (popoutIds.has(id)) {
+      void window.folk.window.popout(id)
+      closeCmdk()
+      return
+    }
     setActive(id)
     setPage('sessions')
     closeCmdk()
