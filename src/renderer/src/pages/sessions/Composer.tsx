@@ -907,7 +907,7 @@ export function Composer({ session, onSend, onCancel, onClear, onConfigureNew, o
                           >
                             <div className="m-main">
                               <div className="m-disp">{m.label ?? m.id}</div>
-                              <div className="m-id">{m.id}</div>
+                              {m.id !== 'claude-auto' && <div className="m-id">{m.id}</div>}
                             </div>
                             {isOn && (
                               <svg

@@ -65,7 +65,11 @@ export function useProviders() {
             : p.authMode === 'claude-code'
               ? (STATIC_FALLBACK[p.id] ?? [])
               : []
-        return models
+        const withAuto: ModelConfig[] =
+          p.id === 'anthropic'
+            ? [{ id: 'claude-auto', label: 'Automatic', enabled: true }, ...models]
+            : models
+        return withAuto
           .filter((m) => m.enabled)
           .map((m) => ({ providerId: p.id, providerName: p.name, ...m }))
       }),

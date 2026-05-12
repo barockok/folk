@@ -472,7 +472,7 @@ export class AgentManager extends EventEmitter {
       options: {
         pathToClaudeCodeExecutable: claudeBin,
         cwd: session.workingDir,
-        model: session.modelId,
+        model: session.modelId === 'claude-auto' ? undefined : session.modelId,
         env: envOverlay,
         mcpServers: mcpMap,
         // Lock the CLI to only the mcpServers we pass — but only when the
@@ -1336,6 +1336,12 @@ export class AgentManager extends EventEmitter {
 
   #resolveProvider(modelId: string) {
     const providers = this.db.listProviders()
+    // 'claude-auto' = let the SDK pick the model; route through Anthropic.
+    if (modelId === 'claude-auto') {
+      const anthropic = providers.find((p) => p.id === 'anthropic' && p.isEnabled)
+      if (!anthropic) throw new Error('No Anthropic provider configured for automatic model selection')
+      return anthropic
+    }
     let match = providers.find((p) => p.models.some((m) => m.id === modelId))
     // Fallback: when the user hasn't fetched/persisted models yet, the
     // provider's `models` array is empty. The renderer surfaces a hard-coded

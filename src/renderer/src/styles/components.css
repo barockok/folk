@@ -3308,11 +3308,11 @@ html[data-window-state="blurred"] .badge-ac {
 .tool-card.failed,
 .tool-card.done { border: 0; }
 .tool-hd {
-  display: flex; align-items: center; gap: 8px;
-  padding: 2px 0;
+  display: flex; align-items: center; gap: 6px;
+  padding: 1px 0;
   cursor: pointer;
   user-select: none;
-  font-size: 12px;
+  font-size: 10px;
   border: 0;
   color: var(--fg-faint);
   background: transparent;
@@ -3322,7 +3322,7 @@ html[data-window-state="blurred"] .badge-ac {
 .tool-hd:hover { color: var(--body); }
 .tool-card[data-open="true"] .tool-hd { border: 0; }
 .tool-ic {
-  width: 14px; height: 14px;
+  width: 11px; height: 11px;
   border-radius: 0;
   background: transparent;
   display: grid; place-items: center;
@@ -3338,23 +3338,23 @@ html[data-window-state="blurred"] .badge-ac {
   color: inherit;
   font-weight: 400;
   font-family: var(--ff-sans);
-  font-size: 12px;
+  font-size: 10px;
 }
 .tool-srv {
   color: var(--fg-faint);
   font-family: var(--ff-mono);
-  font-size: 11px;
+  font-size: 10px;
   opacity: 0.7;
 }
 .tool-status {
   margin-left: auto;
-  display: flex; align-items: center; gap: 4px;
-  font-size: 11px;
+  display: flex; align-items: center; gap: 3px;
+  font-size: 10px;
   color: var(--fg-faint);
   font-family: var(--ff-mono);
   font-feature-settings: "tnum";
 }
-.tool-status .dot { width: 5px; height: 5px; }
+.tool-status .dot { width: 4px; height: 4px; }
 .tool-caret {
   color: var(--fg-faint);
   transition: transform 160ms;
@@ -3395,8 +3395,8 @@ html[data-window-state="blurred"] .badge-ac {
 .msg-tools {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  margin: 2px 0 6px;
+  gap: 1px;
+  margin: 1px 0 4px;
 }
 .msg-divider {
   display: flex;
@@ -3917,10 +3917,10 @@ html[data-window-state="blurred"] .badge-ac {
   text-align: left;
   font: inherit;
   color: var(--fg-faint);
-  padding: 2px 0;
-  gap: 8px;
+  padding: 1px 0;
+  gap: 6px;
 }
-.tool-ic { width: 14px; height: 14px; }
+.tool-ic { width: 11px; height: 11px; }
 .tool-steps {
   display: flex; flex-direction: column; gap: 2px;
   padding: 8px 14px 10px;

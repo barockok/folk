@@ -7,6 +7,7 @@ import { useUIStore } from '../../stores/useUIStore'
 import type { ChatMessage } from '../../stores/useSessionStore'
 import type { MessageBlock, PermissionRequest, PersistedToolCall, Session } from '@shared/types'
 import { ToolCard, humanizeToolName } from './ToolCard'
+import { Icon } from '../../components/icons'
 import { InlineVisual } from './InlineVisual'
 
 // Local-image rewrite: absolute paths and file:// URLs aren't loadable by the
@@ -624,7 +625,9 @@ function ToolGroup({ calls }: { calls: PersistedToolCall[] }) {
   return (
     <div className={`tool-card tool-group ${status}`} data-open={open ? 'true' : 'false'}>
       <button type="button" className="tool-hd" onClick={() => setOpen((v) => !v)}>
-        <span className="tool-ic">▦</span>
+        <span className="tool-ic">
+          <Icon name="terminal" size={10} />
+        </span>
         <span className="tool-name">
           {calls.length} tool calls
         </span>
@@ -636,7 +639,9 @@ function ToolGroup({ calls }: { calls: PersistedToolCall[] }) {
           {running > 0 && <span className="spinner" />}
           {errors > 0 ? `${errors} err` : running > 0 ? `${running} running` : 'done'}
         </span>
-        <span className="tool-caret">{open ? '▾' : '▸'}</span>
+        <span className="tool-caret">
+          <Icon name="chevronRight" size={10} />
+        </span>
       </button>
       {open && (
         <div className="tool-body" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>

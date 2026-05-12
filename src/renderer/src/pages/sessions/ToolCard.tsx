@@ -163,7 +163,7 @@ function AskUserQuestionCard({
       return (
         <div className="tool-card ask-card done">
           <div className="ask-head">
-            <Icon name="terminal" size={12} />
+            <Icon name="terminal" size={10} />
             <span className="ask-title">Question</span>
             <span className="ask-status">answered</span>
           </div>
@@ -181,7 +181,7 @@ function AskUserQuestionCard({
     return (
       <div className={`tool-card ask-card ${answered ? 'done' : 'running'}`}>
         <div className="ask-head">
-          <Icon name="terminal" size={12} />
+          <Icon name="terminal" size={10} />
           <span className="ask-title">Question</span>
           {answered && <span className="ask-status">answered</span>}
         </div>
@@ -245,7 +245,7 @@ function AskUserQuestionCard({
     return (
       <div className="tool-card ask-card done">
         <div className="ask-head">
-          <Icon name="terminal" size={12} />
+          <Icon name="terminal" size={10} />
           <span className="ask-title">{parsed.questions.length} questions</span>
           <span className="ask-status">answered</span>
         </div>
@@ -271,7 +271,7 @@ function AskUserQuestionCard({
   return (
     <div className={`tool-card ask-card ${answered ? 'done' : 'running'}`}>
       <div className="ask-head">
-        <Icon name="terminal" size={12} />
+        <Icon name="terminal" size={10} />
         <span className="ask-title">{parsed.questions.length} questions</span>
         {answered && <span className="ask-status">answered</span>}
       </div>
@@ -469,7 +469,7 @@ function DiffCard({
     <div className={`tool-card diff-card ${statusClass(status)}`} data-open={open ? 'true' : 'false'}>
       <button type="button" className="tool-hd" onClick={() => setOpen((v) => !v)}>
         <span className="tool-ic">
-          <Icon name="terminal" size={12} />
+          <Icon name="terminal" size={10} />
         </span>
         <span className="tool-name" title={call.tool}>{humanizeToolName(call.tool).label}</span>
         {path && <span className="tool-srv" title={path}>{path}</span>}
@@ -482,7 +482,7 @@ function DiffCard({
           {status}
         </span>
         <span className="tool-caret">
-          <Icon name="chevronRight" size={12} />
+          <Icon name="chevronRight" size={10} />
         </span>
       </button>
       {open && (
@@ -695,7 +695,7 @@ function BashBackgroundCard({
     <div className={`tool-card ${statusClass(status)}`} data-open={open ? 'true' : 'false'}>
       <button type="button" className="tool-hd" onClick={() => setOpen((v) => !v)}>
         <span className="tool-ic">
-          <Icon name="terminal" size={12} />
+          <Icon name="terminal" size={10} />
         </span>
         <span className="tool-name">Bash</span>
         <span className="tool-srv" title={cmd}>
@@ -722,7 +722,7 @@ function BashBackgroundCard({
           {bashId ? bashId : status === 'running' ? 'spawning…' : status}
         </span>
         <span className="tool-caret">
-          <Icon name="chevronRight" size={12} />
+          <Icon name="chevronRight" size={10} />
         </span>
       </button>
       {open && (
@@ -772,7 +772,7 @@ function BashOutputCard({
     <div className={`tool-card ${statusClass(status)}`} data-open={open ? 'true' : 'false'}>
       <button type="button" className="tool-hd" onClick={() => setOpen((v) => !v)}>
         <span className="tool-ic">
-          <Icon name="terminal" size={12} />
+          <Icon name="terminal" size={10} />
         </span>
         <span className="tool-name">{call.tool}</span>
         <span className="tool-srv" title={id || undefined}>
@@ -799,7 +799,7 @@ function BashOutputCard({
           {liveBadge}
         </span>
         <span className="tool-caret">
-          <Icon name="chevronRight" size={12} />
+          <Icon name="chevronRight" size={10} />
         </span>
       </button>
       {open && (
@@ -840,7 +840,7 @@ function KillBashCard({
     <div className={`tool-card ${statusClass(status)}`}>
       <div className="tool-hd" style={{ cursor: 'default' }}>
         <span className="tool-ic">
-          <Icon name="terminal" size={12} />
+          <Icon name="terminal" size={10} />
         </span>
         <span className="tool-name">{call.tool}</span>
         <span className="tool-srv" title={id || undefined}>
@@ -900,7 +900,7 @@ export function ToolCard({ call, sessionId }: ToolCardProps) {
       return (
         <div className={`tool-card todo-card ${statusClass(status)}`}>
           <div className="todo-head">
-            <Icon name="terminal" size={12} />
+            <Icon name="terminal" size={10} />
             <span className="todo-title">Todos</span>
             <span className="todo-count">{done}/{todos.length}</span>
           </div>
@@ -926,7 +926,7 @@ export function ToolCard({ call, sessionId }: ToolCardProps) {
     <div className={`tool-card ${statusClass(status)}`} data-open={open ? 'true' : 'false'}>
       <button type="button" className="tool-hd" onClick={() => setOpen((v) => !v)}>
         <span className="tool-ic">
-          <Icon name="terminal" size={12} />
+          <Icon name="terminal" size={10} />
         </span>
         <span className="tool-name" title={call.tool}>{humanizeToolName(call.tool).label}</span>
         {summary && <span className="tool-srv" title={summary}>{summary}</span>}
@@ -939,7 +939,7 @@ export function ToolCard({ call, sessionId }: ToolCardProps) {
             : status}
         </span>
         <span className="tool-caret">
-          <Icon name="chevronRight" size={12} />
+          <Icon name="chevronRight" size={10} />
         </span>
       </button>
       {open && (
