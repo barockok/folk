@@ -416,10 +416,7 @@ app.whenReady().then(() => {
   createWindow()
 
   db = new Database(join(app.getPath('userData'), 'folk.db'))
-  mcpManager = new MCPManager(
-    db,
-    join(app.getPath('userData'), 'folk-managed-mcps.json')
-  )
+  mcpManager = new MCPManager(join(app.getPath('userData'), 'mcp-oauth.json'))
   telemetry = new Telemetry({
     userDataDir: app.getPath('userData'),
     posthogKey: process.env.VITE_POSTHOG_KEY ?? '',
@@ -472,7 +469,6 @@ app.whenReady().then(() => {
   setImmediate(() => {
     initLogger(join(app.getPath('userData'), 'folk-opencode-proxy.log'))
     void bootProxyWithRetry()
-    void mcpManager.syncToClaudeCode()
     if (mainWindow && !is.dev) setupAutoUpdater(mainWindow, telemetry)
     // Parse the most recent transcripts into AgentManager's LRU so the
     // renderer's first sidebar click hits memory instead of a 1-30MB JSONL

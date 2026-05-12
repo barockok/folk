@@ -133,41 +133,8 @@ describe('providers CRUD', () => {
   })
 })
 
-describe('mcp servers CRUD', () => {
-  let dir: string
-  let db: Database
-
-  beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'folk-db-'))
-    db = new Database(join(dir, 'folk.db'))
-  })
-
-  afterEach(() => {
-    db.close()
-    rmSync(dir, { recursive: true, force: true })
-  })
-
-  it('saveMCP persists stdio server with args/env round-trip', () => {
-    db.saveMCP({
-      id: 'fs',
-      name: 'Filesystem',
-      template: 'filesystem',
-      transport: 'stdio',
-      command: 'npx',
-      args: ['-y', '@modelcontextprotocol/server-filesystem', '/tmp'],
-      env: { DEBUG: '1' },
-      url: null,
-      isEnabled: true,
-      status: 'stopped',
-      lastError: null,
-      toolCount: null,
-      createdAt: Date.now()
-    })
-    const got = db.listMCPs()[0]
-    expect(got.args).toEqual(['-y', '@modelcontextprotocol/server-filesystem', '/tmp'])
-    expect(got.env).toEqual({ DEBUG: '1' })
-  })
-})
+// MCP CRUD tests removed: MCP servers live in ~/.claude.json now (see
+// mcp-config-store.ts), not folk's SQLite.
 
 describe('profile', () => {
   let dir: string

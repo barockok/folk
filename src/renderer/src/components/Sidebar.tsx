@@ -132,6 +132,7 @@ export function Sidebar() {
   const setPage = useUIStore((s) => s.setPage)
   const collapsed = useUIStore((s) => s.sidebarCollapsed)
   const nickname = useProfileStore((s) => s.profile?.nickname)
+  const avatarColor = useProfileStore((s) => s.profile?.avatarColor)
   const sessions = useSessionStore((s) => s.sessions)
   const activeId = useSessionStore((s) => s.activeId)
   const setActive = useSessionStore((s) => s.setActive)
@@ -389,7 +390,12 @@ export function Sidebar() {
         }}
         title={collapsed ? `${displayName} — profile` : undefined}
       >
-        <div className="sb-profile-av">{initial}</div>
+        <div
+          className="sb-profile-av"
+          style={avatarColor ? { background: avatarColor } : undefined}
+        >
+          {initial}
+        </div>
         <div className="sb-profile-text sb-fade" style={{ minWidth: 0, flex: 1 }}>
           <div className="sb-profile-name trunc">{displayName}</div>
           <div className="sb-profile-sub trunc">How folk refers to you</div>

@@ -18,7 +18,7 @@ import type { Telemetry, ProviderType, ErrorCode } from './telemetry'
 import { FOLK_PRESENTATION_PROMPT, formatProfilePrompt } from './system-prompt'
 import { waitForProxyPort } from './opencode-proxy/state'
 import { startOpenRouterProxy } from './openrouter-proxy'
-import { discoverLocalMCPs } from './mcp-local-discovery'
+import { listAllMCPs } from './mcp-config-store'
 import type {
   Session,
   SessionConfig,
@@ -377,65 +377,40 @@ export class AgentManager extends EventEmitter {
     }
     if (baseUrlOverride) envOverlay.ANTHROPIC_BASE_URL = baseUrlOverride
 
+    // MCP servers all live in Claude Code's config files now. When the user
+    // has set a per-session allowlist, we read them via the config store,
+    // filter, and pass with strictMcpConfig. With no allowlist, we let the
+    // CLI's own discovery take over (pass nothing).
     const mcpMap: Record<string, McpServerConfig> = {}
     const allowList = session.enabledMcpIds
     const allowSet = allowList ? new Set(allowList) : null
-    // folk-managed (DB) MCPs.
-    for (const m of this.db
-      .listMCPs()
-      .filter((x) => x.isEnabled && (!allowSet || allowSet.has(x.id)))) {
-      if (m.transport === 'stdio' && m.command) {
-        mcpMap[m.name] = {
-          type: 'stdio',
-          command: m.command,
-          args: m.args ?? [],
-          env: m.env ?? undefined
-        }
-      } else if (m.transport === 'http' && m.url) {
-        // Resolve OAuth access token (refreshing if near-expiry) and inject
-        // as Bearer header. Falls through to whatever the user supplied in
-        // headers if there's no OAuth state.
-        const headers: Record<string, string> = { ...(m.headers ?? {}) }
-        if (m.oauthStatus === 'authorized' && this.resolveMcpAccessToken) {
-          const token = await this.resolveMcpAccessToken(m.id)
-          if (token) headers['Authorization'] = `Bearer ${token}`
-        }
-        mcpMap[m.name] = {
-          type: 'http',
-          url: m.url,
-          headers: Object.keys(headers).length > 0 ? headers : undefined
-        }
-      }
-    }
-    // Locally-discovered MCPs (read from ~/.claude/.mcp.json + project files).
-    // We pass them explicitly so strictMcpConfig can lock the CLI to the union
-    // of folk-DB + locally-discovered, filtered by the per-session allowlist —
-    // otherwise unselected entries leak in via on-disk discovery.
-    try {
-      const local = await discoverLocalMCPs()
-      for (const m of local.filter(
-        (x) => x.isEnabled && (!allowSet || allowSet.has(x.id))
-      )) {
-        if (mcpMap[m.name]) continue
-        if (m.transport === 'stdio' && m.command) {
-          mcpMap[m.name] = {
-            type: 'stdio',
-            command: m.command,
-            args: m.args ?? [],
-            env: m.env ?? undefined
-          }
-        } else if (m.transport === 'http' && m.url) {
-          mcpMap[m.name] = {
-            type: 'http',
-            url: m.url,
-            headers:
-              m.headers && Object.keys(m.headers).length > 0 ? m.headers : undefined
+    if (allowSet) {
+      try {
+        const all = await listAllMCPs()
+        for (const m of all.filter((x) => x.isEnabled && allowSet.has(x.id))) {
+          if (m.transport === 'stdio' && m.command) {
+            mcpMap[m.name] = {
+              type: 'stdio',
+              command: m.command,
+              args: m.args ?? [],
+              env: m.env ?? undefined
+            }
+          } else if (m.transport === 'http' && m.url) {
+            const headers: Record<string, string> = { ...(m.headers ?? {}) }
+            if (m.oauthStatus === 'authorized' && this.resolveMcpAccessToken) {
+              const token = await this.resolveMcpAccessToken(m.id)
+              if (token) headers['Authorization'] = `Bearer ${token}`
+            }
+            mcpMap[m.name] = {
+              type: 'http',
+              url: m.url,
+              headers: Object.keys(headers).length > 0 ? headers : undefined
+            }
           }
         }
+      } catch {
+        // best-effort — fall through with whatever we got
       }
-    } catch {
-      // discovery failures shouldn't block session start — proceed without
-      // any local MCPs (CLI strict mode means none will be loaded).
     }
 
     const continuity = session.claudeStarted
@@ -1278,9 +1253,10 @@ export class AgentManager extends EventEmitter {
   async #sendOnce(session: Session, text: string, skillPrompts?: string[]): Promise<void> {
     const provider = this.#resolveProvider(session.modelId)
     const enabledMcps = session.enabledMcpIds ?? null
+    const allMcps = await listAllMCPs().catch(() => [])
     const mcpCount = (enabledMcps
-      ? this.db.listMCPs().filter((m) => m.isEnabled && enabledMcps.includes(m.id))
-      : this.db.listMCPs().filter((m) => m.isEnabled)
+      ? allMcps.filter((m) => m.isEnabled && enabledMcps.includes(m.id))
+      : allMcps.filter((m) => m.isEnabled)
     ).length
 
     this.telemetry?.captureSessionStarted({
@@ -1620,13 +1596,9 @@ export class AgentManager extends EventEmitter {
           .filter((s) => s.status === 'needs-auth')
           .map((s) => s.name)
         if (needsAuth.length > 0) {
-          // Mark our own DB entry as unauthorized so the MCP page reflects it.
-          for (const name of needsAuth) {
-            const match = this.db.listMCPs().find((m) => m.name === name)
-            if (match) {
-              this.db.saveMCP({ ...match, oauthStatus: 'unauthorized' })
-            }
-          }
+          // Persistence of oauthStatus moved out of folk's DB into the MCP
+          // OAuth sidecar managed by MCPManager. Re-signing in will refresh
+          // the status; here we just surface the prompt to the user.
           this.emit('notice', {
             sessionId,
             kind: 'lifecycle',

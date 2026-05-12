@@ -6,7 +6,6 @@ import type {
   ProviderConfig,
   ProviderAuthMode,
   ModelConfig,
-  MCPServer,
   Profile
 } from '@shared/types'
 import {
@@ -68,22 +67,6 @@ CREATE TABLE IF NOT EXISTS providers (
   base_url TEXT,
   models TEXT NOT NULL,
   is_enabled INTEGER NOT NULL DEFAULT 1,
-  created_at INTEGER NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS mcp_servers (
-  id TEXT PRIMARY KEY,
-  name TEXT NOT NULL,
-  template TEXT,
-  transport TEXT NOT NULL,
-  command TEXT,
-  args TEXT,
-  env TEXT,
-  url TEXT,
-  is_enabled INTEGER NOT NULL DEFAULT 1,
-  status TEXT NOT NULL DEFAULT 'stopped',
-  last_error TEXT,
-  tool_count INTEGER,
   created_at INTEGER NOT NULL
 );
 
@@ -172,31 +155,10 @@ export class Database {
         .prepare(`ALTER TABLE sessions ADD COLUMN enabled_mcp_ids TEXT`)
         .run()
     }
-    const mcpCols = new Set(
-      (this.db.prepare(`PRAGMA table_info(mcp_servers)`).all() as Array<{ name: string }>).map(
-        (c) => c.name
-      )
-    )
-    const mcpAdditions: Array<[string, string]> = [
-      ['template', `ALTER TABLE mcp_servers ADD COLUMN template TEXT`],
-      ['transport', `ALTER TABLE mcp_servers ADD COLUMN transport TEXT NOT NULL DEFAULT 'stdio'`],
-      ['command', `ALTER TABLE mcp_servers ADD COLUMN command TEXT`],
-      ['args', `ALTER TABLE mcp_servers ADD COLUMN args TEXT`],
-      ['env', `ALTER TABLE mcp_servers ADD COLUMN env TEXT`],
-      ['url', `ALTER TABLE mcp_servers ADD COLUMN url TEXT`],
-      ['is_enabled', `ALTER TABLE mcp_servers ADD COLUMN is_enabled INTEGER NOT NULL DEFAULT 1`],
-      ['status', `ALTER TABLE mcp_servers ADD COLUMN status TEXT NOT NULL DEFAULT 'stopped'`],
-      ['last_error', `ALTER TABLE mcp_servers ADD COLUMN last_error TEXT`],
-      ['tool_count', `ALTER TABLE mcp_servers ADD COLUMN tool_count INTEGER`],
-      ['headers', `ALTER TABLE mcp_servers ADD COLUMN headers TEXT`],
-      ['oauth_client_id', `ALTER TABLE mcp_servers ADD COLUMN oauth_client_id TEXT`],
-      ['oauth_client_secret', `ALTER TABLE mcp_servers ADD COLUMN oauth_client_secret TEXT`],
-      ['oauth_metadata', `ALTER TABLE mcp_servers ADD COLUMN oauth_metadata TEXT`],
-      ['oauth_status', `ALTER TABLE mcp_servers ADD COLUMN oauth_status TEXT`]
-    ]
-    for (const [col, ddl] of mcpAdditions) {
-      if (!mcpCols.has(col)) this.db.prepare(ddl).run()
-    }
+    // Folk no longer maintains an mcp_servers table — Claude Code's
+    // ~/.claude.json is the source of truth. Drop the legacy table if
+    // present so we don't leak stale rows.
+    this.db.prepare(`DROP TABLE IF EXISTS mcp_servers`).run()
   }
 
   close(): void {
@@ -397,80 +359,6 @@ export class Database {
 
   deleteProvider(id: string): void {
     this.db.prepare(`DELETE FROM providers WHERE id = ?`).run(id)
-  }
-
-  saveMCP(m: MCPServer): void {
-    this.db
-      .prepare(
-        `INSERT INTO mcp_servers (id, name, template, transport, command, args, env, url, headers,
-           oauth_client_id, oauth_client_secret, oauth_metadata, oauth_status,
-           is_enabled, status, last_error, tool_count, created_at)
-         VALUES (@id, @name, @template, @transport, @command, @args, @env, @url, @headers,
-           @oauthClientId, @oauthClientSecret, @oauthMetadata, @oauthStatus,
-           @isEnabled, @status, @lastError, @toolCount, @createdAt)
-         ON CONFLICT(id) DO UPDATE SET
-           name = excluded.name, template = excluded.template, transport = excluded.transport,
-           command = excluded.command, args = excluded.args, env = excluded.env, url = excluded.url,
-           headers = excluded.headers,
-           oauth_client_id = excluded.oauth_client_id,
-           oauth_client_secret = excluded.oauth_client_secret,
-           oauth_metadata = excluded.oauth_metadata,
-           oauth_status = excluded.oauth_status,
-           is_enabled = excluded.is_enabled, status = excluded.status,
-           last_error = excluded.last_error, tool_count = excluded.tool_count`
-      )
-      .run({
-        id: m.id,
-        name: m.name,
-        template: m.template,
-        transport: m.transport,
-        command: m.command,
-        args: m.args ? JSON.stringify(m.args) : null,
-        env: m.env ? JSON.stringify(m.env) : null,
-        url: m.url,
-        headers: m.headers ? JSON.stringify(m.headers) : null,
-        oauthClientId: m.oauthClientId,
-        oauthClientSecret: m.oauthClientSecret,
-        oauthMetadata: m.oauthMetadata ? JSON.stringify(m.oauthMetadata) : null,
-        oauthStatus: m.oauthStatus,
-        isEnabled: m.isEnabled ? 1 : 0,
-        status: m.status,
-        lastError: m.lastError,
-        toolCount: m.toolCount,
-        createdAt: m.createdAt
-      })
-  }
-
-  listMCPs(): MCPServer[] {
-    const rows = this.db
-      .prepare(`SELECT * FROM mcp_servers ORDER BY created_at ASC`)
-      .all() as Array<Record<string, unknown>>
-    return rows.map((r) => ({
-      id: r.id as string,
-      name: r.name as string,
-      template: (r.template as string) ?? null,
-      transport: r.transport as MCPServer['transport'],
-      command: (r.command as string) ?? null,
-      args: r.args ? (JSON.parse(r.args as string) as string[]) : null,
-      env: r.env ? (JSON.parse(r.env as string) as Record<string, string>) : null,
-      url: (r.url as string) ?? null,
-      headers: r.headers ? (JSON.parse(r.headers as string) as Record<string, string>) : null,
-      oauthClientId: (r.oauth_client_id as string) ?? null,
-      oauthClientSecret: (r.oauth_client_secret as string) ?? null,
-      oauthMetadata: r.oauth_metadata
-        ? (JSON.parse(r.oauth_metadata as string) as MCPServer['oauthMetadata'])
-        : null,
-      oauthStatus: (r.oauth_status as MCPServer['oauthStatus']) ?? null,
-      isEnabled: Number(r.is_enabled ?? 0) === 1,
-      status: r.status as MCPServer['status'],
-      lastError: (r.last_error as string) ?? null,
-      toolCount: r.tool_count == null ? null : Number(r.tool_count),
-      createdAt: Number(r.created_at ?? 0)
-    }))
-  }
-
-  deleteMCP(id: string): void {
-    this.db.prepare(`DELETE FROM mcp_servers WHERE id = ?`).run(id)
   }
 
   getProfile(): Profile {

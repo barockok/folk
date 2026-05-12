@@ -17,6 +17,8 @@ interface KVRow {
 export interface FormValues {
   name: string
   mode: ConnectMode
+  scope: 'user' | 'project'
+  projectPath: string
   // stdio
   commandLine: string
   envRows: KVRow[]
@@ -84,6 +86,8 @@ export function valuesFromServer(server: MCPServer | null): FormValues {
     return {
       name: '',
       mode: 'stdio',
+      scope: 'user',
+      projectPath: '',
       commandLine: '',
       envRows: [],
       url: '',
@@ -104,6 +108,8 @@ export function valuesFromServer(server: MCPServer | null): FormValues {
   return {
     name: server.name ?? '',
     mode: server.transport === 'http' ? 'http' : 'stdio',
+    scope: server.scope === 'project' ? 'project' : 'user',
+    projectPath: server.projectPath ?? '',
     commandLine: joinCommandLine(server.command, server.args),
     envRows: rowsFrom(server.env),
     url: server.url ?? '',
@@ -114,8 +120,24 @@ export function valuesFromServer(server: MCPServer | null): FormValues {
   }
 }
 
+function makeServerId(scope: 'user' | 'project', name: string, projectPath?: string): string {
+  if (scope === 'user') return `user:${name}`
+  return `project:${projectPath ?? ''}:${name}`
+}
+
 export function serverFromValues(base: MCPServer | null, v: FormValues): MCPServer {
-  const id = base?.id ?? crypto.randomUUID()
+  const name = v.name.trim() || 'Untitled MCP'
+  const scope = v.scope
+  const projectPath = scope === 'project' ? (v.projectPath.trim() || undefined) : undefined
+  // Recompute id from scope+name so renames/scope changes write to the right
+  // config block. base?.id is only kept when scope/name/path unchanged.
+  const id =
+    base &&
+    base.scope === scope &&
+    base.name === name &&
+    (base.projectPath ?? undefined) === projectPath
+      ? base.id
+      : makeServerId(scope, name, projectPath)
   const createdAt = base?.createdAt ?? Date.now()
   if (v.mode === 'http') {
     const headerRows = [...v.headerRows]
@@ -124,7 +146,7 @@ export function serverFromValues(base: MCPServer | null, v: FormValues): MCPServ
     }
     return {
       id,
-      name: v.name.trim() || 'Untitled MCP',
+      name,
       template: null,
       transport: 'http',
       command: null,
@@ -132,9 +154,6 @@ export function serverFromValues(base: MCPServer | null, v: FormValues): MCPServ
       env: null,
       url: v.url.trim() || null,
       headers: recordFromRows(headerRows),
-      // OAuth credentials in the form take precedence over baseline; an empty
-      // string clears the field so the next sign-in does Dynamic Client
-      // Registration again.
       oauthClientId: v.oauthClientId.trim() || base?.oauthClientId || null,
       oauthClientSecret: v.oauthClientSecret.trim() || base?.oauthClientSecret || null,
       oauthMetadata: base?.oauthMetadata ?? null,
@@ -143,13 +162,15 @@ export function serverFromValues(base: MCPServer | null, v: FormValues): MCPServ
       status: base?.status ?? 'stopped',
       lastError: null,
       toolCount: base?.toolCount ?? null,
-      createdAt
+      createdAt,
+      scope,
+      projectPath
     }
   }
   const { command, args } = splitCommandLine(v.commandLine.trim())
   return {
     id,
-    name: v.name.trim() || 'Untitled MCP',
+    name,
     template: null,
     transport: 'stdio',
     command: command || null,
@@ -165,7 +186,9 @@ export function serverFromValues(base: MCPServer | null, v: FormValues): MCPServ
     status: base?.status ?? 'stopped',
     lastError: null,
     toolCount: base?.toolCount ?? null,
-    createdAt
+    createdAt,
+    scope,
+    projectPath
   }
 }
 
@@ -235,6 +258,39 @@ export function MCPForm({ values, onChange, readOnly, focusApiKey }: MCPFormProp
           disabled={readOnly}
         />
       </Field>
+
+      <Field label="Scope" hint="User = available everywhere. Project = only when working in this folder.">
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            type="button"
+            className={'btn' + (values.scope === 'user' ? ' btn-primary' : '')}
+            onClick={() => set('scope', 'user')}
+            disabled={readOnly}
+          >
+            User (global)
+          </button>
+          <button
+            type="button"
+            className={'btn' + (values.scope === 'project' ? ' btn-primary' : '')}
+            onClick={() => set('scope', 'project')}
+            disabled={readOnly}
+          >
+            Project
+          </button>
+        </div>
+      </Field>
+
+      {values.scope === 'project' && (
+        <Field label="Project path" hint="Absolute path to the project folder.">
+          <input
+            className="input mono"
+            value={values.projectPath}
+            placeholder="/Users/you/Code/my-project"
+            onChange={(e) => set('projectPath', e.target.value)}
+            disabled={readOnly}
+          />
+        </Field>
+      )}
 
       {isHttp ? (
         <>

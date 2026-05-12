@@ -8,13 +8,14 @@ interface MCPListProps {
   onNew: () => void
 }
 
-// The source-path encodes scope: `user`, `project:<path>`, or `plugin:<name>`.
-// MCP IDs follow `local:<scope>:<name>` so we can pull a friendly label from
-// the id without re-parsing the path.
-function localScopeLabel(id: string): { label: string; tone: 'user' | 'project' | 'plugin' } {
-  const parts = id.split(':')
-  if (parts[1] === 'plugin' && parts[2]) return { label: parts[2], tone: 'plugin' }
-  if (parts[1] === 'project') return { label: 'Project', tone: 'project' }
+import type { MCPServer } from '@shared/types'
+
+function scopeLabel(s: MCPServer): { label: string; tone: 'user' | 'project' | 'plugin' } {
+  if (s.scope === 'plugin') {
+    const name = s.projectPath?.split('/').pop() ?? 'Plugin'
+    return { label: name, tone: 'plugin' }
+  }
+  if (s.scope === 'project') return { label: 'Project', tone: 'project' }
   return { label: 'User', tone: 'user' }
 }
 
@@ -114,8 +115,8 @@ export function MCPList({ onOpen, onNew }: MCPListProps) {
               <div style={{ minWidth: 0 }}>
                 <div className="row-title">
                   <span className="trunc">{s.name}</span>
-                  {s.source === 'local' && (() => {
-                    const sc = localScopeLabel(s.id)
+                  {(() => {
+                    const sc = scopeLabel(s)
                     const cls =
                       sc.tone === 'plugin'
                         ? 'badge badge-magenta'
@@ -130,8 +131,8 @@ export function MCPList({ onOpen, onNew }: MCPListProps) {
                   })()}
                 </div>
                 <div className="row-desc trunc">
-                  {s.source === 'local'
-                    ? `Claude Code · ${s.transport === 'http' ? 'remote' : 'stdio'}`
+                  {s.scope === 'plugin'
+                    ? `Plugin · ${s.transport === 'http' ? 'remote' : 'stdio'}`
                     : (s.template ?? (s.transport === 'http' ? 'Remote (HTTP)' : 'Local command'))}
                 </div>
               </div>
@@ -139,10 +140,10 @@ export function MCPList({ onOpen, onNew }: MCPListProps) {
             <div>
               <EnableToggle
                 enabled={s.isEnabled}
-                disabled={s.source === 'local'}
+                disabled={s.scope === 'plugin'}
                 title={
-                  s.source === 'local'
-                    ? `Managed by Claude Code · edit ${s.sourcePath ?? '~/.claude/.mcp.json'} to change`
+                  s.scope === 'plugin'
+                    ? `Bundled by plugin · edit ${s.sourcePath ?? '.mcp.json'} to change`
                     : s.isEnabled
                       ? 'Disable this MCP'
                       : 'Enable this MCP'

@@ -109,13 +109,13 @@ export interface MCPServer {
   lastError: string | null
   toolCount: number | null
   createdAt: number
-  // 'folk' = managed in folk's SQLite DB (editable, persisted by us).
-  // 'local' = discovered from Claude Code config files (~/.claude/mcp_servers.json,
-  // ~/.claude/.mcp.json, per-project entries in ~/.claude.json). Read-only here;
-  // we surface them so the user can browse resources/prompts without re-adding.
-  source?: 'folk' | 'local'
-  // For 'local' servers, where on disk the entry lives — purely informational
-  // so the UI can label "from ~/.claude/.mcp.json" or "project: <path>".
+  // Where this entry lives in Claude Code's config:
+  //   'user'    — ~/.claude.json mcpServers (global)
+  //   'project' — ~/.claude.json projects[projectPath].mcpServers OR <projectPath>/.mcp.json
+  //   'plugin'  — installed plugin's bundled .mcp.json (read-only)
+  scope: 'user' | 'project' | 'plugin'
+  // For project/plugin scope, where on disk the entry lives.
+  projectPath?: string
   sourcePath?: string
 }
 

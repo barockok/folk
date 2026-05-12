@@ -29,7 +29,7 @@ export const useMCPStore = create<MCPState>((set, get) => ({
   },
   setEnabled: async (id, enabled) => {
     const target = get().servers.find((s) => s.id === id)
-    if (!target || target.source === 'local') return
+    if (!target || target.scope === 'plugin') return
     // Optimistic update so the toggle feels instant
     set({ servers: get().servers.map((s) => (s.id === id ? { ...s, isEnabled: enabled } : s)) })
     await window.folk.mcp.save({ ...target, isEnabled: enabled })

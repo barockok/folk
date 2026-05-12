@@ -29,10 +29,12 @@ interface Props {
 }
 
 function localScopeBadge(server: MCPServer | null): { label: string; tone: 'user' | 'project' | 'plugin' } | null {
-  if (!server || server.source !== 'local') return null
-  const parts = server.id.split(':')
-  if (parts[1] === 'plugin' && parts[2]) return { label: parts[2], tone: 'plugin' }
-  if (parts[1] === 'project') return { label: 'Project', tone: 'project' }
+  if (!server) return null
+  if (server.scope === 'plugin') {
+    const name = server.projectPath?.split('/').pop() ?? 'Plugin'
+    return { label: name, tone: 'plugin' }
+  }
+  if (server.scope === 'project') return { label: 'Project', tone: 'project' }
   return { label: 'User', tone: 'user' }
 }
 
@@ -40,7 +42,7 @@ export function MCPDetail({ id, isNew, onBack }: Props) {
   const { servers, save, remove, setEnabled, test } = useMCPStore()
   const toast = useUIStore((s) => s.toast)
   const existing = id ? servers.find((s) => s.id === id) ?? null : null
-  const isLocal = existing?.source === 'local'
+  const isLocal = existing?.scope === 'plugin'
 
   const [stage, setStage] = useState<'pick' | 'form'>(isNew ? 'pick' : 'form')
   const [values, setValues] = useState<FormValues>(() => valuesFromServer(existing))

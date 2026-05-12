@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto'
 import { spawn, type ChildProcessByStdio } from 'node:child_process'
 import type { Readable, Writable } from 'node:stream'
 import type {
@@ -10,9 +9,8 @@ import type {
   MCPTemplate,
   ToolInfo
 } from '@shared/types'
-import { Database } from './database'
-import { discoverLocalMCPs } from './mcp-local-discovery'
-import { applyFolkMCPs } from './mcp-config-writer'
+import { deleteMCP, findMCP, listAllMCPs, makeId, upsertMCP } from './mcp-config-store'
+import { MCPOAuthStore } from './mcp-oauth-store'
 import { deleteTokens, loadTokens, storeTokens } from './keychain'
 import { refreshAccessToken, signIn as runSignIn } from './oauth'
 
@@ -81,17 +79,22 @@ export interface TemplateOverrides {
   url?: string | null
   command?: string
   transport?: 'stdio' | 'http'
+  scope?: MCPServer['scope']
+  projectPath?: string
 }
 
+// Build a fresh MCPServer record from a template. Defaults to user scope.
 export function templateToServer(
   templateId: string,
   overrides: TemplateOverrides = {}
 ): MCPServer {
   const tpl = MCP_TEMPLATES[templateId]
   if (!tpl) throw new Error(`unknown template ${templateId}`)
+  const scope = overrides.scope ?? 'user'
+  const name = overrides.name ?? tpl.label
   return {
-    id: randomUUID(),
-    name: overrides.name ?? tpl.label,
+    id: makeId(scope, name, overrides.projectPath),
+    name,
     template: templateId,
     transport: overrides.transport ?? tpl.transport,
     command: overrides.command ?? tpl.command ?? null,
@@ -109,7 +112,9 @@ export function templateToServer(
     status: 'stopped',
     lastError: null,
     toolCount: null,
-    createdAt: Date.now()
+    createdAt: Date.now(),
+    scope,
+    projectPath: overrides.projectPath
   }
 }
 
@@ -120,8 +125,7 @@ interface RpcConnection {
 
 // Spin up a stdio MCP server, perform `initialize`, return a small JSON-RPC
 // shim. Each public inspection method (testConnection, listResources, …)
-// opens its own connection — MCP servers are usually cheap to start, and we
-// don't want to keep long-lived processes around for an editor UI.
+// opens its own connection.
 function connectStdioMCP(server: MCPServer, timeoutMs = 8000): Promise<RpcConnection> {
   return new Promise((resolve, reject) => {
     if (server.transport !== 'stdio' || !server.command) {
@@ -151,9 +155,6 @@ function connectStdioMCP(server: MCPServer, timeoutMs = 8000): Promise<RpcConnec
       } catch {
         /* ignore */
       }
-      // Snapshot + clear before rejecting — pending callbacks may re-enter
-      // close() (e.g. init reject calling close), and we don't want to iterate
-      // a mutating map.
       const snapshot = [...pending.values()]
       pending.clear()
       for (const p of snapshot) p.reject(new Error('connection closed'))
@@ -200,10 +201,7 @@ function connectStdioMCP(server: MCPServer, timeoutMs = 8000): Promise<RpcConnec
           continue
         }
         if (!msg || typeof msg.id !== 'number') continue
-        if (msg.id === 0 && !initialized) {
-          // shouldn't happen; init uses positive id
-          continue
-        }
+        if (msg.id === 0 && !initialized) continue
         const p = pending.get(msg.id)
         if (!p) continue
         pending.delete(msg.id)
@@ -212,7 +210,6 @@ function connectStdioMCP(server: MCPServer, timeoutMs = 8000): Promise<RpcConnec
       }
     })
 
-    // initialize first; resolve outer promise once init completes
     const initId = nextId++
     pending.set(initId, {
       resolve: () => {
@@ -222,9 +219,6 @@ function connectStdioMCP(server: MCPServer, timeoutMs = 8000): Promise<RpcConnec
       },
       reject: (err) => {
         clearTimeout(overallTimer)
-        // Don't call close() here — we're already being invoked via close()'s
-        // iteration of pending callbacks, or init failed naturally and the
-        // child will exit on its own when stdin closes.
         reject(err)
       }
     })
@@ -242,205 +236,154 @@ function connectStdioMCP(server: MCPServer, timeoutMs = 8000): Promise<RpcConnec
 }
 
 export class MCPManager {
-  // Latest snapshot of CC-discovered local MCPs. Refreshed on every list()
-  // call so #getServer can resolve `local:*` ids without rescanning.
-  #localCache: MCPServer[] = []
-
-  // Server id currently running through the OAuth flow, if any. Only one at
-  // a time — the loopback callback server binds a fixed port.
   #signInInFlight: string | null = null
+  #oauth: MCPOAuthStore
 
-  // When true, syncs are deferred — the bundled Claude Code CLI watches
-  // ~/.claude/.mcp.json and rewriting it mid-stream aborts in-flight turns.
-  #isBusy: () => boolean = () => false
-  #pendingSync = false
-
-  // Sidecar path for the write-through bookkeeping. Lives in folk's userData
-  // dir, NOT under ~/.claude — the user's Claude Code dir stays clean.
-  constructor(
-    private db: Database,
-    private syncSidecarPath: string
-  ) {}
-
-  setBusyCheck(fn: () => boolean): void {
-    this.#isBusy = fn
+  constructor(oauthSidecarPath: string) {
+    this.#oauth = new MCPOAuthStore(oauthSidecarPath)
   }
 
-  // Called by AgentManager when the last live session tears down. Flushes
-  // any sync that was deferred while the SDK had a live stream.
+  // Kept for API stability with old call sites. Folk no longer write-throughs
+  // a separate file — Claude Code's ~/.claude.json IS the source of truth.
+  setBusyCheck(_fn: () => boolean): void {
+    /* no-op */
+  }
   flushDeferredSync(): void {
-    if (this.#pendingSync) {
-      this.#pendingSync = false
-      void this.syncToClaudeCode()
-    }
+    /* no-op */
   }
 
   async list(): Promise<MCPServer[]> {
-    const folk = this.db.listMCPs()
-    try {
-      this.#localCache = await discoverLocalMCPs()
-    } catch {
-      this.#localCache = []
-    }
-    return [...folk, ...this.#localCache]
+    const servers = await listAllMCPs()
+    const oauth = await this.#oauth.all()
+    return servers.map((s) => {
+      const rec = oauth[s.id]
+      if (!rec) return s
+      return {
+        ...s,
+        oauthClientId: rec.clientId,
+        oauthClientSecret: rec.clientSecret,
+        oauthMetadata: rec.metadata,
+        oauthStatus: rec.status
+      }
+    })
   }
 
-  save(server: MCPServer): void {
-    if (server.source === 'local') {
-      throw new Error('Local MCP servers are read-only')
+  async save(server: MCPServer): Promise<void> {
+    if (server.scope === 'plugin') {
+      throw new Error('Plugin-bundled MCP servers are read-only')
     }
-    this.db.saveMCP(server)
-    void this.#syncToClaudeCode()
-  }
-
-  delete(id: string): void {
-    if (id.startsWith('local:')) {
-      throw new Error('Local MCP servers are read-only')
-    }
-    this.db.deleteMCP(id)
-    void this.#syncToClaudeCode()
-  }
-
-  // Write folk's enabled MCPs into ~/.claude/.mcp.json so they're visible to
-  // the Claude Code CLI and any other surface that reads that file. Best
-  // effort — failures are logged but don't break the IPC return.
-  async syncToClaudeCode(): Promise<void> {
-    try {
-      const owned = this.db.listMCPs() // folk DB only — no local entries
-      await applyFolkMCPs({ sidecarPath: this.syncSidecarPath, servers: owned })
-    } catch (err) {
-      console.error('[mcp] write-through to ~/.claude/.mcp.json failed:', err)
+    await upsertMCP(server)
+    // Persist OAuth bookkeeping if present.
+    if (
+      server.oauthClientId ||
+      server.oauthClientSecret ||
+      server.oauthMetadata ||
+      server.oauthStatus
+    ) {
+      await this.#oauth.set(server.id, {
+        clientId: server.oauthClientId,
+        clientSecret: server.oauthClientSecret,
+        metadata: server.oauthMetadata,
+        status: server.oauthStatus
+      })
     }
   }
 
-  #syncToClaudeCode(): void {
-    if (this.#isBusy()) {
-      this.#pendingSync = true
-      return
-    }
-    void this.syncToClaudeCode()
+  async delete(id: string): Promise<void> {
+    await deleteMCP(id)
+    await this.#oauth.delete(id)
+    await deleteTokens(id).catch(() => undefined)
   }
 
   // ── OAuth ──────────────────────────────────────────────────────────────────
 
-  // Run the full OAuth sign-in flow for an HTTP server. Persists discovered
-  // metadata + client credentials on the server record; tokens go to keychain.
   async signIn(id: string): Promise<{ ok: boolean; error?: string }> {
-    const server = this.db.listMCPs().find((m) => m.id === id)
+    const server = await findMCP(id)
     if (!server) return { ok: false, error: 'Server not found' }
     if (server.transport !== 'http' || !server.url) {
       return { ok: false, error: 'OAuth only applies to HTTP servers' }
     }
     if (this.#signInInFlight) {
-      const other = this.db.listMCPs().find((m) => m.id === this.#signInInFlight)
-      return {
-        ok: false,
-        error: `Another sign-in is in progress${other ? ` (${other.name})` : ''}. Finish or cancel that one first.`
-      }
+      return { ok: false, error: 'Another sign-in is in progress. Finish or cancel that one first.' }
     }
     this.#signInInFlight = id
+    const existing = (await this.#oauth.get(id)) ?? {
+      clientId: null,
+      clientSecret: null,
+      metadata: null,
+      status: null
+    }
     try {
       const result = await runSignIn({
         serverId: server.id,
         serverUrl: server.url,
-        providedClientId: server.oauthClientId,
-        providedClientSecret: server.oauthClientSecret,
-        cachedMetadata: server.oauthMetadata
+        providedClientId: existing.clientId,
+        providedClientSecret: existing.clientSecret,
+        cachedMetadata: existing.metadata
       })
-      this.db.saveMCP({
-        ...server,
-        oauthMetadata: result.metadata,
-        oauthClientId: result.clientId,
-        oauthClientSecret: result.clientSecret,
-        oauthStatus: 'authorized'
+      await this.#oauth.set(id, {
+        clientId: result.clientId,
+        clientSecret: result.clientSecret,
+        metadata: result.metadata,
+        status: 'authorized'
       })
-      void this.syncToClaudeCode()
       return { ok: true }
     } catch (err) {
-      this.db.saveMCP({ ...server, oauthStatus: 'error' })
+      await this.#oauth.patch(id, { status: 'error' })
       return { ok: false, error: (err as Error).message }
     } finally {
       this.#signInInFlight = null
     }
   }
 
-  // Sign out: drop tokens + reset status (keep metadata + clientId so the next
-  // sign-in skips re-discovery / re-registration).
   async signOut(id: string): Promise<{ ok: boolean; error?: string }> {
-    const server = this.db.listMCPs().find((m) => m.id === id)
-    if (!server) return { ok: false, error: 'Server not found' }
-    await deleteTokens(server.id)
-    this.db.saveMCP({ ...server, oauthStatus: 'unauthorized' })
+    await deleteTokens(id)
+    await this.#oauth.patch(id, { status: 'unauthorized' })
     return { ok: true }
   }
 
-  // Look up the currently-stored access token for a server, refreshing if
-  // it's expired or near-expiry. Returns null if there's no token at all
-  // (caller must trigger sign-in).
   async getAccessToken(id: string): Promise<string | null> {
-    const server = this.db.listMCPs().find((m) => m.id === id)
-    if (!server) return null
-    const tokens = await loadTokens(server.id)
+    const rec = await this.#oauth.get(id)
+    if (!rec) return null
+    const tokens = await loadTokens(id)
     if (!tokens) return null
 
-    // Refresh if we're inside the 60-second buffer window.
     const needsRefresh =
       tokens.expiresAt != null && Date.now() > tokens.expiresAt - 60_000
     if (!needsRefresh) return tokens.accessToken
 
-    if (!tokens.refreshToken || !server.oauthMetadata || !server.oauthClientId) {
-      // Can't refresh — surface as unauthorized so the UI prompts re-sign-in.
-      this.db.saveMCP({ ...server, oauthStatus: 'unauthorized' })
-      await deleteTokens(server.id)
+    if (!tokens.refreshToken || !rec.metadata || !rec.clientId) {
+      await this.#oauth.patch(id, { status: 'unauthorized' })
+      await deleteTokens(id)
       return null
     }
     try {
       const fresh = await refreshAccessToken({
-        metadata: server.oauthMetadata,
+        metadata: rec.metadata,
         refreshToken: tokens.refreshToken,
-        clientId: server.oauthClientId,
-        clientSecret: server.oauthClientSecret
+        clientId: rec.clientId,
+        clientSecret: rec.clientSecret
       })
-      // Reuse the previous refresh token if the AS didn't rotate it.
       if (!fresh.refreshToken) fresh.refreshToken = tokens.refreshToken
-      await storeTokens(server.id, fresh)
+      await storeTokens(id, fresh)
       return fresh.accessToken
     } catch (err) {
       console.error('[mcp] token refresh failed:', err)
-      this.db.saveMCP({ ...server, oauthStatus: 'unauthorized' })
+      await this.#oauth.patch(id, { status: 'unauthorized' })
       return null
     }
-  }
-
-  async #getServer(id: string): Promise<MCPServer | null> {
-    if (id.startsWith('local:')) {
-      let hit = this.#localCache.find((m) => m.id === id)
-      if (!hit) {
-        // Cache cold (renderer can call listResources before list()). Refresh.
-        try {
-          this.#localCache = await discoverLocalMCPs()
-        } catch {
-          this.#localCache = []
-        }
-        hit = this.#localCache.find((m) => m.id === id)
-      }
-      return hit ?? null
-    }
-    return this.db.listMCPs().find((m) => m.id === id) ?? null
   }
 
   async testConnection(
     id: string
   ): Promise<{ ok: boolean; tools: ToolInfo[]; error?: string }> {
-    const server = await this.#getServer(id)
+    const server = await findMCP(id)
     if (!server) return { ok: false, tools: [], error: 'not found' }
     let conn: RpcConnection
     try {
       conn = await connectStdioMCP(server)
     } catch (err) {
-      const msg = (err as Error).message
-      this.db.saveMCP({ ...server, lastError: msg })
-      return { ok: false, tools: [], error: msg }
+      return { ok: false, tools: [], error: (err as Error).message }
     }
     try {
       const res = await conn.request<{ tools: Array<{ name: string; description?: string }> }>(
@@ -450,12 +393,9 @@ export class MCPManager {
         name: t.name,
         description: t.description
       }))
-      this.db.saveMCP({ ...server, toolCount: tools.length, lastError: null })
       return { ok: true, tools }
     } catch (err) {
-      const msg = (err as Error).message
-      this.db.saveMCP({ ...server, lastError: msg })
-      return { ok: false, tools: [], error: msg }
+      return { ok: false, tools: [], error: (err as Error).message }
     } finally {
       conn.close()
     }
@@ -464,7 +404,7 @@ export class MCPManager {
   async listResources(
     id: string
   ): Promise<{ ok: boolean; resources: MCPResource[]; error?: string }> {
-    const server = await this.#getServer(id)
+    const server = await findMCP(id)
     if (!server) return { ok: false, resources: [], error: 'not found' }
     let conn: RpcConnection
     try {
@@ -486,7 +426,7 @@ export class MCPManager {
     id: string,
     uri: string
   ): Promise<{ ok: boolean; contents: MCPResourceContent[]; error?: string }> {
-    const server = await this.#getServer(id)
+    const server = await findMCP(id)
     if (!server) return { ok: false, contents: [], error: 'not found' }
     let conn: RpcConnection
     try {
@@ -507,7 +447,7 @@ export class MCPManager {
   async listPrompts(
     id: string
   ): Promise<{ ok: boolean; prompts: MCPPrompt[]; error?: string }> {
-    const server = await this.#getServer(id)
+    const server = await findMCP(id)
     if (!server) return { ok: false, prompts: [], error: 'not found' }
     let conn: RpcConnection
     try {
@@ -535,7 +475,7 @@ export class MCPManager {
     messages: MCPPromptMessage[]
     error?: string
   }> {
-    const server = await this.#getServer(id)
+    const server = await findMCP(id)
     if (!server) return { ok: false, messages: [], error: 'not found' }
     let conn: RpcConnection
     try {

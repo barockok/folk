@@ -106,10 +106,10 @@ export function MCPPicker({ enabledMcpIds, eligibleMcps, onChange, labelPrefix =
                   <div className="m-main">
                     <div className="m-disp">
                       {s.name}
-                      {s.source === 'local' ? ' ↗' : ''}
+                      {s.scope === 'plugin' ? ' ↗' : ''}
                     </div>
                     <div className="m-id">
-                      {s.transport} · {s.source === 'local' ? 'Claude Code' : 'folk'}
+                      {s.transport} · {s.scope === 'plugin' ? 'plugin' : s.scope}
                     </div>
                   </div>
                   {checked && <Check />}

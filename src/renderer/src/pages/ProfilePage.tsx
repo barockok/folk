@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import type { Profile } from '@shared/types'
 import { useProfileStore } from '../stores/useProfileStore'
 import { useUIStore } from '../stores/useUIStore'
@@ -39,6 +41,7 @@ export function ProfilePage() {
 
   const [draft, setDraft] = useState<Profile>(EMPTY_DRAFT)
   const [saving, setSaving] = useState(false)
+  const [editingAbout, setEditingAbout] = useState(false)
 
   // Sync store → draft when profile loads
   useEffect(() => {
@@ -110,7 +113,7 @@ export function ProfilePage() {
           style={{
             width: 56,
             height: 56,
-            borderRadius: 'var(--r)',
+            borderRadius: '50%',
             background: draft.avatarColor,
             color: '#fff',
             display: 'grid',
@@ -262,27 +265,61 @@ export function ProfilePage() {
         </label>
       </div>
 
-      <label style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 24 }}>
-        <span
-          style={{
-            fontSize: 11,
-            fontWeight: 600,
-            letterSpacing: '0.06em',
-            textTransform: 'uppercase',
-            color: 'var(--body)',
-          }}
-        >
-          About you
-        </span>
-        <textarea
-          className="input"
-          placeholder="Anything folk should know — your stack, working style, preferred conventions…"
-          rows={4}
-          value={draft.about}
-          onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => set('about', e.target.value)}
-          style={{ resize: 'vertical', fontFamily: 'var(--ff-sans)' }}
-        />
-      </label>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span
+            style={{
+              fontSize: 11,
+              fontWeight: 600,
+              letterSpacing: '0.06em',
+              textTransform: 'uppercase',
+              color: 'var(--body)',
+            }}
+          >
+            About you
+          </span>
+          <button
+            type="button"
+            className="btn btn-plain"
+            style={{ fontSize: 12, padding: '2px 8px' }}
+            onClick={() => setEditingAbout((v) => !v)}
+          >
+            {editingAbout ? 'Done' : 'Edit'}
+          </button>
+        </div>
+        {editingAbout ? (
+          <textarea
+            className="input"
+            placeholder="Anything folk should know — your stack, working style, preferred conventions… Markdown supported."
+            rows={6}
+            value={draft.about}
+            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => set('about', e.target.value)}
+            style={{ resize: 'vertical', fontFamily: 'var(--ff-mono)', fontSize: 13 }}
+            autoFocus
+          />
+        ) : (
+          <div
+            className="markdown-body"
+            onClick={() => setEditingAbout(true)}
+            style={{
+              minHeight: 80,
+              padding: '10px 12px',
+              border: 'var(--hair) solid var(--border)',
+              borderRadius: 'var(--r-sm)',
+              background: 'var(--bg-sub)',
+              cursor: 'text',
+              fontSize: 13,
+              color: draft.about.trim() ? 'var(--body)' : 'var(--fg-faint)',
+            }}
+          >
+            {draft.about.trim() ? (
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{draft.about}</ReactMarkdown>
+            ) : (
+              <span>Click to add notes about yourself — stack, working style, conventions. Markdown supported.</span>
+            )}
+          </div>
+        )}
+      </div>
 
       <div style={{ display: 'flex', gap: 10 }}>
         <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
