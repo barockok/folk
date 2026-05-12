@@ -94,7 +94,7 @@ describe('AgentManager.sendMessage', () => {
     expect(mgr.getSession(s.id)?.status).toBe('idle')
   })
 
-  it('injects CLAUDE_OAUTH_TOKEN for oauth-token providers', async () => {
+  it('injects ANTHROPIC_AUTH_TOKEN for oauth-token providers', async () => {
     // Replace the api-key provider with an oauth-token one
     db.saveProvider({
       id: 'anthropic',
@@ -114,7 +114,7 @@ describe('AgentManager.sendMessage', () => {
     await new Promise((r) => setTimeout(r, 5))
     const opts = __getLastOptions()
     const env = (opts as { env?: Record<string, string | undefined> }).env
-    expect(env?.CLAUDE_OAUTH_TOKEN).toBe('oauth-tok-123')
+    expect(env?.ANTHROPIC_AUTH_TOKEN).toBe('oauth-tok-123')
     expect(env?.ANTHROPIC_API_KEY).toBeUndefined()
     expect(env?.ANTHROPIC_AUTH_TOKEN).toBeUndefined()
   })
