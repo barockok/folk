@@ -227,7 +227,7 @@ export function FirstRunOnboarding({ force = false }: { force?: boolean } = {}) 
     if (verified && preset) {
       const resolvedKey = preset.noAuth ? 'public' : authMode === 'claude-code' ? '' : apiKey
       let models: ModelConfig[] = []
-      if (!isCustom && authMode !== 'claude-code') {
+      if (!isCustom && authMode !== 'claude-code' && authMode !== 'oauth-token') {
         try {
           const res = await window.folk.providers.fetchModels({
             presetId: providerId,

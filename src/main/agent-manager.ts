@@ -344,6 +344,7 @@ export class AgentManager extends EventEmitter {
     //     free tier uses literal token "public".
     delete envOverlay.ANTHROPIC_API_KEY
     delete envOverlay.ANTHROPIC_AUTH_TOKEN
+    delete envOverlay.CLAUDE_OAUTH_TOKEN
     let baseUrlOverride: string | null = provider.baseUrl
     if (provider.authMode !== 'claude-code') {
       const isOpencode = provider.id === 'opencode-free' || provider.id === 'opencode-paid'
