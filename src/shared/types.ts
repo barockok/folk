@@ -47,7 +47,7 @@ export interface SessionConfig {
   enabledMcpIds?: string[] | null
 }
 
-export type ProviderAuthMode = 'api-key' | 'claude-code'
+export type ProviderAuthMode = 'api-key' | 'claude-code' | 'oauth-token'
 
 export interface ProviderConfig {
   id: string
