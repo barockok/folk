@@ -451,11 +451,13 @@ export class AgentManager extends EventEmitter {
     // forever" reports without round-tripping through main-process logs.
     const authMode = provider.authMode === 'claude-code'
       ? 'claude-code'
-      : provider.id === 'opencode-free' || provider.id === 'opencode-paid'
-        ? 'opencode-bridge'
-        : provider.id === 'openrouter'
-          ? 'bearer'
-          : 'x-api-key'
+      : provider.authMode === 'oauth-token'
+        ? 'oauth-bearer'
+        : provider.id === 'opencode-free' || provider.id === 'opencode-paid'
+          ? 'opencode-bridge'
+          : provider.id === 'openrouter'
+            ? 'bearer'
+            : 'x-api-key'
     this.emit('notice', {
       sessionId: session.id,
       kind: 'lifecycle',
