@@ -367,6 +367,9 @@ export class AgentManager extends EventEmitter {
       } else if (usesBearer) {
         if (!provider.apiKey) throw new Error(`API key for "${provider.name}" is missing or could not be read. Re-enter it in Models settings.`)
         envOverlay.ANTHROPIC_AUTH_TOKEN = provider.apiKey
+      } else if (provider.authMode === 'oauth-token') {
+        if (!provider.apiKey) throw new Error(`OAuth token for "${provider.name}" is missing.`)
+        envOverlay.CLAUDE_OAUTH_TOKEN = provider.apiKey
       } else {
         if (!provider.apiKey) throw new Error(`API key for "${provider.name}" is missing or could not be read. Re-enter it in Models settings.`)
         envOverlay.ANTHROPIC_API_KEY = provider.apiKey
