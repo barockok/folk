@@ -201,8 +201,7 @@ function AddProviderModal({ usedIds, onAdd, onClose }: AddProviderModalProps) {
     onAdd(newProvider)
   }
 
-  const needsKey =
-    !(selectedId === 'anthropic' && authMode === 'claude-code') && !preset?.noAuth
+  const needsKey = authMode !== 'claude-code' && !preset?.noAuth
   const canAdd =
     selectedId.length > 0 &&
     (selectedId !== CUSTOM_PRESET_ID || name.trim().length > 0) &&
@@ -307,7 +306,7 @@ function AddProviderModal({ usedIds, onAdd, onClose }: AddProviderModalProps) {
               {selectedId === 'anthropic' && (
                 <div className="field">
                   <label className="label">How to authenticate</label>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
                     <button
                       type="button"
                       className={'model-opt' + (authMode === 'api-key' ? ' on' : '')}
@@ -317,6 +316,17 @@ function AddProviderModal({ usedIds, onAdd, onClose }: AddProviderModalProps) {
                       <span className="name" style={{ fontSize: 13 }}>API key</span>
                       <span className="desc" style={{ fontSize: 11, marginTop: 2 }}>
                         Paste an Anthropic API key
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      className={'model-opt' + (authMode === 'oauth-token' ? ' on' : '')}
+                      onClick={() => setAuthMode('oauth-token')}
+                      style={{ padding: 12, textAlign: 'left' }}
+                    >
+                      <span className="name" style={{ fontSize: 13 }}>OAuth token</span>
+                      <span className="desc" style={{ fontSize: 11, marginTop: 2 }}>
+                        Paste a CLAUDE_OAUTH_TOKEN
                       </span>
                     </button>
                     <button
@@ -357,7 +367,7 @@ function AddProviderModal({ usedIds, onAdd, onClose }: AddProviderModalProps) {
                 </div>
               ) : needsKey ? (
                 <div className="field">
-                  <label className="label">{preset?.keyLabel ?? 'API key'}</label>
+                  <label className="label">{authMode === 'oauth-token' ? 'OAuth token' : (preset?.keyLabel ?? 'API key')}</label>
                   <input
                     className="input mono"
                     type="password"
