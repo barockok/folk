@@ -704,16 +704,27 @@ export function ModelPage() {
             {active.id === 'anthropic' && (
               <div className="field">
                 <label className="label">How to authenticate</label>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
                   <button
                     type="button"
-                    className={'model-opt' + (draft.authMode !== 'claude-code' ? ' on' : '')}
+                    className={'model-opt' + (draft.authMode === 'api-key' ? ' on' : '')}
                     onClick={() => updateDraft({ authMode: 'api-key' })}
                     style={{ padding: 12, textAlign: 'left' }}
                   >
                     <span className="name" style={{ fontSize: 13 }}>API key</span>
                     <span className="desc" style={{ fontSize: 11, marginTop: 2 }}>
                       Paste an Anthropic API key
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    className={'model-opt' + (draft.authMode === 'oauth-token' ? ' on' : '')}
+                    onClick={() => updateDraft({ authMode: 'oauth-token' })}
+                    style={{ padding: 12, textAlign: 'left' }}
+                  >
+                    <span className="name" style={{ fontSize: 13 }}>OAuth token</span>
+                    <span className="desc" style={{ fontSize: 11, marginTop: 2 }}>
+                      Paste a CLAUDE_OAUTH_TOKEN
                     </span>
                   </button>
                   <button
@@ -762,7 +773,7 @@ export function ModelPage() {
               </div>
             ) : (
               <div className="field">
-                <label className="label">{preset?.keyLabel ?? 'API key'}</label>
+                <label className="label">{draft.authMode === 'oauth-token' ? 'OAuth token' : (preset?.keyLabel ?? 'API key')}</label>
                 <div style={{ position: 'relative' }}>
                   <input
                     className="input mono"
