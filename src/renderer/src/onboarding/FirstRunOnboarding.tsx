@@ -178,6 +178,10 @@ export function FirstRunOnboarding({ force = false }: { force?: boolean } = {}) 
   }
 
   const handleTest = () => {
+    if (authMode === 'oauth-token') {
+      setVerified(apiKey.trim().length > 0)
+      return
+    }
     setTesting(true)
     // Simulate key verification — real validation wired in future task
     setTimeout(() => {
@@ -571,22 +575,34 @@ export function FirstRunOnboarding({ force = false }: { force?: boolean } = {}) 
                   </>
                 )}
 
-                {canUseClaudeCode && (
-                  <div className="field" style={{ marginTop: 12 }}>
-                    <label className="label">How to authenticate</label>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                      <button
-                        type="button"
-                        className={'ob-prov' + (authMode === 'api-key' ? ' on' : '')}
-                        onClick={() => {
-                          setAuthMode('api-key')
-                          setVerified(false)
-                        }}
-                        style={{ padding: 12, alignItems: 'flex-start', textAlign: 'left' }}
-                      >
-                        <span className="ob-prov-name">API key</span>
-                        <span className="ob-prov-sub">Paste an Anthropic API key</span>
-                      </button>
+                <div className="field" style={{ marginTop: 12 }}>
+                  <label className="label">How to authenticate</label>
+                  <div style={{ display: 'grid', gridTemplateColumns: canUseClaudeCode ? '1fr 1fr 1fr' : '1fr 1fr', gap: 8 }}>
+                    <button
+                      type="button"
+                      className={'ob-prov' + (authMode === 'api-key' ? ' on' : '')}
+                      onClick={() => {
+                        setAuthMode('api-key')
+                        setVerified(false)
+                      }}
+                      style={{ padding: 12, alignItems: 'flex-start', textAlign: 'left' }}
+                    >
+                      <span className="ob-prov-name">API key</span>
+                      <span className="ob-prov-sub">Paste an Anthropic API key</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={'ob-prov' + (authMode === 'oauth-token' ? ' on' : '')}
+                      onClick={() => {
+                        setAuthMode('oauth-token')
+                        setVerified(false)
+                      }}
+                      style={{ padding: 12, alignItems: 'flex-start', textAlign: 'left' }}
+                    >
+                      <span className="ob-prov-name">OAuth token</span>
+                      <span className="ob-prov-sub">Paste a CLAUDE_OAUTH_TOKEN</span>
+                    </button>
+                    {canUseClaudeCode && (
                       <button
                         type="button"
                         className={'ob-prov' + (authMode === 'claude-code' ? ' on' : '')}
@@ -599,9 +615,9 @@ export function FirstRunOnboarding({ force = false }: { force?: boolean } = {}) 
                         <span className="ob-prov-name">Use Claude Code login</span>
                         <span className="ob-prov-sub">Reuse existing subscription</span>
                       </button>
-                    </div>
+                    )}
                   </div>
-                )}
+                </div>
 
                 {preset.noAuth ? (
                   <div className="ob-key-actions" style={{ marginTop: 12 }}>
@@ -619,10 +635,10 @@ export function FirstRunOnboarding({ force = false }: { force?: boolean } = {}) 
                       </div>
                     </div>
                   </div>
-                ) : authMode === 'api-key' ? (
+                ) : authMode === 'api-key' || authMode === 'oauth-token' ? (
                   <>
                     <div className="field" style={{ marginTop: 12 }}>
-                      <label className="label">{preset.keyLabel}</label>
+                      <label className="label">{authMode === 'oauth-token' ? 'OAuth token' : preset.keyLabel}</label>
                       <input
                         className="input mono"
                         type="password"
