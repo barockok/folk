@@ -270,6 +270,11 @@ export function registerIpc(
         ? { ok: true }
         : { ok: false, error: 'Claude Code login not found — run `claude login` in a terminal' }
     }
+    if (p.authMode === 'oauth-token') {
+      return p.apiKey
+        ? { ok: true }
+        : { ok: false, error: 'OAuth token is empty' }
+    }
     // Probe shape depends on the provider's API style.
     // Anthropic / anthropic-proxy: x-api-key + /v1/models
     // OpenAI-compatible (OpenAI, DeepSeek default, GLM, Moonshot, Qwen,
