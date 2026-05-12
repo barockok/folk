@@ -20,6 +20,7 @@ export function TweaksPanel() {
   }, [])
 
   const [analyticsEnabled, setAnalyticsEnabled] = useState<boolean | null>(null)
+  const [checkingUpdate, setCheckingUpdate] = useState(false)
   useEffect(() => {
     let cancelled = false
     void window.folk.telemetry.getConfig().then((cfg) => {
@@ -318,17 +319,25 @@ export function TweaksPanel() {
         <button
           className="btn btn-plain"
           style={{ fontSize: 12, width: '100%', justifyContent: 'flex-start', gap: 6 }}
+          disabled={checkingUpdate}
           onClick={async () => {
-            const res = await window.folk.updater.check()
-            if (!res.ok) {
-              toast({ kind: 'err', text: res.error ?? 'Update check failed' })
-            } else if (!res.version) {
-              toast({ kind: 'info', text: 'You are up to date' })
+            setCheckingUpdate(true)
+            try {
+              const res = await window.folk.updater.check()
+              if (!res.ok) {
+                toast({ kind: 'err', text: res.error ?? 'Update check failed' })
+              } else if (!res.version || res.version === appVersion) {
+                toast({ kind: 'ok', text: `You are up to date${appVersion ? ` (v${appVersion})` : ''}` })
+              } else {
+                toast({ kind: 'ok', text: `Update available: v${res.version} — downloading in background` })
+              }
+            } finally {
+              setCheckingUpdate(false)
             }
           }}
         >
           <Icon name="refresh" size={13} />
-          Check for updates
+          {checkingUpdate ? 'Checking…' : 'Check for updates'}
         </button>
       </div>
 

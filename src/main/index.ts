@@ -113,6 +113,7 @@ import { initLogger } from './opencode-proxy/logger'
 import { stopOpenRouterProxy } from './openrouter-proxy'
 import { setupAutoUpdater, teardownAutoUpdater } from './updater'
 import { Telemetry } from './telemetry'
+import contextMenu from 'electron-context-menu'
 
 let db: Database
 let agentManager: AgentManager
@@ -364,6 +365,28 @@ app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.folk.app')
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
+  })
+
+  // Native right-click context menu — copy/cut/paste/select-all on text,
+  // Copy image / Save image / Copy link on media + anchors. Inspect Element
+  // only in dev. Mirrors the affordances people expect from a web browser.
+  contextMenu({
+    showSelectAll: true,
+    showCopyImage: true,
+    showCopyImageAddress: true,
+    showSaveImageAs: true,
+    showCopyLink: true,
+    showInspectElement: false,
+    showSearchWithGoogle: false,
+    // Only show menu in chat content, editable inputs, or on media/links.
+    // Sidebar + app chrome stay menu-less to match native-app feel.
+    shouldShowMenu: (_event, params) => {
+      if (params.isEditable) return true
+      if (params.selectionText && params.selectionText.trim().length > 0) return true
+      if (params.mediaType === 'image' || params.mediaType === 'video') return true
+      if (params.linkURL && params.linkURL.length > 0) return true
+      return false
+    }
   })
 
   // folk-file://<absolute-path> → stream the on-disk file. The hostname slot

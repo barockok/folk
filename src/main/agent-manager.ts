@@ -433,15 +433,18 @@ export class AgentManager extends EventEmitter {
           : provider.id === 'openrouter'
             ? 'bearer'
             : 'x-api-key'
-    this.emit('notice', {
-      sessionId: session.id,
-      kind: 'lifecycle',
-      text:
-        `[diag] packaged=${app.isPackaged} bin=${claudeBin ?? '(sdk-resolve)'} ` +
-        `exists=${claudeBin ? existsSync(claudeBin) : 'n/a'} ` +
-        `provider=${provider.id} model=${session.modelId} auth=${authMode} ` +
-        `baseUrl=${baseUrlOverride ?? '(default)'} mcps=${Object.keys(mcpMap).length}`
-    })
+    // Diagnostic notice only in dev — clutters the timeline in shipped builds.
+    if (!app.isPackaged) {
+      this.emit('notice', {
+        sessionId: session.id,
+        kind: 'lifecycle',
+        text:
+          `[diag] packaged=${app.isPackaged} bin=${claudeBin ?? '(sdk-resolve)'} ` +
+          `exists=${claudeBin ? existsSync(claudeBin) : 'n/a'} ` +
+          `provider=${provider.id} model=${session.modelId} auth=${authMode} ` +
+          `baseUrl=${baseUrlOverride ?? '(default)'} mcps=${Object.keys(mcpMap).length}`
+      })
+    }
 
     const q = query({
       prompt: iterable,
@@ -465,7 +468,9 @@ export class AgentManager extends EventEmitter {
           const t = data.replace(/\s+$/, '')
           if (t) {
             console.error(`[claude-cli ${session.id}] ${t}`)
-            this.emit('notice', { sessionId: session.id, kind: 'lifecycle', text: `[stderr] ${t}` })
+            if (!app.isPackaged) {
+              this.emit('notice', { sessionId: session.id, kind: 'lifecycle', text: `[stderr] ${t}` })
+            }
           }
         },
         systemPrompt: {

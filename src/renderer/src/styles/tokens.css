@@ -122,8 +122,18 @@ body {
   font-feature-settings: "ss01";
   font-weight: 400;
   overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
 }
 #root { height: 100vh; }
+
+/* Allow text selection only inside chat content + editable inputs. */
+.conv, .conv *,
+.markdown-body, .markdown-body *,
+input, textarea, [contenteditable="true"], [contenteditable="true"] * {
+  user-select: text;
+  -webkit-user-select: text;
+}
 
 /* Stripe-inspired headings: deep navy, tight, light weight */
 h1,h2,h3,h4 {

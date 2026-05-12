@@ -54,6 +54,16 @@ function CodeBlock({ code, children }: { code: string; children: ReactNode }) {
 }
 
 const USER_MD_COMPONENTS: Components = {
+  pre: ({ node, children }) => {
+    const codeChild = (node as HastElement | undefined)?.children?.find(
+      (c): c is HastElement => c.type === 'element' && (c as HastElement).tagName === 'code'
+    )
+    if (codeChild) {
+      const code = hastText(codeChild).replace(/\n$/, '')
+      return <CodeBlock code={code}>{children}</CodeBlock>
+    }
+    return <pre>{children}</pre>
+  },
   img: ({ src, alt }) => {
     const safe = rewriteImgSrc(typeof src === 'string' ? src : undefined)
     return (
